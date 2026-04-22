@@ -1,311 +1,246 @@
-# PowerSim v4.0 — Georgian Power System Simulation
+# PowerSim v4 — UC/ED Research Baseline
 
-End-to-end UC/ED platform for the Georgian electricity system. Hourly resolution,
-8760h annual horizon, Asia/Tbilisi calendar. Data flow:
+PowerSim is an hourly unit commitment / economic dispatch (UC/ED) simulation stack for the Georgian power system.
+It includes:
+- thermal commitment and dispatch,
+- reservoir + run-of-river hydro,
+- hydro cascade links and travel delay,
+- gas constraints (annual/monthly),
+- renewable profiles,
+- schema-validated JSON I/O,
+- HTML results import compatibility.
 
-    HTML UI  →  config JSON  →  Python solver (Pyomo + HiGHS)  →  results JSON / Excel  →  HTML UI
-
-Stage 2 (current): hydro cascade with travel delay, strategic reservoir end-level
-penalties, real per-calendar-month gas caps, pmax-weighted hydro inflow shares,
-and dispatch-side hydro derating.
-
----
-
-## 1. Project structure
-
-```
-powersim_v4/
-├── solver/
-│   ├── powersim_solver.py         (1500+ lines — UC/ED MIP, rolling horizon)
-│   ├── powersim_dataio.py         (1000+ lines — Excel / CSV → input JSON)
-│   └── powersim_asset_mapper.py   (1400+ lines — installed-capacity → assets)
-├── schema/
-│   └── powersim_schema.py         (schema v1.2, validate_input/_output)
-├── tests/
-│   ├── smoke_168h.py              (end-to-end: dataio→validate→solver→validate)
-│   ├── stage1_smoke_fleet.json    (8-asset minimal fleet for CI)
-│   └── reservoir_overrides_template.csv
-├── html/
-│   └── PowerSim_v4.html           (browser UI; round-trips with the JSON files)
-├── README.md                      (this file)
-└── README_stage1.md               (historical Stage 1 narrative — kept for context)
-```
+This repository is now organized for a **single canonical Python workflow** usable in local environments, Google Colab, and future CI.
 
 ---
 
-## 2. Setup
+## 1) Repository structure
 
-### Requirements
+Current repository layout is a flat root:
 
-- Python 3.10 or newer (3.12 tested)
-- HiGHS solver via Pyomo's appsi backend (bundled when you `pip install` Pyomo)
+```
+.
+├── powersim_solver.py          # Main UC/ED solver CLI (Pyomo + HiGHS)
+├── powersim_dataio.py          # Project data loaders -> solver input JSON
+├── powersim_asset_mapper.py    # Installed-capacity workbook -> asset config
+├── powersim_schema.py          # Input/output schema + validators
+├── smoke_168h.py               # End-to-end smoke test (168h pipeline)
+├── run_simulation.py           # Canonical single-run pipeline (dataio->solver->validate)
+├── decision_grade_run.py       # Batch runner: MC (P10/P50/P90) + annual
+├── powersim_report.py          # Comparative reporting + cascade/reservoir checks
+├── stage1_smoke_fleet.json     # Baseline 8-asset config
+├── PowerSim_v4.html            # UI for import/export and visualization
+├── requirements.txt            # Python dependencies
+└── README.md
+```
 
-### Install
+Notes:
+- Historical docs/scripts may refer to `solver/`, `schema/`, and `tests/` folders.
+- Runtime scripts in this repo support both historical and flat layouts for key paths.
+
+---
+
+## 2) Setup
+
+### Python requirements
+- Python 3.10+
+- HiGHS via `highspy`
+
+Install dependencies:
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-pip install --upgrade pip
-pip install pyomo highspy pandas openpyxl numpy
+python3 -m pip install --upgrade pip
+python3 -m pip install -r requirements.txt
 ```
 
-### Project data
-
-The dataio module reads from a project directory containing the GSE/ESCO source
-files. Pass it via `--project-dir`. Expected files (any of the supported layouts):
-
-- `2026_A_historical_mean.csv` (or `MC_P10/P50/P90.csv`) — hourly hydro inflow per zone
-- Renewable site CSVs (Tbilisi, Kutaisi, Mta_Sabueti, …)
-- Demand CharYear / S-curve workbook
-- `დადგმული_სიმძლავრე__2026.xlsx` — installed capacity by plant
-
-If the project directory is not at `/mnt/project`, pass `--project-dir /path/to/your/data`
-to every CLI in this README.
-
----
-
-## 3. Running simulations
-
-### 168h smoke test (end-to-end CI)
+If you prefer explicit packages:
 
 ```bash
-cd powersim_v4
-python tests/smoke_168h.py \
-    --project-dir /mnt/project \
-    --config      tests/stage1_smoke_fleet.json \
-    --keep-outputs /tmp/smoke_out
+python3 -m pip install pyomo highspy pandas numpy openpyxl xlsxwriter
 ```
 
-This runs the full pipeline against an 8-asset minimal fleet:
-1. `dataio.build_input_from_project` → produces `powersim_input.json`
-2. `schema.validate_input` → must return `ok=True`
-3. `solver.powersim_solver.py` → produces `powersim_results.json` and `.xlsx`
-4. `schema.validate_output` → must return `ok=True`
-5. HTML `importResults()` shape check
+---
 
-Exit code 0 on full success.
+## 3) Canonical project data layout
 
-### 168h full-fleet run (131 plants)
+Set one project data directory (recommended: `./project_data`) and place source files under it.
 
-Build a config from the asset mapper and run the solver directly:
+Minimal expected inputs:
+
+```
+project_data/
+├── 2026_A_historical_mean.csv          # hydro scenario A_mean
+├── 2026_MC_P10.csv                     # optional
+├── 2026_MC_P50.csv                     # optional
+├── 2026_MC_P90.csv                     # optional
+├── Demand_CharYear.xlsx                # demand shape workbook
+├── generation-2026-forecast-v13.xlsx   # demand absolute workbook
+├── wind_tbilisi_A_mean.csv             # renewable site examples
+├── solar_tbilisi_A_mean.csv
+└── ... other supported source files
+```
+
+The loader in `powersim_dataio.py` already probes multiple common subdirectories (flat + nested data folders), but keeping everything under a single root avoids ambiguity.
+
+You can point all commands to this directory with either:
+- `--project-dir /path/to/project_data`, or
+- `POWERSIM_PROJECT_DIR=/path/to/project_data`.
+
+---
+
+## 4) Canonical execution workflow
+
+## A) 168h smoke / baseline run
 
 ```bash
-# Step 1 — Build the asset list from the installed-capacity workbook
-python solver/powersim_asset_mapper.py \
-    --excel /mnt/project/დადგმული_სიმძლავრე__2026.xlsx \
-    --hydro-overrides tests/reservoir_overrides_template.csv \
-    --emit-config /tmp/run/config_168h.json
-
-# Step 2 — Build solver input JSON
-python solver/powersim_dataio.py \
-    --project-dir /mnt/project \
-    --config      /tmp/run/config_168h.json \
-    --out         /tmp/run/input_168h.json
-
-# Step 3 — Solve
-python solver/powersim_solver.py \
-    --input  /tmp/run/input_168h.json \
-    --output /tmp/run/results_168h.json \
-    --excel  /tmp/run/results_168h.xlsx
+python3 run_simulation.py \
+  --project-dir /path/to/project_data \
+  --config stage1_smoke_fleet.json \
+  --out-dir outputs/smoke_168h \
+  --horizon-hours 168
 ```
 
-Typical wallclock at `mip_gap=0.01`: 50–80 s on a single core.
+This pipeline performs:
+1. `build_input_from_project(...)`
+2. `validate_input(...)`
+3. solver run (`powersim_solver.py`)
+4. `validate_output(...)`
 
-### 720h run (1 month)
+Expected outputs:
+- `outputs/smoke_168h/powersim_input.json`
+- `outputs/smoke_168h/powersim_results.json`
+- `outputs/smoke_168h/powersim_results.xlsx`
 
-Same as 168h, but in the config set:
+## B) 720h run
 
-```json
-"study_horizon":   { "start_hour": 0, "horizon_hours": 720, "mode": "full" },
-"solver_settings": {
-    "mip_gap": 0.02,
-    "time_limit_s": 600,
-    "rolling_window_h": 168,
-    "rolling_step_h":   168,
-    "unserved_penalty": 3000,
-    "curtailment_penalty": 0,
-    "threads": 0
-}
+```bash
+python3 run_simulation.py \
+  --project-dir /path/to/project_data \
+  --config stage1_smoke_fleet.json \
+  --out-dir outputs/run_720h \
+  --horizon-hours 720
 ```
 
-The solver automatically uses rolling-horizon decomposition: 720 h ÷ 168 h window
-× 168 h step = 5 windows. Each window's terminal state (storage, BESS SoC,
-commitment) is carried forward as initial state for the next window.
+## C) 8760h run path
 
-Typical wallclock for 720h: 2–4 minutes per scenario.
+```bash
+python3 run_simulation.py \
+  --project-dir /path/to/project_data \
+  --config stage1_smoke_fleet.json \
+  --out-dir outputs/run_8760h \
+  --horizon-hours 8760
+```
 
-### MC scenario sweep
-
-Change the `scenario` field to `MC_P10`, `MC_P50`, or `MC_P90` and re-run dataio
-+ solver. Hydro inflow profiles will be loaded from the matching CSV.
-Calibration (water values, derate factor, etc.) is unchanged across scenarios.
-
-### Annual 8760h run
-
-Set `horizon_hours: 8760` and `rolling_step_h: 168`. The solver will execute
-~52 windows. Budget: 30–60 minutes at `mip_gap=0.02`.
+For long runs, tune `solver_settings` in config (e.g., `mip_gap`, `time_limit_s`, rolling-window parameters).
 
 ---
 
-## 4. Stage 2 features and how to use them
+## 5) Alternative entry points
 
-### Hydro cascade with travel delay
+### Decision-grade batch run (Monte Carlo + annual)
 
-Set on a downstream reservoir's `hydro` block:
-
-```json
-"hydro": {
-    "cascade_upstream":       "engurhesi",
-    "cascade_travel_delay_h": 2,
-    "cascade_gain":           0.97,
-    "..."
-}
+```bash
+python3 decision_grade_run.py \
+  --project-dir /path/to/project_data \
+  --base-config stage1_smoke_fleet.json \
+  --output-root outputs \
+  --mc-horizon 720 \
+  --annual-horizon 8760 \
+  --annual-rolling-window 168 \
+  --annual-rolling-step 24
 ```
 
-The solver enforces:
+This writes:
+- `outputs/mc/*` for scenario runs,
+- `outputs/annual/*` for the annual run,
+- `outputs/reports/scenario_comparison.csv` and per-scenario diagnostics.
 
-    cascade_in[t]  =  cascade_gain × release_upstream[t − travel_delay_h]
-    release_upstream[τ]  =  p_upstream[τ] / efficiency_upstream
+### Smoke test script
 
-For `t ≤ travel_delay_h` the upstream contribution is 0 (bootstrap — no
-pre-horizon water is modeled). Only turbined water flows downstream — upstream
-*spill* is excluded by design to avoid recovering wasted water as energy.
-
-Defaults applied automatically by the asset mapper:
-
-| Downstream | Upstream | Delay (h) | Gain |
-|---|---|---:|---:|
-| `vardnilhesi` | `engurhesi` | 2 | 0.97 |
-| `khramhesi_2` | `khramhesi_1` | 1 | 0.95 |
-
-### Strategic reservoir end-level penalty
-
-Discourages myopic depletion in short-horizon runs by adding a soft penalty
-when end storage falls below a target fraction of `reservoir_max`:
-
-```json
-"hydro": {
-    "target_end_level_frac": 0.85,
-    "end_level_penalty":     20.0,
-    "..."
-}
+```bash
+python3 smoke_168h.py \
+  --project-dir /path/to/project_data \
+  --config stage1_smoke_fleet.json \
+  --keep-outputs outputs/smoke_test
 ```
 
-Objective adds `end_level_penalty × max(0, target − stor[T_last])` for each
-plant that declares both fields. Section-I reservoirs receive these defaults
-automatically.
+### DataIO only (build input JSON)
 
-### Water value (`water_value`)
-
-For reservoir hydro (Section I), the marginal cost is floored by the
-`water_value` field ($/MWh). This treats stored water as a priced resource:
-the solver will not turbine reservoir water below this opportunity cost.
-Set per plant in the override CSV.
-
-### Real per-calendar-month gas caps
-
-```json
-"gas_constraints": {
-    "mode":   "annual+monthly",
-    "unit":   "Mm3",
-    "annual": { "cap": 1170 },
-    "monthly": {
-        "Jan": 180, "Feb": 160, "Mar": 100, "Apr":  60,
-        "May":  40, "Jun":  40, "Jul":  60, "Aug":  60,
-        "Sep":  60, "Oct":  90, "Nov": 140, "Dec": 180
-    },
-    "applies_to": ["gardabani_1", "gardabani_2", "..."]
-}
+```bash
+python3 powersim_dataio.py \
+  --project-dir /path/to/project_data \
+  --config stage1_smoke_fleet.json \
+  --out outputs/input_only/powersim_input.json
 ```
 
-The solver maps each window hour to its calendar month using the global
-`offset_h` and emits one constraint per month touched by the window. For
-horizons shorter than a full month, the cap is pro-rated as
-`cap_window = cap_full × (hours_in_window / hours_in_month)`.
+### Solver only
 
-Month keys may be `"Jan".."Dec"`, `"jan".."dec"`, integers `1..12`, or
-strings `"1".."12"`. Annual + monthly caps may be combined.
-
-### Hydro inflow allocation (Layer 1 — pmax-weighted share)
-
-Each plant in a hydrological zone receives `share = pmax / Σ pmax_zone` of
-the zone inflow profile. Σ(share) = 1.0 per zone is enforced; the asset mapper
-computes this automatically and emits a warning if any zone deviates by more
-than 1e-6.
-
-This eliminates the original 7.88× water double-counting that resulted from
-every plant claiming `share = 1.0`.
-
-### Hydro pmax derating
-
-Inflow-driven hydro (109 plants) has `pmax_effective = pmax × 0.65` applied
-in the asset mapper to reflect maintenance, head loss, intake silting, low-flow
-restrictions, and ice. Section-I reservoirs (7 plants) are excluded.
-
-### Calibration baseline (v10 LOCKED)
-
-| Parameter | Value |
-|---|---|
-| Hydro pmax derate | 0.65 (inflow-driven only) |
-| Gas fuel price | $5.50/MMBtu |
-| Gas startup / no-load | $1000 / $50 |
-| Coal startup / no-load | $4000 / $100 |
-| Thermal pmin | 25% of pmax |
-| Section-I water values | Enguri/Vardnili $35, Zhinvali/Khrami $42, Shaori/Dzevrula $37 |
-| Section-I end-level target | 85% of reservoir_max |
-| Section-I end-level penalty | $20/Mm³ |
-| Cascade Enguri→Vardnili | delay=2h, gain=0.97 |
-| Cascade Khrami_1→Khrami_2 | delay=1h, gain=0.95 |
-| Monthly gas caps | annual 1170 Mm³ (winter ~180, summer ~40) |
+```bash
+python3 powersim_solver.py \
+  --input outputs/input_only/powersim_input.json \
+  --output outputs/solver_only/powersim_results.json \
+  --excel outputs/solver_only/powersim_results.xlsx
+```
 
 ---
 
-## 5. Output schema highlights
+## 6) Validation story
 
-`results.json` produced by the solver:
+- Input validation: `powersim_schema.validate_input`
+- Output validation: `powersim_schema.validate_output`
+- `run_simulation.py` enforces both for single runs.
+- `decision_grade_run.py` orchestrates scenario runs and then calls `powersim_report.py`.
+- `smoke_168h.py` also validates output shape compatibility expected by HTML import.
 
+If validation fails, scripts print explicit errors and return non-zero exit codes.
+
+---
+
+## 7) Google Colab quickstart
+
+```python
+!pip install pyomo highspy pandas numpy openpyxl xlsxwriter
 ```
-metadata:
-    schema_version, scenario, horizon_hours, closure_ok, closure_gap, ...
-    data_source_fingerprint: { profile_bundle, input_file_hashes, loader_version }
-diagnostics:
-    solver_status, solve_time_s, gas_cap_binding, hydro_end_storage_warnings, ...
-system_summary:
-    total_cost_usd, total_energy_mwh, avg_lambda_usd_mwh, peak_load_mw,
-    total_gas_mm3, total_unserved_mwh, total_curtailed_mwh
-hourly_system: [ { t, load_mw, lambda_usd_mwh, ... } × H ]
-hourly_by_unit: { asset_id: [ { t, dispatch_mw, hydro: {...}, ... } × H ] }
-by_unit_summary: { asset_id: { name, type, energy_mwh, capacity_factor, ... } }
+
+Then upload repository files and data, and run:
+
+```python
+!python run_simulation.py --project-dir /content/project_data --config stage1_smoke_fleet.json --out-dir /content/outputs_168h --horizon-hours 168
 ```
 
-The HTML UI reads this format directly via its `importResults()` function.
+---
+
+## 8) CI readiness suggestions
+
+Typical CI checks:
+
+```bash
+python3 -m py_compile smoke_168h.py run_simulation.py decision_grade_run.py powersim_report.py powersim_dataio.py powersim_solver.py powersim_schema.py powersim_asset_mapper.py
+python3 smoke_168h.py --project-dir /mnt/project --config stage1_smoke_fleet.json --keep-outputs /tmp/powersim_smoke
+```
+
+Second command requires runtime dependencies and data files to be present.
 
 ---
 
-## 6. Reference runs (in `tests/`)
+## 9) Troubleshooting
 
-| Path | Description |
-|---|---|
-| `reality_check_v8/` | v8 calibration baseline (Layer 1 + derate 0.65 + thermal v5 + gas $5.50) |
-| `stage2_v10_720h/` | 720h Stage 2 with cascade fully active (Enguri+Vardnili wv=$35) |
-| `mc_sweep_720h/` | MC_P10 / P50 / P90 robustness sweep at v10 calibration |
+### `ModuleNotFoundError` (e.g. pandas/pyomo/highspy)
+Install dependencies from `requirements.txt` in an activated virtualenv.
 
-Each contains `config_*.json`, `results_*.json`, `results_*.xlsx`.
+### `project dir not found`
+Pass `--project-dir` explicitly or set `POWERSIM_PROJECT_DIR`.
 
----
+### Missing hydro / renewable / xlsx files
+Check your project data root and filenames. The loader error message lists accepted candidate names and folders.
 
-## 7. Troubleshooting
-
-- **HiGHS import error**: `pip install --upgrade pyomo highspy`
-- **`raw` hydro unit unverified warning**: expected — the solver treats raw values as Mm³/h
-- **Slow solves on dry MC scenarios**: tighten initial state or loosen `mip_gap` to 0.02
-- **`closure_gap` > 1%**: re-run with `mip_gap` ≤ 0.005 — closure tracks LP optimality
-- **Georgian filenames not loading**: ensure your filesystem and Python locale support UTF-8
+### Solver fails to converge or is too slow
+Adjust config `solver_settings` (`mip_gap`, `time_limit_s`, rolling horizon settings, threads).
 
 ---
 
-## 8. Versioning
+## 10) Non-goals of this hardening pass
 
-- Schema: `1.2` (Stage 2 — current). Accepts `1.0` and `1.1` configs with a warning.
-- Loader: see `LOADER_VERSION` in `solver/powersim_dataio.py`
-- Solver: see `MODEL_VERSION` in `schema/powersim_schema.py`
+This baseline intentionally does **not** alter calibration economics (water values, fuel prices, hydro derating, cascade gains, penalties) except where needed for pure runtime robustness.

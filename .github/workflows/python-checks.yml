@@ -1,0 +1,36 @@
+name: Python checks
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  compile:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+      - name: Compile checks
+        run: |
+          python -m py_compile smoke_168h.py run_simulation.py decision_grade_run.py powersim_report.py powersim_dataio.py powersim_solver.py powersim_schema.py powersim_asset_mapper.py
+      - name: Dependency sanity
+        run: |
+          python - <<'PY'
+          import importlib.util
+          mods = ['pyomo','highspy','pandas','numpy','openpyxl','xlsxwriter']
+          missing = [m for m in mods if importlib.util.find_spec(m) is None]
+          if missing:
+              raise SystemExit(f"Missing runtime modules: {missing}")
+          print('All core runtime modules importable.')
+          PY

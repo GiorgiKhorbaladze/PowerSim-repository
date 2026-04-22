@@ -1,0 +1,26 @@
+# Python cache/bytecode
+__pycache__/
+*.py[cod]
+
+# Virtual environments
+.venv/
+venv/
+
+# Run artifacts
+out/
+outputs/
+/tmp/
+*.log
+
+# Solver/data outputs
+powersim_input.json
+powersim_results.json
+powersim_results.xlsx
+
+# Editor/OS
+.DS_Store
+.vscode/
+.idea/
+
+# Browser partial downloads
+*.crdownload
