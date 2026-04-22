@@ -43,6 +43,22 @@ from powersim_dataio import (                                           # noqa: 
 )
 
 
+def _resolve_repo_file(*parts: str) -> Path:
+    """
+    Resolve file paths for both historical tree layout and flat repo layout.
+    Tries:
+      1) <repo_root>/<parts...>            (historical: solver/, tests/, ...)
+      2) <script_dir>/<parts...> basename  (flat: files at repository root)
+    """
+    preferred = ROOT.joinpath(*parts)
+    if preferred.exists():
+        return preferred
+    fallback = HERE / Path(parts[-1])
+    if fallback.exists():
+        return fallback
+    return preferred
+
+
 # ──────────────────────────────────────────────────────────────────────
 # Helpers
 # ──────────────────────────────────────────────────────────────────────
@@ -106,7 +122,7 @@ def stage_solver(input_path: Path, results_path: Path, excel_path: Path) -> None
     hr("STAGE 3 / 4  —  solver run  (MIP UC/ED, HiGHS)")
     cmd = [
         sys.executable,
-        str(ROOT / "solver" / "powersim_solver.py"),
+        str(_resolve_repo_file("solver", "powersim_solver.py")),
         "--input",  str(input_path),
         "--output", str(results_path),
         "--excel",  str(excel_path),
@@ -200,7 +216,7 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description="PowerSim v4.0 Stage 1 smoke test")
     ap.add_argument("--project-dir", default="/mnt/project",
                     help="Directory containing the uploaded project files.")
-    ap.add_argument("--config", default=str(ROOT / "tests" / "stage1_smoke_fleet.json"),
+    ap.add_argument("--config", default=str(_resolve_repo_file("tests", "stage1_smoke_fleet.json")),
                     help="Fleet + mapping config JSON.")
     ap.add_argument("--keep-outputs", default=None,
                     help="Directory to write intermediate artifacts (default: temp).")
