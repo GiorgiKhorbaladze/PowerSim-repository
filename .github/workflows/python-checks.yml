@@ -23,7 +23,7 @@ jobs:
           python -m pip install -r requirements.txt
       - name: Compile checks
         run: |
-          python -m py_compile smoke_168h.py run_simulation.py powersim_dataio.py powersim_solver.py powersim_schema.py powersim_asset_mapper.py
+          python -m py_compile smoke_168h.py run_simulation.py decision_grade_run.py powersim_report.py powersim_dataio.py powersim_solver.py powersim_schema.py powersim_asset_mapper.py
       - name: Dependency sanity
         run: |
           python - <<'PY'

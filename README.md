@@ -25,7 +25,9 @@ Current repository layout is a flat root:
 ├── powersim_asset_mapper.py    # Installed-capacity workbook -> asset config
 ├── powersim_schema.py          # Input/output schema + validators
 ├── smoke_168h.py               # End-to-end smoke test (168h pipeline)
-├── run_simulation.py           # Canonical pipeline runner (dataio->solver->validate)
+├── run_simulation.py           # Canonical single-run pipeline (dataio->solver->validate)
+├── decision_grade_run.py       # Batch runner: MC (P10/P50/P90) + annual
+├── powersim_report.py          # Comparative reporting + cascade/reservoir checks
 ├── stage1_smoke_fleet.json     # Baseline 8-asset config
 ├── PowerSim_v4.html            # UI for import/export and visualization
 ├── requirements.txt            # Python dependencies
@@ -96,7 +98,7 @@ You can point all commands to this directory with either:
 python3 run_simulation.py \
   --project-dir /path/to/project_data \
   --config stage1_smoke_fleet.json \
-  --out-dir out/smoke_168h \
+  --out-dir outputs/smoke_168h \
   --horizon-hours 168
 ```
 
@@ -107,9 +109,9 @@ This pipeline performs:
 4. `validate_output(...)`
 
 Expected outputs:
-- `out/smoke_168h/powersim_input.json`
-- `out/smoke_168h/powersim_results.json`
-- `out/smoke_168h/powersim_results.xlsx`
+- `outputs/smoke_168h/powersim_input.json`
+- `outputs/smoke_168h/powersim_results.json`
+- `outputs/smoke_168h/powersim_results.xlsx`
 
 ## B) 720h run
 
@@ -117,7 +119,7 @@ Expected outputs:
 python3 run_simulation.py \
   --project-dir /path/to/project_data \
   --config stage1_smoke_fleet.json \
-  --out-dir out/run_720h \
+  --out-dir outputs/run_720h \
   --horizon-hours 720
 ```
 
@@ -127,7 +129,7 @@ python3 run_simulation.py \
 python3 run_simulation.py \
   --project-dir /path/to/project_data \
   --config stage1_smoke_fleet.json \
-  --out-dir out/run_8760h \
+  --out-dir outputs/run_8760h \
   --horizon-hours 8760
 ```
 
@@ -137,13 +139,31 @@ For long runs, tune `solver_settings` in config (e.g., `mip_gap`, `time_limit_s`
 
 ## 5) Alternative entry points
 
+### Decision-grade batch run (Monte Carlo + annual)
+
+```bash
+python3 decision_grade_run.py \
+  --project-dir /path/to/project_data \
+  --base-config stage1_smoke_fleet.json \
+  --output-root outputs \
+  --mc-horizon 720 \
+  --annual-horizon 8760 \
+  --annual-rolling-window 168 \
+  --annual-rolling-step 24
+```
+
+This writes:
+- `outputs/mc/*` for scenario runs,
+- `outputs/annual/*` for the annual run,
+- `outputs/reports/scenario_comparison.csv` and per-scenario diagnostics.
+
 ### Smoke test script
 
 ```bash
 python3 smoke_168h.py \
   --project-dir /path/to/project_data \
   --config stage1_smoke_fleet.json \
-  --keep-outputs out/smoke_test
+  --keep-outputs outputs/smoke_test
 ```
 
 ### DataIO only (build input JSON)
@@ -152,16 +172,16 @@ python3 smoke_168h.py \
 python3 powersim_dataio.py \
   --project-dir /path/to/project_data \
   --config stage1_smoke_fleet.json \
-  --out out/input_only/powersim_input.json
+  --out outputs/input_only/powersim_input.json
 ```
 
 ### Solver only
 
 ```bash
 python3 powersim_solver.py \
-  --input out/input_only/powersim_input.json \
-  --output out/solver_only/powersim_results.json \
-  --excel out/solver_only/powersim_results.xlsx
+  --input outputs/input_only/powersim_input.json \
+  --output outputs/solver_only/powersim_results.json \
+  --excel outputs/solver_only/powersim_results.xlsx
 ```
 
 ---
@@ -170,7 +190,8 @@ python3 powersim_solver.py \
 
 - Input validation: `powersim_schema.validate_input`
 - Output validation: `powersim_schema.validate_output`
-- `run_simulation.py` enforces both.
+- `run_simulation.py` enforces both for single runs.
+- `decision_grade_run.py` orchestrates scenario runs and then calls `powersim_report.py`.
 - `smoke_168h.py` also validates output shape compatibility expected by HTML import.
 
 If validation fails, scripts print explicit errors and return non-zero exit codes.
@@ -186,7 +207,7 @@ If validation fails, scripts print explicit errors and return non-zero exit code
 Then upload repository files and data, and run:
 
 ```python
-!python run_simulation.py --project-dir /content/project_data --config stage1_smoke_fleet.json --out-dir /content/out_168h --horizon-hours 168
+!python run_simulation.py --project-dir /content/project_data --config stage1_smoke_fleet.json --out-dir /content/outputs_168h --horizon-hours 168
 ```
 
 ---
@@ -196,7 +217,7 @@ Then upload repository files and data, and run:
 Typical CI checks:
 
 ```bash
-python3 -m py_compile smoke_168h.py run_simulation.py powersim_dataio.py powersim_solver.py powersim_schema.py powersim_asset_mapper.py
+python3 -m py_compile smoke_168h.py run_simulation.py decision_grade_run.py powersim_report.py powersim_dataio.py powersim_solver.py powersim_schema.py powersim_asset_mapper.py
 python3 smoke_168h.py --project-dir /mnt/project --config stage1_smoke_fleet.json --keep-outputs /tmp/powersim_smoke
 ```
 
