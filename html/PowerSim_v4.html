@@ -492,6 +492,15 @@ tr:hover td{background:var(--bg3)}
           <input type="text" value="Asia/Tbilisi" readonly style="color:var(--teal)">
         </div>
         <div class="field">
+          <label>სცენარი (Scenario)</label>
+          <select id="hor-scenario" onchange="updateDashKpis()">
+            <option value="A_mean" selected>A_mean — საბაზო (historical mean)</option>
+            <option value="MC_P10">MC_P10 — სველი (P10)</option>
+            <option value="MC_P50">MC_P50 — საშუალო (P50)</option>
+            <option value="MC_P90">MC_P90 — მშრალი (P90)</option>
+          </select>
+        </div>
+        <div class="field">
           <label>საბაზო წელი</label>
           <select id="hor-year">
             <option value="2025">2025</option>
@@ -655,21 +664,26 @@ tr:hover td{background:var(--bg3)}
 <div class="pane" id="pane-compare">
   <div class="card" style="margin-bottom:8px">
     <div class="sh">🔀 Scenario Comparison</div>
-    <div class="bgrp">
+    <div class="bgrp" style="align-items:center">
       <label class="btn btn-t btn-s" style="cursor:pointer">
         📥 Scenario A
         <input type="file" accept=".json" style="display:none" onchange="loadScenario('A',this)">
       </label>
+      <span id="cmp-slot-A" style="font-size:8px;color:var(--t3);min-width:120px">— ფაილი არ ჩაიტვ. —</span>
       <label class="btn btn-o btn-s" style="cursor:pointer">
         📥 Scenario B
         <input type="file" accept=".json" style="display:none" onchange="loadScenario('B',this)">
       </label>
+      <span id="cmp-slot-B" style="font-size:8px;color:var(--t3);min-width:120px">— ფაილი არ ჩაიტვ. —</span>
       <button class="btn btn-p btn-s" onclick="runComparison()">▶ შედარება</button>
+    </div>
+    <div style="font-size:7.5px;color:var(--t3);margin-top:5px">
+      ჩატვირთე ორი results JSON (მაგ. P10 vs P90) სცენარული Δ-ანალიზისთვის.
     </div>
   </div>
   <div id="compare-content">
     <div style="text-align:center;color:var(--t3);font-size:9px;padding:30px">
-      ატვირთე ორი results JSON სცენარის შედარებისთვის
+      ჯერ არცერთი სცენარი არ ჩაიტვ. — გამოიყენე "📥 Scenario A/B" ღილაკები.
     </div>
   </div>
 </div>
@@ -696,7 +710,8 @@ const STATE = {
   validated:      false
 };
 
-const SCHEMA_VERSION = '1.0';
+const SCHEMA_VERSION = '1.2';
+const ACCEPTED_OUTPUT_SCHEMAS = new Set(['1.2','1.1','1.0']);
 const MODEL_VERSION  = 'PowerSim v4.0';
 let   assetIdCtr     = 1;
 
@@ -1459,7 +1474,12 @@ function buildInputPayload(){
       curtailment_penalty: 0,
       threads: 0
     },
-    scenario_metadata:{id:'A_mean',label:'Base scenario',probability:1.0}
+    scenario_metadata:(function(){
+      const sel=document.getElementById('hor-scenario');
+      const sid=(sel&&sel.value)||'A_mean';
+      const labels={A_mean:'Base (historical mean)',MC_P10:'MC P10 (wet)',MC_P50:'MC P50',MC_P90:'MC P90 (dry)'};
+      return{id:sid,label:labels[sid]||sid,probability:1.0};
+    })()
   };
 }
 
@@ -1487,9 +1507,9 @@ function psValidateOutput(out){
   for(const k of required){ if(!(k in out)) errors.push(`missing top-level key '${k}'`); }
   const meta = out.metadata || {};
   const sv = meta.schema_version;
-  if(sv === '1.1'){ /* ok */ }
-  else if(sv === '1.0') warnings.push(`output schema_version '${sv}' accepted (v1.0 transition)`);
-  else if(sv) errors.push(`output schema_version '${sv}' unsupported`);
+  if(sv === SCHEMA_VERSION){ /* ok */ }
+  else if(ACCEPTED_OUTPUT_SCHEMAS.has(sv)) warnings.push(`output schema_version '${sv}' accepted (legacy)`);
+  else if(sv) errors.push(`output schema_version '${sv}' unsupported (expected '${SCHEMA_VERSION}')`);
 
   const H  = meta.horizon_hours;
   const hs = out.hourly_system;
@@ -1610,7 +1630,7 @@ function renderResults(){
       chart:{type:'bar',height:220,toolbar:{show:false}},
       series:[
         {name:'ენ. MWh', data:monthly.map(m=>+(m.total_energy_mwh||0).toFixed(0))},
-        {name:'ხარჯი k$',data:monthly.map(m=>+((m.total_cost||0)/1000).toFixed(0))}
+        {name:'ხარჯი k$',data:monthly.map(m=>+(((m.total_cost_usd||m.total_cost||0))/1000).toFixed(0))}
       ],
       xaxis:{categories:monthly.map(m=>m.label||''),labels:{style:{fontSize:'8px'}}},
       yaxis:{labels:{formatter:v=>v.toFixed(0)}},
@@ -1678,39 +1698,51 @@ function loadScenario(ab, input){
   reader.onload=e=>{
     try{
       const data=JSON.parse(e.target.result);
-      if(ab==='A') STATE.scenarioA=data;
-      else STATE.scenarioB=data;
-      showBanner(`✅ Scenario ${ab} ჩაიტვ.`,'g');
-    }catch(err){showBanner('❌ '+err.message,'r');}
+      const v=psValidateOutput(data);
+      if(!v.ok) throw new Error(v.errors.slice(0,2).join('; '));
+      if(ab==='A') STATE.scenarioA=data; else STATE.scenarioB=data;
+      const sid=(data.metadata&&data.metadata.scenario)||'?';
+      showBanner(`✅ Scenario ${ab} (${sid}) ჩაიტვ. — ${data.metadata?.horizon_hours||'?'}h`,'g');
+      // Update slot label so the user can see what's loaded.
+      const lbl=document.getElementById('cmp-slot-'+ab);
+      if(lbl) lbl.textContent=`${file.name} · ${sid} · ${data.metadata?.horizon_hours||'?'}h`;
+    }catch(err){showBanner('❌ Scenario '+ab+': '+err.message,'r');}
     input.value='';
   };
   reader.readAsText(file);
 }
 
 function runComparison(){
-  if(!STATE.scenarioA||!STATE.scenarioB){showBanner('⚠️ ორივე სცენ. ატვ.','o');return;}
+  if(!STATE.scenarioA||!STATE.scenarioB){showBanner('⚠️ ორივე სცენ. ატვირთე','o');return;}
   const A=STATE.scenarioA.system_summary||{}, B=STATE.scenarioB.system_summary||{};
-  const delta=(a,b,fmt)=>+(b-a).toFixed(2);
+  const Ameta=STATE.scenarioA.metadata||{}, Bmeta=STATE.scenarioB.metadata||{};
   const rows=[
     ['სულ ხარჯი $','total_cost_usd'],['Avg λ $/MWh','avg_lambda_usd_mwh'],
     ['Peak MW','peak_load_mw'],['სულ ენ. MWh','total_energy_mwh'],
-    ['Gas Mm³','total_gas_mm3'],['Unserved MWh','total_unserved_mwh']
+    ['Gas Mm³','total_gas_mm3'],['Unserved MWh','total_unserved_mwh'],
+    ['Curtailed MWh','total_curtailed_mwh']
   ];
+  const fmt=v=>(typeof v==='number')?(v>=1e6?(v/1e6).toFixed(2)+'M':v>=1e3?(v/1e3).toFixed(1)+'k':v.toFixed(2)):(v??'—');
   const content=document.getElementById('compare-content');
-  if(content){
-    content.innerHTML=`
-    <div class="card">
-      <div class="sh">Scenario A vs B — KPI Delta</div>
-      <table><thead><tr><th>Metric</th><th>A</th><th>B</th><th>Δ (B-A)</th></tr></thead>
-      <tbody>${rows.map(([lbl,key])=>{
-        const a=A[key]||0, b=B[key]||0, d=b-a;
-        const cls=d>0?'color:var(--red)':'color:var(--green)';
-        return`<tr><td>${lbl}</td><td class="mono">${a.toFixed?a.toFixed(2):a}</td>
-                <td class="mono">${b.toFixed?b.toFixed(2):b}</td>
-                <td class="mono" style="${cls}">${d>=0?'+':''}${d.toFixed?d.toFixed(2):d}</td></tr>`;
-      }).join('')}</tbody></table>
-    </div>`;
-  }
+  if(!content) return;
+  content.innerHTML=`
+  <div class="card">
+    <div class="sh">Scenario A vs B — KPI Delta</div>
+    <div style="font-size:8px;color:var(--t3);margin-bottom:6px">
+      A = <b style="color:var(--teal)">${Ameta.scenario||'?'}</b> · ${Ameta.horizon_hours||'?'}h&nbsp;·&nbsp;
+      B = <b style="color:var(--orange)">${Bmeta.scenario||'?'}</b> · ${Bmeta.horizon_hours||'?'}h
+    </div>
+    <table><thead><tr><th>Metric</th><th>A</th><th>B</th><th>Δ (B-A)</th><th>Δ %</th></tr></thead>
+    <tbody>${rows.map(([lbl,key])=>{
+      const a=+A[key]||0, b=+B[key]||0, d=b-a;
+      const pct=a?100*d/a:0;
+      const cls=d>0?'color:var(--red)':d<0?'color:var(--green)':'color:var(--t3)';
+      return`<tr><td>${lbl}</td><td class="mono">${fmt(a)}</td>
+              <td class="mono">${fmt(b)}</td>
+              <td class="mono" style="${cls}">${d>=0?'+':''}${fmt(d)}</td>
+              <td class="mono" style="${cls}">${a?(pct>=0?'+':'')+pct.toFixed(1)+'%':'—'}</td></tr>`;
+    }).join('')}</tbody></table>
+  </div>`;
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -1770,7 +1802,8 @@ function updateDashKpis(){
   if(el('kpi-assets')) el('kpi-assets').textContent=STATE.assets.length;
   if(el('kpi-pmax'))   el('kpi-pmax').textContent=total.toFixed(0);
   if(el('kpi-profiles')) el('kpi-profiles').textContent=Object.keys(STATE.profiles).length;
-  if(el('kpi-scenario')) el('kpi-scenario').textContent='A_mean';
+  const sscen=document.getElementById('hor-scenario');
+  if(el('kpi-scenario')) el('kpi-scenario').textContent=(sscen&&sscen.value)||'A_mean';
   const status=document.getElementById('sys-status');
   if(status){
     const lines=[

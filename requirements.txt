@@ -1,0 +1,14 @@
+# PowerSim v4.0 — Python solver dependencies
+#
+# Install with:
+#   pip install -r requirements.txt
+#
+# Tested on CPython 3.10, 3.11, 3.12.
+# HiGHS is bundled with `highspy`; no separate install needed.
+
+pyomo>=6.7
+highspy>=1.7
+pandas>=2.0
+numpy>=1.24
+openpyxl>=3.1
+xlsxwriter>=3.1

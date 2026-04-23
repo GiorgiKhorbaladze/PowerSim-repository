@@ -92,7 +92,7 @@ def stage_dataio(project_dir: Path, config_path: Path, out_path: Path) -> dict:
 
 
 def stage_validate_input(inp: dict) -> None:
-    hr("STAGE 2 / 4  —  validate_input (schema v1.1)")
+    hr("STAGE 2 / 4  —  validate_input (schema v1.2)")
     ok_flag, errs, warns = validate_input(inp)
     print(f"  result: ok={ok_flag}  errors={len(errs)}  warnings={len(warns)}")
     for e in errs:  print(f"    ERROR: {e}")
@@ -131,7 +131,7 @@ def stage_solver(input_path: Path, results_path: Path, excel_path: Path) -> None
 
 
 def stage_validate_output(results_path: Path) -> dict:
-    hr("STAGE 4 / 4  —  validate_output (schema v1.1) + HTML import shape check")
+    hr("STAGE 4 / 4  —  validate_output (schema v1.2) + HTML import shape check")
     res = json.loads(results_path.read_text(encoding="utf-8"))
     ok_flag, errs, warns = validate_output(res)
     print(f"  validate_output: ok={ok_flag}  errors={len(errs)}  warnings={len(warns)}")

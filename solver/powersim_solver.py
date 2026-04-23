@@ -939,7 +939,18 @@ def build_result_store(hourly: list, assets: dict, inp: dict, solve_time: float,
         vom_cost  = energy * float(a.get("vom",0))
         gross     = fuel_cost + sc_cost + nl_cost + vom_cost
         gas_mm3   = energy * a["_gas_rate"]
-        pmax_inst = float(a.get("pmax_installed", a.get("pmax",0)))
+        # Capacity-factor reference: pmax_installed for RE, pmax for thermal/hydro,
+        # power_mw for BESS, scalar pmax_profile for imports (otherwise observed peak).
+        if a.get("type") in ("wind", "solar"):
+            pmax_inst = float(a.get("pmax_installed", 0) or 0)
+        elif a.get("type") == "bess":
+            pmax_inst = float(a.get("power_mw", 0) or 0)
+        elif a.get("type") == "import":
+            pp = a.get("pmax_profile")
+            pmax_inst = float(pp) if isinstance(pp, (int, float)) else max(
+                (h["dispatch"].get(gid, 0) for h in hourly), default=0.0)
+        else:
+            pmax_inst = float(a.get("pmax", 0) or 0)
         curt      = sum(h["curtailed_mwh"] for h in hourly
                         if a.get("type") in ("wind","solar"))  # simplified
 
