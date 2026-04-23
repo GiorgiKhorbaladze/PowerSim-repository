@@ -130,6 +130,10 @@ def main(argv=None) -> int:
         hydro_inflow_unit = cfg.get("hydro_inflow_unit", "raw"),
         scenario_metadata = cfg.get("scenario_metadata"),
         study_year        = cfg.get("study_year", 2026),
+        resolution_min    = int(cfg.get("resolution_min", 60)),
+        stochastic_tree   = cfg.get("stochastic_tree"),
+        expansion         = cfg.get("expansion"),
+        kpi_templates     = cfg.get("kpi_templates"),
     )
     input_json.write_text(json.dumps(inp, ensure_ascii=False, separators=(",", ":")),
                           encoding="utf-8")

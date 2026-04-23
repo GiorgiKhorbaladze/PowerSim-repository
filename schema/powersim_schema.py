@@ -42,11 +42,18 @@ from typing import Any
 # ──────────────────────────────────────────────────────────────────────
 # VERSION + FIXED CONSTANTS
 # ──────────────────────────────────────────────────────────────────────
-SCHEMA_VERSION          = "1.2"
-ACCEPTED_SCHEMA_PRIOR   = {"1.0", "1.1"}     # accept legacy configs with warning
+SCHEMA_VERSION          = "1.3"
+ACCEPTED_SCHEMA_PRIOR   = {"1.0", "1.1", "1.2"}  # accept legacy configs with warning
 MODEL_VERSION           = "PowerSim v4.0"
 TIMEZONE                = "Asia/Tbilisi"
 HOURS_PER_YEAR          = 8760
+
+# Allowed sub-hourly resolutions (minutes per period).
+# The default remains 60 for full backward-compatibility with v1.0..v1.2.
+ALLOWED_RESOLUTIONS_MIN: tuple[int, ...] = (60, 30, 15, 5)
+
+# Back-ends the solver can drive. 'auto' → HiGHS if Gurobi isn't importable.
+ALLOWED_SOLVER_BACKENDS: tuple[str, ...] = ("auto", "highs", "gurobi", "cplex")
 
 # Allowed identifiers for `profile_bundle.scenario_id`.
 SCENARIOS: tuple[str, ...] = ("A_mean", "MC_P10", "MC_P50", "MC_P90")
@@ -256,14 +263,28 @@ def validate_input(inp: dict) -> tuple[bool, list[str], list[str]]:
     if ti and len(ti) != HOURS_PER_YEAR:
         errors.append(f"time_index length {len(ti)} ≠ {HOURS_PER_YEAR}")
 
+    # ── v1.3: resolution_min — sub-hourly support ───────────────────
+    res_min = inp.get("resolution_min", 60)
+    if res_min not in ALLOWED_RESOLUTIONS_MIN:
+        errors.append(
+            f"resolution_min '{res_min}' not in {ALLOWED_RESOLUTIONS_MIN}")
+    periods_per_year = HOURS_PER_YEAR * (60 // res_min) if res_min in ALLOWED_RESOLUTIONS_MIN else HOURS_PER_YEAR
+
     # ── profiles ────────────────────────────────────────────────────
+    # In v1.3 profile arrays must be HOURS_PER_YEAR (hourly base) OR
+    # periods_per_year (matching resolution_min). We accept both — the
+    # solver resamples at load time.
     profiles = inp.get("profiles") or {}
+    accepted_lengths = {HOURS_PER_YEAR, periods_per_year}
     demand = profiles.get("demand") or []
     if not demand:
         errors.append("profiles.demand is required")
     else:
-        if len(demand) != HOURS_PER_YEAR:
-            errors.append(f"profiles.demand length {len(demand)} ≠ {HOURS_PER_YEAR}")
+        if len(demand) not in accepted_lengths:
+            errors.append(
+                f"profiles.demand length {len(demand)} "
+                f"not in {sorted(accepted_lengths)} "
+                f"(hourly base or resolution_min={res_min}min)")
         if any((v is None) or (v != v) for v in demand):
             errors.append("profiles.demand contains NaN/None")
         if any(isinstance(v, (int, float)) and v < 0 for v in demand):
@@ -272,8 +293,10 @@ def validate_input(inp: dict) -> tuple[bool, list[str], list[str]]:
     for key, arr in profiles.items():
         if key == "demand" or not isinstance(arr, list):
             continue
-        if len(arr) != HOURS_PER_YEAR:
-            errors.append(f"profile '{key}' length {len(arr)} ≠ {HOURS_PER_YEAR}")
+        if len(arr) not in accepted_lengths:
+            errors.append(
+                f"profile '{key}' length {len(arr)} "
+                f"not in {sorted(accepted_lengths)}")
         if any((v is None) or (v != v) for v in arr):
             errors.append(f"profile '{key}' contains NaN/None")
 
@@ -469,6 +492,108 @@ def validate_input(inp: dict) -> tuple[bool, list[str], list[str]]:
         errors.append(
             f"study_horizon out of range: "
             f"start={start}, horizon={hlen}, cap={HOURS_PER_YEAR}")
+
+    # ── v1.3: piecewise heat_rate_curve on thermal ───────────────────
+    for a in inp.get("assets") or []:
+        if a.get("type") != "thermal":
+            continue
+        hrc = a.get("heat_rate_curve")
+        if hrc is None:
+            continue
+        if not isinstance(hrc, list) or len(hrc) < 2:
+            errors.append(f"thermal '{a.get('id')}': heat_rate_curve must be a list of "
+                          "≥2 [pmw, heat_rate] pairs when provided")
+            continue
+        prev_p = -1.0
+        for pt in hrc:
+            if not (isinstance(pt, (list, tuple)) and len(pt) == 2):
+                errors.append(f"thermal '{a.get('id')}': heat_rate_curve entry {pt!r} must be [pmw, hr]")
+                break
+            p, hr = pt
+            if not (isinstance(p, (int, float)) and isinstance(hr, (int, float))):
+                errors.append(f"thermal '{a.get('id')}': heat_rate_curve non-numeric in {pt!r}")
+                break
+            if p <= prev_p:
+                errors.append(f"thermal '{a.get('id')}': heat_rate_curve breakpoints must strictly increase in pmw")
+                break
+            prev_p = p
+
+    # ── v1.3: solver backend selector ─────────────────────────────
+    scfg = inp.get("solver_settings") or {}
+    bke = scfg.get("solver", "auto")
+    if bke not in ALLOWED_SOLVER_BACKENDS:
+        errors.append(f"solver_settings.solver '{bke}' not in {ALLOWED_SOLVER_BACKENDS}")
+    ws = scfg.get("warm_start", False)
+    if not isinstance(ws, bool):
+        errors.append("solver_settings.warm_start must be boolean")
+
+    # ── v1.3: stochastic_tree (2-stage UC) ────────────────────────
+    st = inp.get("stochastic_tree")
+    if st is not None:
+        if not isinstance(st, dict):
+            errors.append("stochastic_tree must be a dict")
+        else:
+            scs = st.get("scenarios") or []
+            if not isinstance(scs, list) or len(scs) < 2:
+                errors.append("stochastic_tree.scenarios must be a list of ≥2 scenarios")
+            else:
+                total = 0.0
+                seen = set()
+                for sc in scs:
+                    sid = sc.get("id")
+                    if not sid or sid in seen:
+                        errors.append(f"stochastic_tree: duplicate or missing scenario id '{sid}'")
+                        continue
+                    seen.add(sid)
+                    p = sc.get("prob", sc.get("probability"))
+                    if not (isinstance(p, (int, float)) and 0 < p <= 1):
+                        errors.append(f"stochastic_tree scenario '{sid}': prob must be (0, 1]")
+                    else:
+                        total += p
+                if abs(total - 1.0) > 1e-4:
+                    warnings.append(
+                        f"stochastic_tree: scenario probabilities sum to {total:.4f} "
+                        "(solver will renormalize)")
+            obj = st.get("objective", "expected")
+            if obj not in ("expected", "cvar", "expected+cvar"):
+                errors.append(f"stochastic_tree.objective '{obj}' must be expected|cvar|expected+cvar")
+            alpha = st.get("cvar_alpha", 0.95)
+            if not (isinstance(alpha, (int, float)) and 0 < alpha < 1):
+                errors.append("stochastic_tree.cvar_alpha must be in (0, 1)")
+
+    # ── v1.3: capacity expansion (LT-Plan) ────────────────────────
+    ex = inp.get("expansion")
+    if ex is not None:
+        if not isinstance(ex, dict):
+            errors.append("expansion must be a dict")
+        else:
+            mode = ex.get("mode", "fixed")
+            if mode not in ("fixed", "enabled"):
+                errors.append(f"expansion.mode '{mode}' must be 'fixed' or 'enabled'")
+            disc = ex.get("discount_rate", 0.08)
+            if not (isinstance(disc, (int, float)) and 0 <= disc < 0.5):
+                errors.append("expansion.discount_rate must be in [0, 0.5)")
+            years = ex.get("years", 1)
+            if not (isinstance(years, int) and 1 <= years <= 30):
+                errors.append("expansion.years must be integer in [1, 30]")
+            cands = ex.get("candidates") or []
+            if not isinstance(cands, list):
+                errors.append("expansion.candidates must be a list")
+            else:
+                for c in cands:
+                    for f in ("id", "type", "capex_per_mw", "max_build_mw"):
+                        if f not in c:
+                            errors.append(f"expansion candidate missing field '{f}'")
+
+    # ── v1.3: kpi_templates ──────────────────────────────────────
+    kps = inp.get("kpi_templates")
+    if kps is not None:
+        if not isinstance(kps, list):
+            errors.append("kpi_templates must be a list")
+        else:
+            for k in kps:
+                if not (isinstance(k, dict) and k.get("id") and k.get("formula")):
+                    errors.append("each kpi_template needs id + formula")
 
     ok = len(errors) == 0
     return ok, errors, warnings

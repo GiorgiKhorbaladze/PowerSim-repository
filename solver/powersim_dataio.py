@@ -641,6 +641,10 @@ def build_input_from_project(
     hydro_inflow_unit: str = "raw",
     scenario_metadata: dict | None = None,
     study_year: int = 2026,
+    resolution_min: int = 60,
+    stochastic_tree: dict | None = None,
+    expansion: dict | None = None,
+    kpi_templates: list | None = None,
 ) -> dict:
     """
     Assemble a schema v1.1 input dict from the raw project files.
@@ -760,6 +764,15 @@ def build_input_from_project(
             "id": scenario, "label": scenario, "probability": 1.0,
         },
     }
+    # v1.3 additions — only embed when the caller supplied them.
+    if resolution_min and resolution_min != 60:
+        inp["resolution_min"] = int(resolution_min)
+    if stochastic_tree is not None:
+        inp["stochastic_tree"] = stochastic_tree
+    if expansion is not None:
+        inp["expansion"] = expansion
+    if kpi_templates is not None:
+        inp["kpi_templates"] = kpi_templates
 
     # Validate generated input — must pass before returning.
     ok, errs, warns = validate_input(inp)

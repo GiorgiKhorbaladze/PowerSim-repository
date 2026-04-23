@@ -76,9 +76,56 @@ except ImportError:
 
 SCHEMA_VERSION = _SCHEMA_VER
 MODEL_VERSION  = _MODEL_VER
-RESOLUTION_H   = 1          # FIXED — never change
 HOURS_PER_YEAR = 8760
-SOLVER_VERSION = "powersim_solver 1.1.0"   # Stage-1-patched
+SOLVER_VERSION = "powersim_solver 1.3.0"   # v1.3: sub-hourly, Gurobi, warm-start, heat-rate curves
+
+
+# ══════════════════════════════════════════════════════════════════════
+#  RESOLUTION HELPERS  (v1.3 sub-hourly support)
+# ══════════════════════════════════════════════════════════════════════
+def resolve_resolution(inp: dict) -> tuple[int, int, float]:
+    """
+    Pick (resolution_min, periods_per_year, period_hours) from the input.
+    Defaults to 60-min (hourly) for back-compat. Only {5,15,30,60} are valid.
+    """
+    r = int(inp.get("resolution_min", 60))
+    if r not in (5, 15, 30, 60):
+        raise ValueError(f"resolution_min={r} not in (5,15,30,60)")
+    ppy = HOURS_PER_YEAR * (60 // r)
+    return r, ppy, r / 60.0
+
+
+def _resample_to_periods(arr: list, n_out: int) -> list:
+    """
+    Resample `arr` (length L) to exactly `n_out` periods.
+      - Upsample (L < n_out):   step-hold — every slot inside the hour carries the hourly value.
+        Energy-preserving for extensive qty (MW), because MW is an intensive rate.
+      - Downsample (L > n_out): average across contained sub-periods.
+      - L == n_out:             pass-through.
+    """
+    L = len(arr)
+    if L == n_out:
+        return list(arr)
+    if L == 0:
+        return [0.0] * n_out
+    if L < n_out and n_out % L == 0:
+        k = n_out // L
+        return [float(arr[i // k]) for i in range(n_out)]
+    if L > n_out and L % n_out == 0:
+        k = L // n_out
+        out = []
+        for i in range(n_out):
+            seg = arr[i * k:(i + 1) * k]
+            out.append(sum(seg) / len(seg))
+        return out
+    # Generic fallback: linear interpolation.
+    out = []
+    for i in range(n_out):
+        x = i * (L - 1) / max(n_out - 1, 1)
+        lo = int(x); hi = min(lo + 1, L - 1)
+        w = x - lo
+        out.append(arr[lo] * (1 - w) + arr[hi] * w)
+    return out
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -110,26 +157,37 @@ def _print_input_summary(inp: dict):
 
 def slice_profiles(inp: dict) -> dict:
     """
-    Extract the study slice from 8760-length profiles.
-    Returns: {profile_key: [float × horizon_h]}
+    Extract the study slice from profiles, accounting for `resolution_min`.
+
+    Profile arrays may arrive at either:
+      • hourly base    (length == HOURS_PER_YEAR == 8760)          → resampled
+      • native periods (length == HOURS_PER_YEAR × 60/resolution_min) → passed through
+
+    Horizon is specified in HOURS; the solver expands to periods internally.
+
+    Returns:
+        (sliced_profiles, horizon_periods) where horizon_periods is the
+        number of decision periods inside the slice at the chosen resolution.
     """
     sh      = inp.get("study_horizon", {})
-    start   = int(sh.get("start_hour", 0))
-    horizon = int(sh.get("horizon_hours", HOURS_PER_YEAR))
-    horizon = min(horizon, HOURS_PER_YEAR - start)
+    start_h = int(sh.get("start_hour", 0))
+    horizon_h = int(sh.get("horizon_hours", HOURS_PER_YEAR))
+    horizon_h = min(horizon_h, HOURS_PER_YEAR - start_h)
+
+    r_min, ppy, _ = resolve_resolution(inp)
+    periods_per_hour = 60 // r_min
+    start_p   = start_h * periods_per_hour
+    horizon_p = horizon_h * periods_per_hour
 
     profiles_full = inp.get("profiles", {})
     sliced = {}
     for key, arr in profiles_full.items():
-        if isinstance(arr, list) and len(arr) >= start + horizon:
-            sliced[key] = arr[start:start + horizon]
-        elif isinstance(arr, list):
-            # tile if needed
-            extended = arr * math.ceil((start + horizon) / max(len(arr), 1))
-            sliced[key] = extended[start:start + horizon]
-        else:
-            sliced[key] = [float(arr)] * horizon  # scalar expansion
-    return sliced, horizon
+        if not isinstance(arr, list):
+            sliced[key] = [float(arr)] * horizon_p          # scalar expansion
+            continue
+        native = arr if len(arr) == ppy else _resample_to_periods(arr, ppy)
+        sliced[key] = native[start_p:start_p + horizon_p]
+    return sliced, horizon_p
 
 
 def build_asset_map(inp: dict) -> dict:
@@ -266,8 +324,10 @@ def solve_window(
     gas_limits:   dict,          # gas constraint config
     init_state:   dict,          # carry-over from previous window
     solver_cfg:   dict,          # solver settings
-    offset_h:     int = 0        # global hour offset for calendar
-) -> tuple[list, dict, float]:
+    offset_h:     int = 0,       # global hour offset for calendar
+    dt:           float = 1.0,   # hours per period (60-min default)
+    warm_start:   dict | None = None,   # optional {varname: {keys: value}} hints
+) -> tuple[list, dict, float, float]:
     """
     Solve one rolling window.
     Returns: (hourly_results, final_state, solve_time_s)
@@ -329,33 +389,67 @@ def solve_window(
         m.xch  = pyo.Var(m.BESS, m.T, domain=pyo.Binary)            # 1=charging
 
     # ── Objective ─────────────────────────────────────────────────────
+    # All extensive quantities (energy in MWh, gas in Mm3, fuel $ etc.) are
+    # scaled by `dt` hours-per-period so the objective is time-consistent
+    # at any resolution (60/30/15/5 min).
     UNSERVED_PEN = float(solver_cfg.get("unserved_penalty", 3000))
     CURT_PEN     = float(solver_cfg.get("curtailment_penalty", 0))
 
     res_penalties = {rp["id"]: float(rp.get("shortfall_penalty",500))
                      for rp in reserve_prods}
 
+    # ── Piecewise heat-rate curve (v1.3 #9) ───────────────────────────
+    # If a thermal asset defines `heat_rate_curve: [[pmw, hr], ...]`,
+    # replace its flat `_dispMC` with a convex combination using SOS2
+    # lambda variables. The effective fuel cost is
+    #    fuel_g_t = fuel_price * Σ_k λ[g,t,k] * hr[k] * pmw[k]
+    # where the λ's also pin dispatch to the interpolated point.
+    hrc_assets: dict[str, list[tuple[float, float]]] = {
+        g: list(map(tuple, a["heat_rate_curve"]))
+        for g, a in assets.items()
+        if a.get("type") == "thermal" and isinstance(a.get("heat_rate_curve"), list)
+    }
+    if hrc_assets:
+        m.HRC = pyo.Set(initialize=list(hrc_assets.keys()))
+        hrc_idx = {g: list(range(len(pts))) for g, pts in hrc_assets.items()}
+        m.HRCidx = pyo.Set(initialize=[
+            (g, k) for g, ks in hrc_idx.items() for k in ks], dimen=2)
+        m.hrc_lam = pyo.Var(m.HRCidx, m.T, domain=pyo.NonNegativeReals, bounds=(0, 1))
+        def _hrc_sum(m, g, t):
+            return sum(m.hrc_lam[g, k, t] for k in hrc_idx[g]) == (
+                m.u[g, t] if g in committable else 1)
+        m.HRCSum = pyo.Constraint(m.HRC, m.T, rule=_hrc_sum)
+        def _hrc_disp(m, g, t):
+            return m.p[g, t] == sum(hrc_assets[g][k][0] * m.hrc_lam[g, k, t]
+                                    for k in hrc_idx[g])
+        m.HRCDisp = pyo.Constraint(m.HRC, m.T, rule=_hrc_disp)
+
+    def _fuel_term(g, t):
+        """$ per period = MC × MW × dt (+ PWL heat-rate cost when defined)."""
+        if g in hrc_assets:
+            fp   = float(assets[g].get("fuel_price", 0))
+            pts  = hrc_assets[g]
+            # $ / period = fuel_price × Σ_k λ_k × hr_k × pmw_k × dt × 0.9478
+            return fp * 0.9478 * dt * sum(
+                m.hrc_lam[g, k, t] * pts[k][0] * pts[k][1]
+                for k in hrc_idx[g])
+        return (assets[g]["_dispMC"] + assets[g].get("vom", 0)) * m.p[g, t] * dt
+
     def obj_rule(m):
-        # Generation costs
-        fuel  = sum((assets[g]["_dispMC"] + assets[g].get("vom",0)) * m.p[g,t]
-                    for g in all_ids for t in m.T)
-        start = sum(float(assets[g].get("startup_cost",0)) * m.y[g,t]
+        fuel  = sum(_fuel_term(g, t) for g in all_ids for t in m.T)
+        # Startup is per-event (no dt); no-load is $/h so × dt.
+        start = sum(float(assets[g].get("startup_cost", 0)) * m.y[g, t]
                     for g in committable for t in m.T)
-        noload= sum(float(assets[g].get("no_load_cost",0)) * m.u[g,t]
+        noload= sum(float(assets[g].get("no_load_cost", 0)) * m.u[g, t] * dt
                     for g in committable for t in m.T)
-        # BESS degradation via vom_discharge
         bess_cost = sum(
-            float(assets[b].get("vom_discharge",0)) * m.dis[b,t]
+            float(assets[b].get("vom_discharge", 0)) * m.dis[b, t] * dt
             for b in bess_ids for t in m.T
         ) if bess_ids else 0
-        # Penalties
-        unserved_pen = UNSERVED_PEN * sum(m.unserv[t] for t in m.T)
+        unserved_pen = UNSERVED_PEN * sum(m.unserv[t] * dt for t in m.T)
         res_pen = sum(
-            res_penalties[rid] * m.res_sh[rid,t]
-            for rid in res_ids for t in m.T
-        )
-        # Stage 2: strategic end-of-horizon penalty for reservoir hydro.
-        # Activates only if at least one plant declared target + penalty.
+            res_penalties[rid] * m.res_sh[rid, t] * dt
+            for rid in res_ids for t in m.T)
         end_level_pen = 0
         if hasattr(m, "end_short"):
             end_level_pen = sum(
@@ -395,28 +489,31 @@ def solve_window(
     def yz_ub(m, g, t): return m.y[g,t] + m.z[g,t] <= 1
     m.YZUB = pyo.Constraint(m.GC, m.T, rule=yz_ub)
 
+    # min_up / min_down are specified in HOURS; convert to periods.
+    def _hours_to_periods(h): return max(1, int(math.ceil(h / dt)))
+
     # ── Minimum Up Time ────────────────────────────────────────────────
     def min_up(m, g, t):
-        mut = int(assets[g].get("min_up", 0))
-        if mut < 2: return pyo.Constraint.Skip
-        end = min(t + mut - 1, T[-1])
+        mut_p = _hours_to_periods(float(assets[g].get("min_up", 0)))
+        if mut_p < 2: return pyo.Constraint.Skip
+        end = min(t + mut_p - 1, T[-1])
         return sum(m.y[g,tau] for tau in range(t, end+1)) <= m.u[g,t]
     m.MinUp = pyo.Constraint(m.GC, m.T, rule=min_up)
 
     # ── Minimum Down Time ──────────────────────────────────────────────
     def min_dn(m, g, t):
-        mdt = int(assets[g].get("min_down", 0))
-        if mdt < 2: return pyo.Constraint.Skip
-        end = min(t + mdt - 1, T[-1])
+        mdt_p = _hours_to_periods(float(assets[g].get("min_down", 0)))
+        if mdt_p < 2: return pyo.Constraint.Skip
+        end = min(t + mdt_p - 1, T[-1])
         return sum(m.z[g,tau] for tau in range(t, end+1)) <= 1 - m.u[g,t]
     m.MinDn = pyo.Constraint(m.GC, m.T, rule=min_dn)
 
-    # ── Ramp constraints ───────────────────────────────────────────────
+    # ── Ramp constraints (ramp_up/down are MW per HOUR → MW per period = ramp*dt)
     def ramp_up_c(m, g, t):
         if t == 1: return pyo.Constraint.Skip
         ru = float(assets[g].get("ramp_up", 9999))
         if ru >= 9999: return pyo.Constraint.Skip
-        return m.p[g,t] - m.p[g,t-1] <= ru
+        return m.p[g,t] - m.p[g,t-1] <= ru * dt
     def ramp_dn_c(m, g, t):
         if t == 1: return pyo.Constraint.Skip
         rd = float(assets[g].get("ramp_down", 9999))
@@ -441,39 +538,37 @@ def solve_window(
     # turbine it, we've just recovered the upstream plant's waste).
     # Conservative choice: downstream sees only turbined water.
     if hydro_reg:
+        # Periods per hour & upstream cascade delay in periods (was hours).
+        _per_per_h = max(1, int(round(1 / dt)))
         def hydro_bal(m, h, t):
             ha   = assets[h]["hydro"]
             eff  = float(ha.get("efficiency", 350))   # MWh/Mm³
             infl_key = assets[h].get("inflow_profile")
-            # Stage 2: no fallback inflow. If inflow_profile is null AND
-            # hydro.inflow is not explicitly set, inflow is 0. Reservoirs
-            # with no inflow source rely solely on initial storage + cascade.
             if infl_key and infl_key in profiles_w:
-                infl = profiles_w[infl_key][t-1]
+                infl_rate = profiles_w[infl_key][t-1]     # Mm³/h rate
             else:
                 raw_inflow = ha.get("inflow")
-                infl = float(raw_inflow) if raw_inflow is not None else 0.0
-            release = m.p[h,t] / max(eff, 0.001)
+                infl_rate = float(raw_inflow) if raw_inflow is not None else 0.0
+            # Release is Mm³/h rate: p[MW] / eff[MWh/Mm³] = Mm³/h.
+            release_rate = m.p[h, t] / max(eff, 0.001)
 
-            # ── Cascade with travel delay ──
             up_id = ha.get("cascade_upstream")
-            cascade_in = 0
+            cascade_in_rate = 0
             if up_id and up_id in assets:
-                delay    = int(ha.get("cascade_travel_delay_h", 0))
+                delay_h  = int(ha.get("cascade_travel_delay_h", 0))
                 gain     = float(ha.get("cascade_gain", 1.0))
-                t_upstream = t - delay
+                t_upstream = t - delay_h * _per_per_h
                 if t_upstream >= 1:
-                    up_eff = float(assets[up_id].get("hydro",{}).get("efficiency",350))
-                    # Only turbined water (release = p/eff), not spill
-                    cascade_in = gain * (m.p[up_id, t_upstream] / max(up_eff, 0.001))
-                # else: pre-horizon upstream water not modeled — bootstrap=0
+                    up_eff = float(assets[up_id].get("hydro", {}).get("efficiency", 350))
+                    cascade_in_rate = gain * (m.p[up_id, t_upstream] / max(up_eff, 0.001))
 
-            infl_total = infl + cascade_in
+            infl_rate_total = infl_rate + cascade_in_rate
             if t == 1:
-                stor_prev = init_state.get(h, {}).get("stor", float(ha.get("reservoir_init",700)))
+                stor_prev = init_state.get(h, {}).get("stor", float(ha.get("reservoir_init", 700)))
             else:
-                stor_prev = m.stor[h,t-1]
-            return m.stor[h,t] == stor_prev + infl_total - release - m.spill[h,t]
+                stor_prev = m.stor[h, t-1]
+            # Convert rates to per-period volumes by × dt.
+            return m.stor[h, t] == stor_prev + (infl_rate_total - release_rate - m.spill[h, t]) * dt
         m.HydroBal = pyo.Constraint(m.GR, m.T, rule=hydro_bal)
 
         def stor_lb(m, h, t):
@@ -521,7 +616,8 @@ def solve_window(
                            float(a["soc_init"]) * float(a["energy_mwh"]))
             else:
                 soc_prev = m.soc[b,t-1]
-            return m.soc[b,t] == soc_prev + ec * m.ch[b,t] - m.dis[b,t] / max(ed,0.001)
+            # ch/dis are MW; × dt converts to MWh per period.
+            return m.soc[b,t] == soc_prev + (ec * m.ch[b,t] - m.dis[b,t] / max(ed,0.001)) * dt
         def bess_soc_lb(m, b, t):
             return m.soc[b,t] >= float(assets[b]["soc_min"]) * float(assets[b]["energy_mwh"])
         def bess_soc_ub(m, b, t):
@@ -574,31 +670,26 @@ def solve_window(
                     m.res_down[rid,g,t].fix(0)
 
     # ── Gas constraints ────────────────────────────────────────────────
+    # Gas flow per period = gas_rate[Mm³/MWh] × p[MW] × dt[h].
     gas_mode = gas_limits.get("mode","none")
     if gas_mode != "none" and gas_units:
+        H_hours = H * dt
         def gas_total(m):
-            return sum(assets[g]["_gas_rate"] * m.p[g,t]
+            return sum(assets[g]["_gas_rate"] * m.p[g,t] * dt
                        for g in gas_units for t in m.T) <= \
-                   gas_limits.get("daily_limit", 9999) * H
+                   gas_limits.get("daily_limit", 9999) * H_hours
         if gas_mode in ("annual","annual+monthly") and gas_limits.get("daily_limit"):
             m.GasTotal = pyo.Constraint(rule=gas_total)
-        # ── Stage 2: real per-calendar-month gas cap ───────────────────
-        # Map each window hour t (1..H) to its calendar month using the
-        # global hour offset.  For each month that the window TOUCHES,
-        # emit one constraint:
-        #   Σ_{t in month_m ∩ window} gas_rate × p[g,t]  ≤  cap_m × frac
-        # where `frac` = (hours in window ∩ month) / (total hours in month).
-        # This pro-rates correctly when the horizon is shorter than a month
-        # (e.g. 168h Jan window gets cap_Jan × 168/744).
+        # ── Real per-calendar-month gas cap ────────────────────────────
+        # Map each window period t to its calendar month via the global
+        # hour offset and the period duration.
         monthly = gas_limits.get("monthly_limits")
         if gas_mode in ("monthly","annual+monthly") and monthly:
             HOURS_PER_MONTH = (
-                31*24, 28*24, 31*24, 30*24, 31*24, 30*24,   # Jan..Jun
-                31*24, 31*24, 30*24, 31*24, 30*24, 31*24,   # Jul..Dec
+                31*24, 28*24, 31*24, 30*24, 31*24, 30*24,
+                31*24, 31*24, 30*24, 31*24, 30*24, 31*24,
             )
-            # Bucket window hours by calendar month
             def _hour_to_month(global_h: int) -> int:
-                """Return 1..12 for a global hour 0..8759 (non-leap)."""
                 acc = 0
                 for i, hpm in enumerate(HOURS_PER_MONTH, start=1):
                     if global_h < acc + hpm:
@@ -607,37 +698,81 @@ def solve_window(
                 return 12
             month_to_periods: dict[int, list[int]] = {}
             for t in T:
-                gh = (offset_h + (t - 1)) % 8760
+                gh = (offset_h + int((t - 1) * dt)) % 8760
                 mo = _hour_to_month(gh)
                 month_to_periods.setdefault(mo, []).append(t)
-            # Build constraints — only for months that have a cap declared
             constrained = [mo for mo in sorted(month_to_periods.keys()) if mo in monthly]
             if constrained:
                 m.GasMonthlyIdx = pyo.Set(initialize=constrained, ordered=True)
                 def _gas_month_rule(m, mo):
                     periods = month_to_periods[mo]
                     cap_full = float(monthly[mo])
-                    # Pro-rate: fraction of the month covered by this window
-                    frac = len(periods) / float(HOURS_PER_MONTH[mo - 1])
+                    # Pro-rate: hours (= periods × dt) covered by window vs full month.
+                    hours_in_window = len(periods) * dt
+                    frac = hours_in_window / float(HOURS_PER_MONTH[mo - 1])
                     cap_window = cap_full * frac
-                    return sum(assets[g]["_gas_rate"] * m.p[g, t]
+                    return sum(assets[g]["_gas_rate"] * m.p[g, t] * dt
                                for g in gas_units for t in periods) <= cap_window
                 m.GasMonthly = pyo.Constraint(m.GasMonthlyIdx, rule=_gas_month_rule)
 
+    # ── Warm start hints (v1.3 #6) — pre-populate .value on vars from a
+    #   previous solve; both Gurobi and HiGHS honour this for MIP restarts.
+    if warm_start:
+        for vn, values in warm_start.items():
+            if not hasattr(m, vn):  continue
+            var = getattr(m, vn)
+            for k, v in values.items():
+                try:
+                    var[k].value = float(v)
+                except (KeyError, TypeError, ValueError):
+                    pass
+
     # ── Solve ──────────────────────────────────────────────────────────
     m.dual = pyo.Suffix(direction=pyo.Suffix.IMPORT)
-    try:
-        # Pyomo ≤6.9 ships HiGHS; Pyomo ≥6.10 renamed the class to Highs.
+    backend = str(solver_cfg.get("solver", "auto")).lower()
+
+    def _make_highs():
         try:
-            from pyomo.contrib.appsi.solvers.highs import HiGHS as _HighsCls
+            from pyomo.contrib.appsi.solvers.highs import HiGHS as _C
         except ImportError:
-            from pyomo.contrib.appsi.solvers.highs import Highs as _HighsCls
-        solver = _HighsCls()
-        solver.highs_options["time_limit"]    = float(solver_cfg.get("time_limit_s",300))
-        solver.highs_options["mip_rel_gap"]   = float(solver_cfg.get("mip_gap",0.005))
-        solver.highs_options["log_to_console"]= False
+            from pyomo.contrib.appsi.solvers.highs import Highs as _C
+        s = _C()
+        s.highs_options["time_limit"]     = float(solver_cfg.get("time_limit_s", 300))
+        s.highs_options["mip_rel_gap"]    = float(solver_cfg.get("mip_gap", 0.005))
+        s.highs_options["log_to_console"] = False
+        return s, "highs"
+
+    def _make_gurobi():
+        from pyomo.contrib.appsi.solvers.gurobi import Gurobi as _G
+        s = _G()
+        # Probe availability — Gurobi class imports cleanly even without a
+        # license; the runtime check tells us if we actually have a solver.
+        av = s.available()
+        ok_flags = ("FullLicense", "LimitedLicense", "available",
+                    "Available", "NotFound")   # names vary by Pyomo version
+        if str(av).split(".")[-1] in ("NotFound", "BadLicense"):
+            raise RuntimeError(f"Gurobi not usable ({av})")
+        s.gurobi_options["TimeLimit"] = float(solver_cfg.get("time_limit_s", 300))
+        s.gurobi_options["MIPGap"]    = float(solver_cfg.get("mip_gap", 0.005))
+        s.gurobi_options["Threads"]   = int(solver_cfg.get("threads", 0))
+        s.gurobi_options["OutputFlag"]= 0
+        if warm_start:
+            s.gurobi_options["LPWarmStart"] = 2
+        return s, "gurobi"
+
+    solver = None; backend_used = "appsi_highs"
+    try:
+        if backend == "gurobi":
+            solver, backend_used = _make_gurobi()
+        elif backend == "highs":
+            solver, backend_used = _make_highs()
+        else:  # auto — prefer Gurobi when usable, else HiGHS
+            try:
+                solver, backend_used = _make_gurobi()
+            except Exception:
+                solver, backend_used = _make_highs()
     except Exception:
-        solver = pyo.SolverFactory("appsi_highs")
+        solver = pyo.SolverFactory("appsi_highs"); backend_used = "appsi_highs"
 
     t0     = time.time()
     # Pyomo 6.10 dropped the load_solutions kwarg from appsi.Highs.solve().
@@ -646,7 +781,7 @@ def solve_window(
         result = solver.solve(m, load_solutions=True)
     except TypeError:
         result = solver.solve(m)
-    dt     = time.time() - t0
+    solve_wall_s = time.time() - t0
 
     def pv(var, *keys):
         try: v = pyo.value(var[keys]); return float(v) if v else 0.0
@@ -660,14 +795,15 @@ def solve_window(
         start_h = {g: round(pv(m.y, g, t)) for g in committable}
         shut_h  = {g: round(pv(m.z, g, t)) for g in committable}
 
-        # Gas
+        # Gas — reported as Mm³/h rate (intensive). Total volume per period
+        # is `hgas × dt` but the output keeps the rate for back-compat.
         hgas = sum(assets[g]["_gas_rate"] * disp[g] for g in gas_units)
 
-        # Curtailment (RE potential - actual)
+        # Curtailment — MWh per period (pot - actual is MW, × dt).
         curt = 0.0
         for g in wind_solar:
             pot = get_pmax_t(assets[g], t-1, profiles_w)
-            curt += max(0.0, pot - disp[g])
+            curt += max(0.0, pot - disp[g]) * dt
 
         # Lambda (VOLL-aware, from ED resolve in Phase 2 — here use dual)
         try:    lam = abs(float(m.dual[m.Balance[t]]))
@@ -722,13 +858,19 @@ def solve_window(
             if bess_ids else 0
         )
 
+        # 't' is a period index; we also expose hour_of_year for calendar
+        # work and the period's duration in minutes.
+        t_period = t - 1 + offset_h * max(1, int(round(1/dt)))
+        hour_of_year = (offset_h + (t - 1) * dt)
         hourly_w.append({
-            "t":               t - 1 + offset_h,
+            "t":               t_period,
+            "hour_of_year":    round(hour_of_year, 6),
+            "period_minutes":  int(round(dt * 60)),
             "load_mw":         demand_w[t-1],
             "generation_mw":   round(gen_total, 2),
             "lambda_usd_mwh":  round(lam, 3),
             "lambda_source":   "dual_or_fallback",
-            "unserved_mwh":    round(pv(m.unserv, t), 3),
+            "unserved_mwh":    round(pv(m.unserv, t) * dt, 3),
             "curtailed_mwh":   round(curt, 2),
             "gas_mm3h":        round(hgas, 6),
             "dispatch":        disp,
@@ -755,16 +897,13 @@ def solve_window(
 
     tc = str(getattr(result, "solver", {}).termination_condition
              if hasattr(result,"solver") else "—")
-    print(f"   ✅ {tc} | {dt:.1f}s | H={H}")
+    print(f"   ✅ {tc} | {solve_wall_s:.1f}s | H={H} | backend={backend_used} | dt={dt}h")
 
-    # ── Return Pyomo objective for real closure reconciliation ────────
-    # (Stage-1 patch: closure check was self-referential; now compare
-    #  reconstructed cost against the solver's own objective value.)
     try:
         obj_val = float(pyo.value(m.OBJ))
     except Exception:
         obj_val = float("nan")
-    return hourly_w, fin_state, dt, obj_val
+    return hourly_w, fin_state, solve_wall_s, obj_val
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -778,58 +917,78 @@ def solve_all(inp: dict, assets: dict, profiles: dict, gas_limits: dict) -> tupl
     Stage-1 patch: also returns summed Pyomo objective for closure check.
     """
     sh      = inp.get("study_horizon", {})
-    H_total = int(sh.get("horizon_hours", len(profiles.get("demand",[]))))
+    H_total_h = int(sh.get("horizon_hours", len(profiles.get("demand", [])) or HOURS_PER_YEAR))
     demand  = profiles["demand"]
     reserve_prods = inp.get("reserve_products", [])
     solver_cfg    = inp.get("solver_settings", {})
 
+    # Resolution → period duration.
+    r_min, _ppy, dt_h = resolve_resolution(inp)
+    periods_per_h = 60 // r_min
+    H_total_p     = H_total_h * periods_per_h
+
     window_h = int(solver_cfg.get("rolling_window_h", 168))
     step_h   = int(solver_cfg.get("rolling_step_h",   24))
+    window_p = window_h * periods_per_h
+    step_p   = step_h   * periods_per_h
 
-    use_rolling = H_total > window_h
+    warm_start_enabled = bool(solver_cfg.get("warm_start", False))
 
+    use_rolling = H_total_p > window_p
     if not use_rolling:
-        print(f"⚙️  Full-horizon solve: {len(assets)} assets × {H_total}h")
-        hourly, _, dt, obj_val = solve_window(
-            assets, demand[:H_total], profiles, reserve_prods, gas_limits,
-            init_state={}, solver_cfg=solver_cfg, offset_h=0
-        )
-        return hourly, dt, obj_val
+        print(f"⚙️  Full-horizon solve: {len(assets)} assets × {H_total_p} periods "
+              f"({H_total_h}h @ {r_min}min)")
+        hourly, _, swall, obj_val = solve_window(
+            assets, demand[:H_total_p], profiles, reserve_prods, gas_limits,
+            init_state={}, solver_cfg=solver_cfg, offset_h=0, dt=dt_h)
+        return hourly, swall, obj_val
 
-    # Rolling
-    n_windows = math.ceil((H_total - window_h) / step_h) + 1
-    print(f"⚙️  Rolling Horizon: {H_total}h ÷ {window_h}h window × {step_h}h step = {n_windows} windows")
+    n_windows = math.ceil((H_total_p - window_p) / step_p) + 1
+    print(f"⚙️  Rolling Horizon: {H_total_h}h ÷ {window_h}h window × {step_h}h step "
+          f"= {n_windows} windows  (dt={r_min}min, warm_start={warm_start_enabled})")
 
-    all_hourly, state, total_dt, obj_accum = [], {}, 0.0, 0.0
-    committed = 0
+    all_hourly, state, total_swall, obj_accum = [], {}, 0.0, 0.0
+    committed_p = 0
+    prev_hint: dict | None = None
 
     for w in range(n_windows):
-        start = w * step_h
-        end   = min(start + window_h, H_total)
-        if start >= H_total: break
+        start_p = w * step_p
+        end_p   = min(start_p + window_p, H_total_p)
+        if start_p >= H_total_p: break
 
-        demand_w   = demand[start:end]
-        profiles_w = {k: v[start:end] if isinstance(v, list) else v
+        demand_w   = demand[start_p:end_p]
+        profiles_w = {k: v[start_p:end_p] if isinstance(v, list) else v
                       for k, v in profiles.items()}
+        start_h    = start_p // periods_per_h
 
-        hourly_w, state, dt, obj_w = solve_window(
+        hourly_w, state, swall, obj_w = solve_window(
             assets, demand_w, profiles_w, reserve_prods, gas_limits,
-            init_state=state, solver_cfg=solver_cfg, offset_h=start
-        )
-        total_dt += dt
-        # Commit only first step_h hours — objective is scaled by the committed
-        # fraction so rolling windows contribute proportionally to closure check.
-        commit_n    = min(step_h, end - start)
-        all_hourly.extend(hourly_w[:commit_n])
-        committed  += commit_n
-        if obj_w == obj_w and len(hourly_w) > 0:          # NaN check
-            obj_accum += obj_w * (commit_n / len(hourly_w))
-        pct = committed / H_total * 100
-        print(f"   window {w+1:3d}/{n_windows}: h{start:5d}-{start+commit_n-1:5d} "
-              f"| {dt:5.1f}s | {pct:5.1f}% done")
+            init_state=state, solver_cfg=solver_cfg, offset_h=start_h,
+            dt=dt_h, warm_start=prev_hint if warm_start_enabled else None)
+        total_swall += swall
+        commit_n_p = min(step_p, end_p - start_p)
+        all_hourly.extend(hourly_w[:commit_n_p])
+        committed_p += commit_n_p
+        if obj_w == obj_w and len(hourly_w) > 0:
+            obj_accum += obj_w * (commit_n_p / len(hourly_w))
+        pct = committed_p / H_total_p * 100
+        print(f"   window {w+1:3d}/{n_windows}: p{start_p:6d}-{start_p+commit_n_p-1:6d} "
+              f"| {swall:5.1f}s | {pct:5.1f}% done")
 
-    print(f"\n   ✅ Total: {committed}h, {total_dt:.0f}s ({total_dt/60:.1f} min)")
-    return all_hourly, total_dt, obj_accum
+        # Build a warm-start hint from the values this window produced.
+        # Uses rolled-forward assignments: period τ in new window ≈ period τ+step in old window.
+        if warm_start_enabled and hourly_w:
+            hint: dict = {"p": {}, "u": {}}
+            for j, row in enumerate(hourly_w[step_p:], start=1):
+                for g, v in row.get("dispatch", {}).items():
+                    hint["p"][(g, j)] = v
+                for g, v in row.get("commitment", {}).items():
+                    hint["u"][(g, j)] = v
+            prev_hint = hint
+
+    print(f"\n   ✅ Total: {committed_p} periods ({committed_p*dt_h:.0f}h), "
+          f"{total_swall:.0f}s ({total_swall/60:.1f} min)")
+    return all_hourly, total_swall, obj_accum
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -919,6 +1078,10 @@ def build_result_store(hourly: list, assets: dict, inp: dict, solve_time: float,
     pbundle  = inp.get("profile_bundle", {})
 
     H        = len(hourly)
+    # Resolution in hours (default 1.0). Honors sub-hourly v1.3 runs.
+    r_min    = int(inp.get("resolution_min", 60))
+    dt_h     = r_min / 60.0
+    H_hours  = H * dt_h
     res_ids  = [rp["id"] for rp in inp.get("reserve_products",[])]
     gas_cfg  = inp.get("gas_constraints", {}) or {}
     gas_units= [a["id"] for a in inp.get("assets",[])
@@ -928,9 +1091,11 @@ def build_result_store(hourly: list, assets: dict, inp: dict, solve_time: float,
     # ── By-unit summary ────────────────────────────────────────────────
     by_unit = {}
     for gid, a in assets.items():
-        energy    = sum(h["dispatch"].get(gid,0) for h in hourly)
-        oper_h    = sum(1 for h in hourly if h["commitment"].get(gid,0) > 0.5 or
+        # Energy (MWh) = Σ dispatch(MW) × dt(h)
+        energy    = sum(h["dispatch"].get(gid,0) for h in hourly) * dt_h
+        oper_p    = sum(1 for h in hourly if h["commitment"].get(gid,0) > 0.5 or
                         (not a["_committable"] and h["dispatch"].get(gid,0) > 0.1))
+        oper_h    = oper_p * dt_h
         starts    = sum(1 for i,h in enumerate(hourly)
                         if h["startup"].get(gid,0) > 0.5)
         fuel_cost = energy * a["_dispMC"]
@@ -958,8 +1123,8 @@ def build_result_store(hourly: list, assets: dict, inp: dict, solve_time: float,
             "name":          a.get("name", gid),
             "type":          a.get("type"),
             "energy_mwh":    round(energy, 1),
-            "capacity_factor": round(energy / max(pmax_inst * H, 1) * 100, 2),
-            "oper_hours":    oper_h,
+            "capacity_factor": round(energy / max(pmax_inst * H_hours, 1) * 100, 2),
+            "oper_hours":    round(oper_h, 2),
             "starts":        starts,
             "fuel_cost":     round(fuel_cost, 0),
             "startup_cost":  round(sc_cost, 0),
@@ -992,41 +1157,44 @@ def build_result_store(hourly: list, assets: dict, inp: dict, solve_time: float,
     gas_util_pct = None
     if gas_mode != "none" and annual_cap and annual_cap > 0:
         # Scale annual cap to horizon; binding = utilization > 99%.
-        window_cap = float(annual_cap) * (H / HOURS_PER_YEAR)
-        used = sum(gas_used_h)
+        window_cap = float(annual_cap) * (H_hours / HOURS_PER_YEAR)
+        # gas_used_h is a per-period Mm³/h rate; volume = Σ rate × dt.
+        used = sum(gas_used_h) * dt_h
         gas_util_pct = round(used / max(window_cap, 1e-9) * 100, 2) if window_cap else None
         gas_binding  = (gas_util_pct is not None) and (gas_util_pct >= 99.0)
     # Per-hour limited count stays a proxy — refining requires per-hour duals
     # which HiGHS doesn't surface cleanly for MIP.  Deferred to Stage 2.
     hours_gas_limited = H if gas_binding else 0
 
-    # ── Monthly aggregation (Stage-1 patch: real per-month rollups) ────
+    # ── Monthly aggregation ─────────────────────────────────────────
+    # month_map is length H (one entry per PERIOD). Per-period quantities
+    # multiply by dt_h to become per-hour/energy totals.
     study_year = inp.get("metadata",{}).get("study_year", 2026)
     start_h    = int(sh.get("start_hour", 0))
-    month_map  = _build_month_map(study_year, start_h, H)
+    month_map  = _build_month_map_periods(study_year, start_h, H, dt_h)
 
     monthly = []
     for mo in range(1, 13):
         idxs = [i for i, m in enumerate(month_map) if m == mo]
         if not idxs:
             continue
-        # Real per-unit monthly breakdown — no placeholder spread.
         per_unit_mo = {}
         for gid, a in assets.items():
-            m_energy = sum(hourly[i]["dispatch"].get(gid, 0) for i in idxs)
+            m_energy = sum(hourly[i]["dispatch"].get(gid, 0) for i in idxs) * dt_h
             m_starts = sum(1 for i in idxs if hourly[i]["startup"].get(gid, 0) > 0.5)
-            m_oper   = sum(1 for i in idxs
+            m_oper_p = sum(1 for i in idxs
                            if hourly[i]["commitment"].get(gid, 0) > 0.5
                            or (not a["_committable"] and hourly[i]["dispatch"].get(gid,0) > 0.1))
+            m_oper_h = m_oper_p * dt_h
             m_fuel   = m_energy * a["_dispMC"]
             m_vom    = m_energy * float(a.get("vom", 0))
             m_sc     = m_starts * float(a.get("startup_cost", 0))
-            m_nl     = m_oper   * float(a.get("no_load_cost", 0))
+            m_nl     = m_oper_h * float(a.get("no_load_cost", 0))
             m_gross  = m_fuel + m_vom + m_sc + m_nl
             per_unit_mo[gid] = {
                 "energy_mwh":  round(m_energy, 1),
                 "starts":      m_starts,
-                "oper_hours":  m_oper,
+                "oper_hours":  round(m_oper_h, 2),
                 "fuel_cost":   round(m_fuel, 0),
                 "gross_cost":  round(m_gross, 0),
                 "gas_mm3":     round(m_energy * a["_gas_rate"], 4),
@@ -1035,11 +1203,12 @@ def build_result_store(hourly: list, assets: dict, inp: dict, solve_time: float,
         monthly.append({
             "month":          mo,
             "label":          month_abbr[mo],
-            "hours":          len(idxs),
-            "total_energy_mwh": round(sum(hourly[i]["generation_mw"] for i in idxs), 0),
+            "hours":          round(len(idxs) * dt_h, 2),
+            "periods":        len(idxs),
+            "total_energy_mwh": round(sum(hourly[i]["generation_mw"] for i in idxs) * dt_h, 0),
             "total_cost_usd": round(m_cost, 0),
             "avg_lambda":     round(sum(hourly[i]["lambda_usd_mwh"] for i in idxs)/max(len(idxs),1), 2),
-            "gas_mm3":        round(sum(hourly[i]["gas_mm3h"] for i in idxs), 3),
+            "gas_mm3":        round(sum(hourly[i]["gas_mm3h"] for i in idxs) * dt_h, 3),
             "curtailed_mwh":  round(sum(hourly[i]["curtailed_mwh"] for i in idxs), 1),
             "unserved_mwh":   round(sum(hourly[i]["unserved_mwh"] for i in idxs), 1),
             "peak_load_mw":   round(max(hourly[i]["load_mw"] for i in idxs), 0),
@@ -1099,8 +1268,10 @@ def build_result_store(hourly: list, assets: dict, inp: dict, solve_time: float,
             "scenario":       sc_meta.get("id","A_mean"),
             "solved_at":      datetime.now().isoformat(),
             "study_start":    inp.get("time_index",[""])[sh.get("start_hour",0)] if inp.get("time_index") else "",
-            "horizon_hours":  H,
-            "resolution_h":   RESOLUTION_H,
+            "horizon_hours":  H,          # NB: H is period count; when dt=1 this equals hours.
+            "horizon_periods": H,
+            "resolution_h":   dt_h,
+            "resolution_min": r_min,
             "closure_ok":     closure_ok,
             "closure_gap":    None if closure_gap is None else round(closure_gap, 6),
             "closure_note":   closure_note,
@@ -1140,6 +1311,8 @@ def build_result_store(hourly: list, assets: dict, inp: dict, solve_time: float,
         "hourly_system": [
             {
                 "t":             h["t"],
+                "hour_of_year":  h.get("hour_of_year"),
+                "period_minutes":h.get("period_minutes", int(round(dt_h * 60))),
                 "load_mw":       h["load_mw"],
                 "generation_mw": h["generation_mw"],
                 "lambda_usd_mwh": h["lambda_usd_mwh"],
@@ -1193,9 +1366,15 @@ def build_result_store(hourly: list, assets: dict, inp: dict, solve_time: float,
 
 
 def _build_month_map(year: int, start_h: int, horizon_h: int) -> list:
-    """Return list of month numbers for each hour in the horizon."""
+    """Return list of month numbers for each HOUR in the horizon (legacy)."""
     base = datetime(year, 1, 1) + timedelta(hours=start_h)
     return [(base + timedelta(hours=i)).month for i in range(horizon_h)]
+
+
+def _build_month_map_periods(year: int, start_h: int, horizon_p: int, dt_h: float) -> list:
+    """Return list of month numbers for each PERIOD at the chosen dt."""
+    base = datetime(year, 1, 1) + timedelta(hours=start_h)
+    return [(base + timedelta(hours=i * dt_h)).month for i in range(horizon_p)]
 
 
 # ══════════════════════════════════════════════════════════════════════

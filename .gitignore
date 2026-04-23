@@ -23,3 +23,5 @@ Thumbs.db
 
 # Sample run logs
 *.log
+powersim_store.sqlite
+batches/
