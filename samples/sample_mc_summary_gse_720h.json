@@ -1,0 +1,94 @@
+{
+  "scenarios_run": 4,
+  "scenarios_ok": 4,
+  "horizon_hours": 720,
+  "wallclock_total_s": 179.93,
+  "percentiles": {
+    "total_cost_usd": {
+      "p10": 66139624.0,
+      "p50": 66198664.0,
+      "p90": 66219410.0,
+      "min": 66139624.0,
+      "max": 66219410.0,
+      "mean": 66179622.25
+    },
+    "avg_lambda_usd_mwh": {
+      "p10": 49.034,
+      "p50": 49.042,
+      "p90": 49.047,
+      "min": 49.034,
+      "max": 49.047,
+      "mean": 49.0395
+    },
+    "total_unserved_mwh": {
+      "p10": 0.0,
+      "p50": 0.0,
+      "p90": 0.0,
+      "min": 0.0,
+      "max": 0.0,
+      "mean": 0.0
+    },
+    "total_gas_mm3": {
+      "p10": 131.6111,
+      "p50": 131.663,
+      "p90": 131.6835,
+      "min": 131.6111,
+      "max": 131.6835,
+      "mean": 131.64325
+    }
+  },
+  "by_scenario": {
+    "A_mean": {
+      "wallclock_s": 46.58,
+      "total_cost_usd": 66198664.0,
+      "avg_lambda_usd_mwh": 49.042,
+      "total_energy_mwh": 1538373.0,
+      "peak_load_mw": 2922.5,
+      "total_gas_mm3": 131.6111,
+      "total_unserved_mwh": 0.0,
+      "total_curtailed_mwh": 0.0,
+      "closure_ok": true,
+      "closure_gap": 0.0,
+      "solver_status": "solved"
+    },
+    "MC_P10": {
+      "wallclock_s": 46.34,
+      "total_cost_usd": 66139624.0,
+      "avg_lambda_usd_mwh": 49.034,
+      "total_energy_mwh": 1538373.0,
+      "peak_load_mw": 2922.5,
+      "total_gas_mm3": 131.6835,
+      "total_unserved_mwh": 0.0,
+      "total_curtailed_mwh": 0.0,
+      "closure_ok": true,
+      "closure_gap": 0.0,
+      "solver_status": "solved"
+    },
+    "MC_P50": {
+      "wallclock_s": 42.96,
+      "total_cost_usd": 66160791.0,
+      "avg_lambda_usd_mwh": 49.035,
+      "total_energy_mwh": 1538373.0,
+      "peak_load_mw": 2922.5,
+      "total_gas_mm3": 131.6154,
+      "total_unserved_mwh": 0.0,
+      "total_curtailed_mwh": 0.0,
+      "closure_ok": true,
+      "closure_gap": 0.0,
+      "solver_status": "solved"
+    },
+    "MC_P90": {
+      "wallclock_s": 43.65,
+      "total_cost_usd": 66219410.0,
+      "avg_lambda_usd_mwh": 49.047,
+      "total_energy_mwh": 1538373.0,
+      "peak_load_mw": 2922.5,
+      "total_gas_mm3": 131.663,
+      "total_unserved_mwh": 0.0,
+      "total_curtailed_mwh": 0.0,
+      "closure_ok": true,
+      "closure_gap": 0.0,
+      "solver_status": "solved"
+    }
+  }
+}

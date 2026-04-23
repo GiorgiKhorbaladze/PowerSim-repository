@@ -34,17 +34,21 @@ files. See [`docs/JSON_HANDOFF.md`](docs/JSON_HANDOFF.md) for the contract.
 │   └── powersim_schema.py        ← v1.2 input + output validators
 ├── tests/
 │   ├── smoke_168h.py             ← end-to-end CI smoke test
-│   ├── stage1_smoke_fleet.json   ← 8-asset minimal fleet
+│   ├── stage1_smoke_fleet.json   ← 8-asset minimal fleet (CI only)
+│   ├── gse_2026_baseline.json    ← 27-asset GSE 2026 fleet, v10 LOCKED
 │   └── reservoir_overrides_template.csv
 ├── scripts/
 │   ├── build_demo_project.py     ← synthesize project_data/ for trials
 │   ├── run_horizon.py            ← single-scenario horizon run
 │   └── run_mc_sweep.py           ← P10/P50/P90 MC sweep
 ├── samples/
-│   ├── sample_input_168h.json    ← reference input (round-trip ready)
-│   ├── sample_results_168h.json  ← reference results (load in HTML)
+│   ├── sample_input_168h.json                  ← smoke fleet input
+│   ├── sample_input_gse_2026_168h.json         ← GSE 2026 baseline input
+│   ├── sample_results_168h.json                ← smoke fleet results
 │   ├── sample_results_720h.json
-│   └── sample_mc_summary_720h.json
+│   ├── sample_results_gse_2026_720h.json       ← GSE baseline 720h results
+│   ├── sample_mc_summary_720h.json
+│   └── sample_mc_summary_gse_720h.json         ← GSE 4-scenario MC summary
 ├── docs/
 │   ├── HAPPY_PATH.md             ← clone → result in 5 minutes
 │   ├── JSON_HANDOFF.md           ← input/output schema reference
@@ -68,15 +72,23 @@ pip install -r requirements.txt
 # 1. synthetic data so you can try without GSE files
 python scripts/build_demo_project.py --out project_data
 
-# 2. 168-hour smoke test (≈5 s)
+# 2. 168-hour CI smoke test (≈5 s, 8-asset minimal fleet)
 python tests/smoke_168h.py \
     --project-dir project_data \
     --config      tests/stage1_smoke_fleet.json \
     --keep-outputs out/smoke_168h
 
-# 3. open the HTML
+# 3. or — full GSE 2026 baseline 168h (≈35 s, 27 assets, v10 LOCKED)
+python scripts/run_horizon.py \
+    --project-dir project_data \
+    --config      tests/gse_2026_baseline.json \
+    --hours       168 \
+    --out-dir     out/gse_168h
+
+# 4. open the HTML
 xdg-open html/PowerSim_v4.html      # or just double-click
-# → click "📥 Import Results JSON" → pick out/smoke_168h/powersim_results.json
+# → click "🏭 GSE 2026 Demo ჩატვირთვა"  (loads the same 27-asset fleet)
+# → click "📥 Import Results JSON" → pick out/gse_168h/powersim_results.json
 ```
 
 Full walkthrough: [`docs/HAPPY_PATH.md`](docs/HAPPY_PATH.md).
@@ -86,16 +98,31 @@ Colab walkthrough: [`docs/COLAB.md`](docs/COLAB.md).
 
 ## Running real horizons
 
+### Reference numbers (GSE 2026 baseline, demo project_data)
+
+These should be reproducible verbatim from a clean clone — they are the
+acceptance check for the v10 LOCKED calibration on the demo project_data.
+
+| Horizon | Fleet | Wallclock | Total cost | Avg λ | Unserved | Gas |
+|---------|-------|-----------|------------|-------|----------|-----|
+| 168h    | 27 assets | 35 s  | $9.9 M    | $37.12/MWh | 0 MWh | 20.8 Mm³ |
+| 720h    | 27 assets | 44 s  | $66.2 M   | $49.04/MWh | 0 MWh | 87.3 Mm³ |
+| 8760h   | 27 assets | 217 s | $780.9 M  | $52.27/MWh | 0 MWh | 1069.6 Mm³ |
+| MC sweep 720h × 4 | 27 assets | 180 s | P10/P50/P90 ≈ $66.14M / $66.20M / $66.22M | — | — | gas-cap binding |
+
+Annual gas usage (1069.6 Mm³) is within the 1170 Mm³ cap; closure_gap ≈ 0%
+on every run; all four MC scenarios converge to optimal.
+
 ### 720-hour run (1 month)
 
 ```bash
 python scripts/run_horizon.py \
     --project-dir project_data \
-    --config      tests/stage1_smoke_fleet.json \
+    --config      tests/gse_2026_baseline.json \
     --hours       720 \
     --mip-gap     0.02 \
     --rolling-window 168 --rolling-step 168 \
-    --out-dir     out/run_720h
+    --out-dir     out/gse_720h
 ```
 
 Rolling horizon: 720 h ÷ 168 h windows × 168 h step = 5 windows. Each
@@ -106,11 +133,12 @@ window's terminal storage / commitment carries over to the next.
 ```bash
 python scripts/run_horizon.py \
     --project-dir project_data \
-    --config      tests/stage1_smoke_fleet.json \
+    --config      tests/gse_2026_baseline.json \
     --hours       8760 \
     --mip-gap     0.03 \
     --rolling-window 168 --rolling-step 168 \
-    --out-dir     out/run_8760h
+    --time-limit  600 \
+    --out-dir     out/gse_8760h
 ```
 
 ### Monte-Carlo P10 / P50 / P90 sweep
@@ -118,10 +146,10 @@ python scripts/run_horizon.py \
 ```bash
 python scripts/run_mc_sweep.py \
     --project-dir project_data \
-    --config      tests/stage1_smoke_fleet.json \
+    --config      tests/gse_2026_baseline.json \
     --hours       720 \
     --scenarios   A_mean MC_P10 MC_P50 MC_P90 \
-    --out-dir     out/mc_sweep_720h
+    --out-dir     out/gse_mc_720h
 ```
 
 Each scenario writes its own subdirectory; `mc_sweep_720h/mc_summary.json`

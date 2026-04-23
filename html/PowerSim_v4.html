@@ -892,41 +892,202 @@ function clearAssets(){
 }
 
 // ══════════════════════════════════════════════════════════════════
-// GSE 2026 DEMO DATA
+// GSE 2026 DEMO DATA  —  v10 LOCKED calibration baseline
 // ══════════════════════════════════════════════════════════════════
+//   Installed-capacity reference: დადგმული_სიმძლავრე__2026.xlsx
+//     (Section I reservoirs, Section II inflow-driven, aggregated small
+//     hydro, thermal, wind/solar, neighbour imports).
+//
+//   Calibration (must match README §"Calibration baseline v10 LOCKED"):
+//     - Hydro pmax derate 0.65       — inflow-driven only (pre-applied)
+//     - Gas fuel_price 5.50 $/MMBtu
+//     - Gas startup 1000 / no_load 50
+//     - Coal startup 4000 / no_load 100
+//     - Thermal pmin = 25 % of pmax
+//     - Section-I water values:
+//         Enguri/Vardnili $35, Zhinvali/Khrami $42, Shaori/Dzevrula $37
+//     - Section-I target_end_level_frac 0.85, end_level_penalty 20
+//     - Cascades:
+//         Vardnili ← Enguri  delay=2h gain=0.97
+//         Khrami_2 ← Khrami_1 delay=1h gain=0.95
+//     - Monthly gas caps: annual 1170 Mm³ (winter 180, summer 40)
+//
+//   The asset ids match the powersim_asset_mapper transliteration so the
+//   reservoir-override CSV (tests/reservoir_overrides_template.csv) and
+//   results JSON can be cross-referenced.
 function loadGSE2026Demo(){
-  STATE.assets=[
-    {id:'enguri',        name:'ენგური ჰესი',        type:'hydro_reg', committable:true,  pmin:195,  pmax:1300, mc:3,  heat_rate:0,fuel_price:0,vom:0,startup_cost:0,no_load_cost:0,ramp_up:200,ramp_down:200,min_up:0,min_down:0,for_rate:0.04,
-     hydro:{reservoir_init:700,reservoir_min:100,reservoir_max:1100,reservoir_end_min:500,efficiency:350,spill_cost:0,water_value:18,cascade_upstream:null,travel_delay_h:0,conversion_mode:2},inflow_profile:'enguri_inflow'},
-    {id:'vardnili',      name:'ვარდნილი ჰესი',       type:'hydro_reg', committable:true,  pmin:0,    pmax:220,  mc:3,  heat_rate:0,fuel_price:0,vom:0,startup_cost:0,no_load_cost:0,ramp_up:100,ramp_down:100,min_up:0,min_down:0,for_rate:0.05,
-     hydro:{reservoir_init:100,reservoir_min:10,reservoir_max:200,reservoir_end_min:50,efficiency:280,spill_cost:0,water_value:16,cascade_upstream:null,travel_delay_h:0,conversion_mode:2},inflow_profile:'vardnili_inflow'},
-    {id:'gardabani_1',   name:'გარდაბანი TPP-1',     type:'thermal',   committable:true,  pmin:92,   pmax:231.2,mc:0,  heat_rate:6.8,fuel_price:7,vom:2,startup_cost:12000,no_load_cost:600,ramp_up:50,ramp_down:50,min_up:3,min_down:2,for_rate:0.08},
-    {id:'gardabani_2',   name:'გარდაბანი TPP-2',     type:'thermal',   committable:true,  pmin:92,   pmax:230,  mc:0,  heat_rate:6.8,fuel_price:7,vom:2,startup_cost:12000,no_load_cost:600,ramp_up:50,ramp_down:50,min_up:3,min_down:2,for_rate:0.08},
-    {id:'tbilsresi',     name:'თბილსრესი',            type:'thermal',   committable:true,  pmin:150,  pmax:572,  mc:0,  heat_rate:9.5,fuel_price:7,vom:3,startup_cost:18000,no_load_cost:800,ramp_up:25,ramp_down:25,min_up:4,min_down:4,for_rate:0.10},
-    {id:'g_power',       name:'G-Power OCGT',         type:'thermal',   committable:true,  pmin:30,   pmax:110,  mc:0,  heat_rate:11.5,fuel_price:7,vom:3,startup_cost:3500,no_load_cost:200,ramp_up:20,ramp_down:20,min_up:1,min_down:1,for_rate:0.12},
-    {id:'vartsikhe',     name:'ვარციხე ჰესები',       type:'hydro_ror', committable:false, pmin:0,    pmax:184,  mc:2,  heat_rate:0,fuel_price:0,vom:0,startup_cost:0,no_load_cost:0,ramp_up:9999,ramp_down:9999,min_up:0,min_down:0,for_rate:0.05,availability_profile:'ror_cf'},
-    {id:'shuakhevi',     name:'შუახევი ჰესი',         type:'hydro_ror', committable:false, pmin:0,    pmax:178,  mc:2,  heat_rate:0,fuel_price:0,vom:0,startup_cost:0,no_load_cost:0,ramp_up:9999,ramp_down:9999,min_up:0,min_down:0,for_rate:0.05,availability_profile:'ror_cf'},
-    {id:'small_hpp',     name:'მცირე ჰესები',         type:'hydro_ror', committable:false, pmin:0,    pmax:307.6,mc:2,  heat_rate:0,fuel_price:0,vom:0,startup_cost:0,no_load_cost:0,ramp_up:9999,ramp_down:9999,min_up:0,min_down:0,for_rate:0.06,availability_profile:'ror_cf'},
-    {id:'kartli_wind',   name:'ქართლის ქარი',         type:'wind',      committable:false, pmax_installed:20.7, mc:0,vom:0,curtailment_cost:0,availability_profile:'wind_cf'},
-    {id:'zemo_vindi',    name:'ზემო ვინდი',           type:'wind',      committable:false, pmax_installed:18.75,mc:0,vom:0,curtailment_cost:0,availability_profile:'wind_cf'},
-    {id:'solar_2025',    name:'მზის სადგ. 2025',      type:'solar',     committable:false, pmax_installed:10.5, mc:0,vom:0,curtailment_cost:0,availability_profile:'solar_cf'},
-    {id:'import_tr',     name:'🇹🇷 TR იმპ.',           type:'import',    committable:false, vom:55, pmax_profile:700},
-    {id:'import_az',     name:'🇦🇿 AZ იმპ.',           type:'import',    committable:false, vom:48, pmax_profile:500},
+  // Helpers — collapse repetition across the 26-asset list.
+  const t = (id, name, pmax) => ({                      // CCGT thermal
+    id, name, type:'thermal', committable:true,
+    pmin:Math.round(pmax*0.25*10)/10, pmax,
+    heat_rate:6.8, fuel_type:'gas', fuel_price:5.50, vom:2,
+    startup_cost:1000, no_load_cost:50,
+    ramp_up:Math.round(pmax*0.30), ramp_down:Math.round(pmax*0.30),
+    min_up:3, min_down:2,
+    initial_status:1, initial_power:Math.round(pmax*0.5*10)/10,
+    for_rate:0.08, maint_windows:[]
+  });
+  const tOCGT = (id, name, pmax) => ({                  // OCGT thermal
+    id, name, type:'thermal', committable:true,
+    pmin:Math.round(pmax*0.25*10)/10, pmax,
+    heat_rate:9.5, fuel_type:'gas', fuel_price:5.50, vom:2.5,
+    startup_cost:1000, no_load_cost:50,
+    ramp_up:Math.round(pmax*0.50), ramp_down:Math.round(pmax*0.50),
+    min_up:2, min_down:1,
+    initial_status:0, initial_power:0,
+    for_rate:0.10, maint_windows:[]
+  });
+  const tCoal = (id, name, pmax) => ({                  // Coal (Tkibuli)
+    id, name, type:'thermal', committable:true,
+    pmin:Math.round(pmax*0.25*10)/10, pmax,
+    heat_rate:10.5, fuel_type:'coal', fuel_price:4.0, vom:3.5,
+    startup_cost:4000, no_load_cost:100,
+    ramp_up:Math.round(pmax*0.20), ramp_down:Math.round(pmax*0.20),
+    min_up:6, min_down:6,
+    initial_status:1, initial_power:Math.round(pmax*0.5*10)/10,
+    for_rate:0.12, maint_windows:[]
+  });
+  const hReg = (id, name, pmax, h) => ({                // Section I reservoir
+    id, name, type:'hydro_reg', committable:true,
+    pmin:Math.round(pmax*0.15*10)/10, pmax,
+    ramp_up:Math.round(pmax*0.30), ramp_down:Math.round(pmax*0.30),
+    min_up:0, min_down:0, startup_cost:0, no_load_cost:0, vom:0,
+    initial_status:1, initial_power:Math.round(pmax*0.4*10)/10,
+    for_rate:0.04,
+    hydro:Object.assign({
+      reservoir_init: h.init,  reservoir_min: h.min, reservoir_max: h.max,
+      reservoir_end_min: Math.round(h.init*0.5),
+      efficiency: 350, spill_cost: 0, water_value: h.wv,
+      cascade_upstream: h.casc_up || null,
+      cascade_travel_delay_h: h.casc_delay || 0,
+      cascade_gain: h.casc_gain || 1.0,
+      target_end_level_frac: 0.85, end_level_penalty: 20.0,
+      conversion_mode: 2
+    }), inflow_profile:null, inflow_driven:false
+  });
+  // Section II / aggregated small hydro: pmax is ALREADY derated × 0.65.
+  const hRoR = (id, name, pmax_derated) => ({
+    id, name, type:'hydro_ror', committable:false,
+    pmin:0, pmax:pmax_derated,
+    ramp_up:9999, ramp_down:9999,
+    min_up:0, min_down:0, startup_cost:0, no_load_cost:0, vom:0,
+    initial_status:1, initial_power:Math.round(pmax_derated*0.3*10)/10,
+    for_rate:0.06,
+    hydro:{efficiency:400, spill_cost:0, water_value:10,
+           cascade_upstream:null, travel_delay_h:0, conversion_mode:2,
+           reservoir_init:0, reservoir_min:0, reservoir_max:0, reservoir_end_min:0},
+    availability_profile:null, inflow_driven:true
+  });
+  const w = (id, name, pmax) => ({                      // Wind
+    id, name, type:'wind', committable:false,
+    pmax_installed:pmax, vom:0, curtailment_cost:0,
+    availability_profile:null
+  });
+  const s = (id, name, pmax) => ({                      // Solar
+    id, name, type:'solar', committable:false,
+    pmax_installed:pmax, vom:0, curtailment_cost:0,
+    availability_profile:null
+  });
+  const imp = (id, name, pmax, vom) => ({               // Import link
+    id, name, type:'import', committable:false,
+    vom, pmax_profile:pmax
+  });
+
+  STATE.assets = [
+    // ── Section I reservoirs (cascade + strategic end-level) ──────
+    hReg('engurhesi',   'ენგური ჰესი',            1300, {init:700,min:100,max:1100, wv:35}),
+    hReg('vardnilhesi', 'ვარდნილი ჰესი',          220,  {init:40, min:10, max:80,
+        wv:35, casc_up:'engurhesi', casc_delay:2, casc_gain:0.97}),
+    hReg('zhinvalhesi', 'ჟინვალი ჰესი',           130,  {init:150,min:30, max:400, wv:42}),
+    hReg('khramhesi_1', 'ხრამი 1 ჰესი',           113,  {init:80, min:20, max:170, wv:42}),
+    hReg('khramhesi_2', 'ხრამი 2 ჰესი',           110,  {init:15, min:5,  max:30,
+        wv:42, casc_up:'khramhesi_1', casc_delay:1, casc_gain:0.95}),
+    hReg('shaorhesi',   'შაორი ჰესი',             38.4, {init:40, min:10, max:90,  wv:37}),
+    hReg('dzevrulahesi','ძევრულა ჰესი',           80,   {init:8,  min:2,  max:18,  wv:37}),
+
+    // ── Section II / aggregated inflow-driven hydro (× 0.65 derate) ──
+    hRoR('lajanurhesi',     'ლაჯანური ჰესი (×0.65)',           Math.round(112*0.65*10)/10),
+    hRoR('vartsikhehesi',   'ვარციხე ჰესების კასკადი (×0.65)', Math.round(184*0.65*10)/10),
+    hRoR('shuakhevihesi',   'შუახევი ჰესი (×0.65)',            Math.round(178*0.65*10)/10),
+    hRoR('gumathesi',       'გუმათი ჰესი (×0.65)',             Math.round(66.5*0.65*10)/10),
+    hRoR('rionhesi',        'რიონი ჰესი (×0.65)',              Math.round(48*0.65*10)/10),
+    hRoR('chitakhevhesi',   'ჩითახევი ჰესი (×0.65)',           Math.round(21*0.65*10)/10),
+    hRoR('small_hpp_aggr',  'მცირე ჰესების ჯამი (×0.65)',      Math.round(480*0.65)),
+
+    // ── Thermal — v10 LOCKED ($5.50/MMBtu, startup 1000, no-load 50) ──
+    t   ('gardabani_1', 'გარდაბანი TPP-1 CCGT',  231.2),
+    t   ('gardabani_2', 'გარდაბანი TPP-2 CCGT',  230),
+    t   ('gardabani_3', 'გარდაბანი TPP-3 CCGT',  230),
+    t   ('tbilsresi',   'თბილსრესი CCGT',        332),
+    tOCGT('g_power',    'G-Power OCGT',          110),
+    tCoal('tkibuli',    'თბილსრესი ნახშირი',     13),
+
+    // ── Renewables ──
+    w('wind_kartli',       'ქართლის ქარი',         20.7),
+    w('wind_dedoplistskaro','ზემო ვინდი (ქარი)',   18.75),
+    w('wind_kakheti',      'კახეთის ქარი',         34),
+    s('solar_aggr',        'მზის სადგურები (ჯამი)', 32),
+
+    // ── Imports ──
+    imp('import_tr', '🇹🇷 თურქეთი იმპორტი', 700, 55),
+    imp('import_az', '🇦🇿 აზერბაიჯანი იმპ.',  500, 48),
+    imp('import_am', '🇦🇲 სომხეთი იმპორტი',  200, 60),
   ];
-  assetIdCtr=STATE.assets.length+1;
-  STATE.reserveProducts=[
-    {id:'FCR',      name:'FCR',       direction:'symmetric', requirement:60,  shortfall_penalty:500, eligible_units:['enguri','gardabani_1','gardabani_2'], response_time_label:'30s', derating_factors:{}},
-    {id:'aFRR_up',  name:'aFRR Up',   direction:'up',        requirement:80,  shortfall_penalty:300, eligible_units:['gardabani_1','gardabani_2','tbilsresi','enguri'], response_time_label:'5min', derating_factors:{}},
+  assetIdCtr = STATE.assets.length + 1;
+
+  // Reserves — system-wide FCR + aFRR (up + down)
+  STATE.reserveProducts = [
+    {id:'FCR', name:'FCR (Frequency Containment)',
+     direction:'symmetric', requirement:60, shortfall_penalty:1000,
+     eligible_units:['engurhesi','vardnilhesi','zhinvalhesi',
+                     'gardabani_1','gardabani_2','gardabani_3','tbilsresi'],
+     response_time_label:'30s', derating_factors:{}},
+    {id:'aFRR_up', name:'aFRR Up',
+     direction:'up', requirement:120, shortfall_penalty:500,
+     eligible_units:['engurhesi','vardnilhesi','zhinvalhesi',
+                     'gardabani_1','gardabani_2','gardabani_3','tbilsresi','g_power'],
+     response_time_label:'5min', derating_factors:{}},
+    {id:'aFRR_dn', name:'aFRR Down',
+     direction:'down', requirement:80, shortfall_penalty:300,
+     eligible_units:['engurhesi','vardnilhesi','zhinvalhesi',
+                     'gardabani_1','gardabani_2','gardabani_3','tbilsresi'],
+     response_time_label:'5min', derating_factors:{}},
   ];
-  STATE.gasConfig={mode:'annual', annual_cap:1200, monthly:{}, applies_to:['gardabani_1','gardabani_2','tbilsresi','g_power']};
-  STATE.horizon={year:2026,start_date:'2026-01-01',start_hour:0,horizon_h:8760,mode:'auto',window_h:168,step_h:24};
+
+  // Gas — annual + monthly per v10 LOCKED (winter 180, summer 40)
+  const monthly = {jan:180,feb:160,mar:100,apr:60,may:40,jun:40,
+                   jul:60,aug:60,sep:60,oct:90,nov:140,dec:180};
+  STATE.gasConfig = {
+    mode:'annual+monthly', annual_cap:1170,
+    monthly: monthly,
+    applies_to:['gardabani_1','gardabani_2','gardabani_3','tbilsresi','g_power']
+  };
+  // Reflect monthly defaults into the live grid input fields
+  Object.keys(monthly).forEach(m=>{
+    const grid=document.getElementById('gas-monthly-grid');
+    if(grid){
+      const el=grid.querySelector(`input[oninput*="'${m}'"]`);
+      if(el) el.value=monthly[m];
+    }
+  });
+  const annEl=document.getElementById('gas-annual-cap');
+  if(annEl) annEl.value=1170;
+  const modeEl=document.getElementById('gas-mode');
+  if(modeEl){ modeEl.value='annual+monthly'; }
+
+  STATE.horizon = {year:2026,start_date:'2026-01-01',start_hour:0,
+                   horizon_h:8760,mode:'auto',window_h:168,step_h:24};
+
   renderAssetTable();
   renderReservesList();
   updateGasUI();
   updateDashKpis();
   updateGasEligibleUnits();
   renderWorkflowSteps();
-  showBanner('✅ GSE 2026 Demo: '+STATE.assets.length+' სადგ. ჩაიდო!','g');
+  const totalMW = STATE.assets.reduce(
+    (s,a)=>s+(+(a.pmax||a.pmax_installed||a.pmax_profile||0)), 0);
+  showBanner(`✅ GSE 2026 Demo ჩაიტვ. — ${STATE.assets.length} სადგ., `+
+             `Σ ${totalMW.toFixed(0)} MW (v10 LOCKED კალიბრაცია)`,'g',8000);
 }
 
 // ══════════════════════════════════════════════════════════════════
