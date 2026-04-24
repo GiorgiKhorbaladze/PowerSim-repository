@@ -975,9 +975,14 @@ function clearAssets(){
 //   reservoir-override CSV (tests/reservoir_overrides_template.csv) and
 //   results JSON can be cross-referenced.
 function loadGSE2026Demo(){
-  // Helpers — collapse repetition across the 26-asset list.
-  const t = (id, name, pmax) => ({                      // CCGT thermal
-    id, name, type:'thermal', committable:true,
+  // ── Helpers — compact constructors for the 77-asset GSE 2026 fleet.
+  // v10 LOCKED calibration: gas $5.50/MMBtu, startup $1000 / no-load $50,
+  // coal startup $4000 / no-load $100, thermal pmin = 25% pmax,
+  // hydro inflow-driven pmax × 0.65 derate, Section-I water values
+  // $35/$42/$37, target_end_level_frac 0.85, end_level_penalty 20 $/Mm³.
+  // Cascades: Vardnili ← Enguri (2h, 0.97); Khrami_2 ← Khrami_1 (1h, 0.95).
+  const tGas = (id, name, pmax, yr) => ({               // CCGT gas thermal
+    id, name, type:'thermal', committable:true, _commiss_year:yr,
     pmin:Math.round(pmax*0.25*10)/10, pmax,
     heat_rate:6.8, fuel_type:'gas', fuel_price:5.50, vom:2,
     startup_cost:1000, no_load_cost:50,
@@ -986,8 +991,9 @@ function loadGSE2026Demo(){
     initial_status:1, initial_power:Math.round(pmax*0.5*10)/10,
     for_rate:0.08, maint_windows:[]
   });
-  const tOCGT = (id, name, pmax) => ({                  // OCGT thermal
-    id, name, type:'thermal', committable:true,
+  const t = tGas;                                       // legacy alias
+  const tOCGT = (id, name, pmax, yr) => ({              // OCGT thermal
+    id, name, type:'thermal', committable:true, _commiss_year:yr,
     pmin:Math.round(pmax*0.25*10)/10, pmax,
     heat_rate:9.5, fuel_type:'gas', fuel_price:5.50, vom:2.5,
     startup_cost:1000, no_load_cost:50,
@@ -996,8 +1002,8 @@ function loadGSE2026Demo(){
     initial_status:0, initial_power:0,
     for_rate:0.10, maint_windows:[]
   });
-  const tCoal = (id, name, pmax) => ({                  // Coal (Tkibuli)
-    id, name, type:'thermal', committable:true,
+  const tCoal = (id, name, pmax, yr) => ({              // Coal (Tkibuli)
+    id, name, type:'thermal', committable:true, _commiss_year:yr,
     pmin:Math.round(pmax*0.25*10)/10, pmax,
     heat_rate:10.5, fuel_type:'coal', fuel_price:4.0, vom:3.5,
     startup_cost:4000, no_load_cost:100,
@@ -1007,7 +1013,7 @@ function loadGSE2026Demo(){
     for_rate:0.12, maint_windows:[]
   });
   const hReg = (id, name, pmax, h) => ({                // Section I reservoir
-    id, name, type:'hydro_reg', committable:true,
+    id, name, type:'hydro_reg', committable:true, _commiss_year:h.yr||null,
     pmin:Math.round(pmax*0.15*10)/10, pmax,
     ramp_up:Math.round(pmax*0.30), ramp_down:Math.round(pmax*0.30),
     min_up:0, min_down:0, startup_cost:0, no_load_cost:0, vom:0,
@@ -1024,9 +1030,10 @@ function loadGSE2026Demo(){
       conversion_mode: 2
     }), inflow_profile:null, inflow_driven:false
   });
-  // Section II / aggregated small hydro: pmax is ALREADY derated × 0.65.
-  const hRoR = (id, name, pmax_derated) => ({
-    id, name, type:'hydro_ror', committable:false,
+  // Sections II & III — inflow-driven hydro. `pmax_derated` is already
+  // × 0.65 derated per v10 LOCKED.
+  const hRoR = (id, name, pmax_derated, yr) => ({
+    id, name, type:'hydro_ror', committable:false, _commiss_year:yr||null,
     pmin:0, pmax:pmax_derated,
     ramp_up:9999, ramp_down:9999,
     min_up:0, min_down:0, startup_cost:0, no_load_cost:0, vom:0,
@@ -1037,13 +1044,13 @@ function loadGSE2026Demo(){
            reservoir_init:0, reservoir_min:0, reservoir_max:0, reservoir_end_min:0},
     availability_profile:null, inflow_driven:true
   });
-  const w = (id, name, pmax) => ({                      // Wind
-    id, name, type:'wind', committable:false,
+  const w = (id, name, pmax, yr) => ({                  // Wind
+    id, name, type:'wind', committable:false, _commiss_year:yr||null,
     pmax_installed:pmax, vom:0, curtailment_cost:0,
     availability_profile:null
   });
-  const s = (id, name, pmax) => ({                      // Solar
-    id, name, type:'solar', committable:false,
+  const s = (id, name, pmax, yr) => ({                  // Solar
+    id, name, type:'solar', committable:false, _commiss_year:yr||null,
     pmax_installed:pmax, vom:0, curtailment_cost:0,
     availability_profile:null
   });
@@ -1053,73 +1060,137 @@ function loadGSE2026Demo(){
   });
 
   STATE.assets = [
-    // ── Section I reservoirs (cascade + strategic end-level) ──────
-    hReg('engurhesi',   'ენგური ჰესი',            1300, {init:700,min:100,max:1100, wv:35}),
-    hReg('vardnilhesi', 'ვარდნილი ჰესი',          220,  {init:40, min:10, max:80,
-        wv:35, casc_up:'engurhesi', casc_delay:2, casc_gain:0.97}),
-    hReg('zhinvalhesi', 'ჟინვალი ჰესი',           130,  {init:150,min:30, max:400, wv:42}),
-    hReg('khramhesi_1', 'ხრამი 1 ჰესი',           113,  {init:80, min:20, max:170, wv:42}),
-    hReg('khramhesi_2', 'ხრამი 2 ჰესი',           110,  {init:15, min:5,  max:30,
-        wv:42, casc_up:'khramhesi_1', casc_delay:1, casc_gain:0.95}),
-    hReg('shaorhesi',   'შაორი ჰესი',             38.4, {init:40, min:10, max:90,  wv:37}),
-    hReg('dzevrulahesi','ძევრულა ჰესი',           80,   {init:8,  min:2,  max:18,  wv:37}),
+    // ═══════════════════════════════════════════════════════════════
+    // I. მარეგულირებელი ჰესები — 7 plants, Σ 1,993.12 MW
+    // Strategic end-level 0.85, end_level_penalty $20/Mm³.
+    // ═══════════════════════════════════════════════════════════════
+    hReg('khramhesi_1',  'ხრამჰესი 1',       112.8, {init:80,  min:20, max:170, wv:42, yr:1947}),
+    hReg('shaorhesi',    'შაორჰესი',          40.32,{init:40,  min:10, max:90,  wv:37, yr:1955}),
+    hReg('dzevrulahesi', 'ძევრულაჰესი',       80.0, {init:8,   min:2,  max:18,  wv:37, yr:1956}),
+    hReg('khramhesi_2',  'ხრამჰესი 2',       110.0, {init:15,  min:5,  max:30,
+                                                      wv:42, casc_up:'khramhesi_1', casc_delay:1, casc_gain:0.95, yr:1963}),
+    hReg('vardnilhesi',  'ვარდნილჰესი',      220.0, {init:40,  min:10, max:80,
+                                                      wv:35, casc_up:'engurhesi',  casc_delay:2, casc_gain:0.97, yr:1971}),
+    hReg('engurhesi',    'ენგურჰესი',       1300.0, {init:700, min:100,max:1100, wv:35, yr:1978}),
+    hReg('zhinvalhesi',  'ჟინვალჰესი',      130.0, {init:150, min:30, max:400, wv:42, yr:1984}),
 
-    // ── Section II / aggregated inflow-driven hydro (× 0.65 derate) ──
-    hRoR('lajanurhesi',     'ლაჯანური ჰესი (×0.65)',           Math.round(112*0.65*10)/10),
-    hRoR('vartsikhehesi',   'ვარციხე ჰესების კასკადი (×0.65)', Math.round(184*0.65*10)/10),
-    hRoR('shuakhevihesi',   'შუახევი ჰესი (×0.65)',            Math.round(178*0.65*10)/10),
-    hRoR('gumathesi',       'გუმათი ჰესი (×0.65)',             Math.round(66.5*0.65*10)/10),
-    hRoR('rionhesi',        'რიონი ჰესი (×0.65)',              Math.round(48*0.65*10)/10),
-    hRoR('chitakhevhesi',   'ჩითახევი ჰესი (×0.65)',           Math.round(21*0.65*10)/10),
-    hRoR('small_hpp_aggr',  'მცირე ჰესების ჯამი (×0.65)',      Math.round(480*0.65)),
+    // ═══════════════════════════════════════════════════════════════
+    // II. სეზონური ჰესები — 24 plants, Σ 1,214.21 MW (× 0.65 derate)
+    // ═══════════════════════════════════════════════════════════════
+    hRoR('zahesi',        'ზაჰესი',                  Math.round(42.0 *0.65*100)/100, 1927),
+    hRoR('rionhesi',      'რიონჰესი',                Math.round(54.0 *0.65*100)/100, 1933),
+    hRoR('atshesi',       'აწჰესი',                  Math.round(18.4 *0.65*100)/100, 1937),
+    hRoR('chitakhevhesi', 'ჩითახევჰესი',             Math.round(21.0 *0.65*100)/100, 1949),
+    hRoR('ortachalhesi',  'ორთაჭალჰესი',             Math.round(18.0 *0.65*100)/100, 1954),
+    hRoR('gumathesi_1',   'გუმათჰესი 1',             Math.round(46.7 *0.65*100)/100, 1956),
+    hRoR('gumathesi_2',   'გუმათჰესი 2',             Math.round(22.8 *0.65*100)/100, 1958),
+    hRoR('lajanurhesi',   'ლაჯანურჰესი',             Math.round(115.6*0.65*100)/100, 1960),
+    hRoR('vartsikhehesi_1','ვარციხეჰესი 1',          Math.round(46.0 *0.65*100)/100, 1976),
+    hRoR('vartsikhehesi_2','ვარციხეჰესი 2',          Math.round(46.0 *0.65*100)/100, 1976),
+    hRoR('vartsikhehesi_3','ვარციხეჰესი 3',          Math.round(46.0 *0.65*100)/100, 1977),
+    hRoR('vartsikhehesi_4','ვარციხეჰესი 4',          Math.round(46.0 *0.65*100)/100, 1977),
+    hRoR('khadorhesi',    'ხადორჰესი',               Math.round(24.0 *0.65*100)/100, 2004),
+    hRoR('larsihesi',     'ლარსიჰესი',               Math.round(19.0 *0.65*100)/100, 2014),
+    hRoR('paravanhesi',   'ფარავანჰესი',             Math.round(86.54*0.65*100)/100, 2014),
+    hRoR('darialhesi',    'დარიალჰესი',              Math.round(108.0*0.65*100)/100, 2016),
+    hRoR('khelvachauri_1','ხელვაჩაური 1',            Math.round(47.48*0.65*100)/100, 2016),
+    hRoR('shuakhevihesi', 'შუახევიჰესი',             Math.round(178.72*0.65*100)/100,2017),
+    hRoR('old_energy',    'ოლდ ენერჯიჰესი (სოხუმჰესი)', Math.round(21.39*0.65*100)/100, 2018),
+    hRoR('kirnatihesi',   'კირნათიჰესი',             Math.round(52.62*0.65*100)/100, 2018),
+    hRoR('mestiachala_2', 'მესტიაჭალა 2',            Math.round(31.9 *0.65*100)/100, 2019),
+    hRoR('mestiachala_1', 'მესტიაჭალა 1',            Math.round(21.26*0.65*100)/100, 2019),
+    hRoR('khobihesi_2',   'ხობიჰესი 2',              Math.round(46.7 *0.65*100)/100, 2024),
+    hRoR('mtkvarihesi',   'მტკვარიჰესი',             Math.round(54.1 *0.65*100)/100, 2025),
 
-    // ── Thermal — v10 LOCKED ($5.50/MMBtu, startup 1000, no-load 50) ──
-    t   ('gardabani_1', 'გარდაბანი TPP-1 CCGT',  231.2),
-    t   ('gardabani_2', 'გარდაბანი TPP-2 CCGT',  230),
-    t   ('gardabani_3', 'გარდაბანი TPP-3 CCGT',  230),
-    t   ('tbilsresi',   'თბილსრესი CCGT',        332),
-    tOCGT('g_power',    'G-Power OCGT',          110),
-    tCoal('tkibuli',    'თბილსრესი ნახშირი',     13),
+    // ═══════════════════════════════════════════════════════════════
+    // III. მცირე ჰესები — top 15 by capacity (x 0.65 derate) + aggregate remainder
+    //       15 named + 1 aggregate (remaining 70 plants = 178.68 MW).
+    //       All 85 small HPPs total 331.26 MW.
+    // ═══════════════════════════════════════════════════════════════
+    hRoR('satskhenhesi',  'საცხენჰესი',              Math.round(14.0 *0.65*100)/100, 1952),
+    hRoR('basra_1',       'ბასრა 1',                 Math.round(12.53*0.65*100)/100, 2025),
+    hRoR('tetrikhevhesi', 'თეთრიხევჰესი',            Math.round(12.4 *0.65*100)/100, 1952),
+    hRoR('bzhuzhahesi',   'ბჟუჟაჰესი',               Math.round(12.24*0.65*100)/100, 1956),
+    hRoR('rachahesi',     'რაჭაჰესი',                Math.round(11.0 *0.65*100)/100, 2013),
+    hRoR('lakhami_2',     'ლახამი 2',                Math.round(10.71*0.65*100)/100, 2020),
+    hRoR('nakrahesi',     'ნაკრაჰესი',               Math.round(9.95 *0.65*100)/100, 2022),
+    hRoR('bakhvihesi_3',  'ბახვიჰესი 3',             Math.round(9.8  *0.65*100)/100, 2013),
+    hRoR('akhmetahesi',   'ახმეტაჰესი',              Math.round(9.2  *0.65*100)/100, 2014),
+    hRoR('sionhesi',      'სიონჰესი',                Math.round(9.14 *0.65*100)/100, 1964),
+    hRoR('kasletihesi_2', 'კასლეთიჰესი 2',           Math.round(9.1  *0.65*100)/100, 2018),
+    hRoR('skhaltahesi',   'სხალთა',                  Math.round(9.0  *0.65*100)/100, 2021),
+    hRoR('aragvihesi',    'არაგვიჰესი',              Math.round(8.0  *0.65*100)/100, 2014),
+    hRoR('sashuala_1',    'საშუალა 1',               Math.round(7.86 *0.65*100)/100, 2021),
+    hRoR('akhalkalaki_1', 'ახალქალაქი 1',            Math.round(7.65 *0.65*100)/100, 2022),
+    // Remaining 70 small HPPs (vintage 1928–2025) — aggregated (×0.65)
+    hRoR('small_hpp_remainder','მცირე ჰესების ჯამი — დანარჩენი 70', Math.round(178.68*0.65*100)/100, null),
 
-    // ── Renewables ──
-    w('wind_kartli',       'ქართლის ქარი',         20.7),
-    w('wind_dedoplistskaro','ზემო ვინდი (ქარი)',   18.75),
-    w('wind_kakheti',      'კახეთის ქარი',         34),
-    s('solar_aggr',        'მზის სადგურები (ჯამი)', 32),
+    // ═══════════════════════════════════════════════════════════════
+    // V. თბოსადგურები — 7 units, Σ 1,181.40 MW (all gas except Tkibuli)
+    // v10 LOCKED: gas $5.50/MMBtu, startup $1000, no-load $50, pmin=25%
+    // ═══════════════════════════════════════════════════════════════
+    tGas('tbilsresi_4',   'თბილსრესი IV ბლოკი',      142.0, 1963),
+    tGas('tbilsresi_3',   'თბილსრესი III ბლოკი',     130.0, 1963),
+    tGas('mtkvari_energ', 'მტკვარი ენერგეტიკა (IX)', 300.0, 1991),
+    tOCGT('g_power',      'ჯიფაუერი (აირტურბინა)',    110.0, 2006),
+    tCoal('tkibuli_coal', 'ტყიბულის ნახშირი',          13.2, 2011),
+    tGas('gardabani_1',   'გარდაბნის თბოსადგური 1 (კცთეს 1)', 231.2, 2015),
+    tGas('gardabani_2',   'გარდაბნის თბოსადგური 2 (კცთეს 2)', 255.0, 2020),
 
-    // ── Imports ──
+    // ═══════════════════════════════════════════════════════════════
+    // VI. ქარის სადგურები — 2 units, Σ 39.45 MW
+    // ═══════════════════════════════════════════════════════════════
+    w('wind_kartli',         'ქართლის ქარის ელ.სადგური', 20.7,  2016),
+    w('wind_zemo_vindi',     'ზემო ვინდი',               18.75, 2026),
+
+    // ═══════════════════════════════════════════════════════════════
+    // IV. მზის სადგურები — 6 units, Σ 10.75 MW (all commissioned 2025)
+    // ═══════════════════════════════════════════════════════════════
+    s('solar_gamarjvebis',   'გამარჯვების მზის სადგური',       1.75, 2025),
+    s('solar_jugaanis',      'ჯუგაანის მზის სადგური',          1.75, 2025),
+    s('solar_kaspis',        'კასპის მზის სადგური',            2.00, 2025),
+    s('solar_khirsis',       'ხირსის მზის სადგური',            1.75, 2025),
+    s('solar_kedis',         'ქედის მზის ელექტროსადგური',      1.75, 2025),
+    s('solar_kistauris',     'ქისტაურის მზის ელექტროსადგური',  1.75, 2025),
+
+    // ═══════════════════════════════════════════════════════════════
+    //  Import links (not in the installed-capacity spreadsheet)
+    // ═══════════════════════════════════════════════════════════════
     imp('import_tr', '🇹🇷 თურქეთი იმპორტი', 700, 55),
     imp('import_az', '🇦🇿 აზერბაიჯანი იმპ.',  500, 48),
     imp('import_am', '🇦🇲 სომხეთი იმპორტი',  200, 60),
   ];
   assetIdCtr = STATE.assets.length + 1;
 
-  // Reserves — system-wide FCR + aFRR (up + down)
+  // Reserves — system-wide FCR + aFRR (up + down).
+  // Eligible set now includes the six Section-I reservoirs + the five
+  // committable thermals (ccgt + ocgt).  Small HPPs/Section II are
+  // inflow-driven (not committable) and can't provide reserve here.
   STATE.reserveProducts = [
     {id:'FCR', name:'FCR (Frequency Containment)',
      direction:'symmetric', requirement:60, shortfall_penalty:1000,
-     eligible_units:['engurhesi','vardnilhesi','zhinvalhesi',
-                     'gardabani_1','gardabani_2','gardabani_3','tbilsresi'],
+     eligible_units:['engurhesi','vardnilhesi','zhinvalhesi','khramhesi_1','khramhesi_2',
+                     'gardabani_1','gardabani_2','mtkvari_energ','tbilsresi_3','tbilsresi_4'],
      response_time_label:'30s', derating_factors:{}},
     {id:'aFRR_up', name:'aFRR Up',
      direction:'up', requirement:120, shortfall_penalty:500,
-     eligible_units:['engurhesi','vardnilhesi','zhinvalhesi',
-                     'gardabani_1','gardabani_2','gardabani_3','tbilsresi','g_power'],
+     eligible_units:['engurhesi','vardnilhesi','zhinvalhesi','khramhesi_1','khramhesi_2',
+                     'gardabani_1','gardabani_2','mtkvari_energ','tbilsresi_3','tbilsresi_4','g_power'],
      response_time_label:'5min', derating_factors:{}},
     {id:'aFRR_dn', name:'aFRR Down',
      direction:'down', requirement:80, shortfall_penalty:300,
-     eligible_units:['engurhesi','vardnilhesi','zhinvalhesi',
-                     'gardabani_1','gardabani_2','gardabani_3','tbilsresi'],
+     eligible_units:['engurhesi','vardnilhesi','zhinvalhesi','khramhesi_1','khramhesi_2',
+                     'gardabani_1','gardabani_2','mtkvari_energ','tbilsresi_3','tbilsresi_4'],
      response_time_label:'5min', derating_factors:{}},
   ];
 
-  // Gas — annual + monthly per v10 LOCKED (winter 180, summer 40)
+  // Gas — annual + monthly per v10 LOCKED (winter 180, summer 40).
   const monthly = {jan:180,feb:160,mar:100,apr:60,may:40,jun:40,
                    jul:60,aug:60,sep:60,oct:90,nov:140,dec:180};
   STATE.gasConfig = {
     mode:'annual+monthly', annual_cap:1170,
     monthly: monthly,
-    applies_to:['gardabani_1','gardabani_2','gardabani_3','tbilsresi','g_power']
+    applies_to:['gardabani_1','gardabani_2','mtkvari_energ','tbilsresi_3','tbilsresi_4','g_power']
   };
   // Reflect monthly defaults into the live grid input fields
   Object.keys(monthly).forEach(m=>{
