@@ -1,4 +1,4 @@
-# Python
+# Python cache/bytecode
 __pycache__/
 *.py[cod]
 *.pyo
@@ -11,8 +11,17 @@ dist/
 
 # PowerSim runtime artifacts
 out/
-project_data/
+outputs/
+/tmp/
 /tmp/powersim_*
+
+# Solver/data outputs at repo root
+powersim_input.json
+powersim_results.json
+powersim_results.xlsx
+
+# Local project data (replace with real GSE files)
+project_data/
 
 # IDE / OS
 .vscode/
@@ -21,7 +30,12 @@ project_data/
 Thumbs.db
 *.swp
 
+# Browser partial downloads
+*.crdownload
+
 # Sample run logs
 *.log
+
+# Runtime caches
 powersim_store.sqlite
 batches/

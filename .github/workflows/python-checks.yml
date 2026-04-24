@@ -1,0 +1,58 @@
+name: Python checks
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  compile:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+      - name: Compile check (schema + solver + scripts + tests)
+        run: |
+          python -m py_compile schema/powersim_schema.py \
+              solver/powersim_solver.py \
+              solver/powersim_dataio.py \
+              solver/powersim_asset_mapper.py \
+              solver/powersim_kpi.py \
+              solver/powersim_stochastic.py \
+              solver/powersim_expansion.py \
+              scripts/build_demo_project.py \
+              scripts/run_horizon.py \
+              scripts/run_mc_sweep.py \
+              scripts/powersim_report.py \
+              scripts/db_ingest.py \
+              scripts/batch.py \
+              tests/smoke_168h.py
+      - name: Dependency sanity
+        run: |
+          python - <<'PY'
+          import importlib.util
+          mods = ['pyomo','highspy','pandas','numpy','openpyxl','xlsxwriter']
+          missing = [m for m in mods if importlib.util.find_spec(m) is None]
+          if missing:
+              raise SystemExit(f"Missing runtime modules: {missing}")
+          print('All core runtime modules importable.')
+          PY
+      - name: Schema self-test
+        run: python schema/powersim_schema.py
+      - name: Smoke test (synthetic project_data → solver → validate)
+        run: |
+          python scripts/build_demo_project.py --out project_data
+          python tests/smoke_168h.py \
+              --project-dir project_data \
+              --config      tests/stage1_smoke_fleet.json \
+              --keep-outputs out/ci_smoke_168h

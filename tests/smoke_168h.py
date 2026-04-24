@@ -11,10 +11,10 @@ End-to-end verification that the full Stage 1 pipeline runs:
        └→ pass
 
 Usage:
-    python tests/smoke_168h.py
+    python smoke_168h.py
         --project-dir /mnt/project
-        --config      tests/stage1_smoke_fleet.json
-        [--keep-outputs  tests/out/]
+        --config      stage1_smoke_fleet.json
+        [--keep-outputs  out/smoke_168h/]
 
 Exits 0 on success, non-zero on any failure.  Suitable for CI.
 """
@@ -22,7 +22,9 @@ Exits 0 on success, non-zero on any failure.  Suitable for CI.
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
+import os
 import subprocess
 import sys
 import time
@@ -37,10 +39,38 @@ for p in (ROOT / "schema", ROOT / "solver", ROOT):
     if str(p) not in sys.path:
         sys.path.insert(0, str(p))
 
+
+def _missing_runtime_deps() -> list[str]:
+    required = ["pyomo", "highspy", "pandas", "numpy", "openpyxl", "xlsxwriter"]
+    return [m for m in required if importlib.util.find_spec(m) is None]
+
+
+_missing = _missing_runtime_deps()
+if _missing:
+    print("❌ SMOKE FAILED — missing python dependencies: " + ", ".join(_missing))
+    print("   Install with: python3 -m pip install -r requirements.txt")
+    sys.exit(1)
+
 from powersim_schema import validate_input, validate_output            # noqa: E402
 from powersim_dataio import (                                           # noqa: E402
     build_input_from_project, summary_report, LOADER_VERSION,
 )
+
+
+def _resolve_repo_file(*parts: str) -> Path:
+    """
+    Resolve file paths for both historical tree layout and flat repo layout.
+    Tries:
+      1) <repo_root>/<parts...>            (historical: solver/, tests/, ...)
+      2) <script_dir>/<parts...> basename  (flat: files at repository root)
+    """
+    preferred = ROOT.joinpath(*parts)
+    if preferred.exists():
+        return preferred
+    fallback = HERE / Path(parts[-1])
+    if fallback.exists():
+        return fallback
+    return preferred
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -106,7 +136,7 @@ def stage_solver(input_path: Path, results_path: Path, excel_path: Path) -> None
     hr("STAGE 3 / 4  —  solver run  (MIP UC/ED, HiGHS)")
     cmd = [
         sys.executable,
-        str(ROOT / "solver" / "powersim_solver.py"),
+        str(_resolve_repo_file("solver", "powersim_solver.py")),
         "--input",  str(input_path),
         "--output", str(results_path),
         "--excel",  str(excel_path),
@@ -198,9 +228,9 @@ def stage_report(res: dict) -> None:
 # ──────────────────────────────────────────────────────────────────────
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description="PowerSim v4.0 Stage 1 smoke test")
-    ap.add_argument("--project-dir", default="/mnt/project",
+    ap.add_argument("--project-dir", default=os.environ.get("POWERSIM_PROJECT_DIR", "/mnt/project"),
                     help="Directory containing the uploaded project files.")
-    ap.add_argument("--config", default=str(ROOT / "tests" / "stage1_smoke_fleet.json"),
+    ap.add_argument("--config", default=str(_resolve_repo_file("tests", "stage1_smoke_fleet.json")),
                     help="Fleet + mapping config JSON.")
     ap.add_argument("--keep-outputs", default=None,
                     help="Directory to write intermediate artifacts (default: temp).")
@@ -208,7 +238,11 @@ def main(argv=None) -> int:
 
     project_dir = Path(args.project_dir)
     config_path = Path(args.config)
-    if not project_dir.is_dir():  fail(f"project dir not found: {project_dir}")
+    if not project_dir.is_dir():
+        fail(
+            f"project dir not found: {project_dir}. "
+            "Provide --project-dir /path/to/data or set POWERSIM_PROJECT_DIR."
+        )
     if not config_path.is_file(): fail(f"config not found: {config_path}")
 
     out_dir = Path(args.keep_outputs) if args.keep_outputs else Path("/tmp/powersim_smoke")
