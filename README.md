@@ -1,246 +1,219 @@
-# PowerSim v4 — UC/ED Research Baseline
+# PowerSim v4.0 — Georgian Power System Simulation Platform
 
-PowerSim is an hourly unit commitment / economic dispatch (UC/ED) simulation stack for the Georgian power system.
-It includes:
-- thermal commitment and dispatch,
-- reservoir + run-of-river hydro,
-- hydro cascade links and travel delay,
-- gas constraints (annual/monthly),
-- renewable profiles,
-- schema-validated JSON I/O,
-- HTML results import compatibility.
+Decision-support platform for the Georgian electricity system. End-to-end
+unit-commitment + economic-dispatch (UC/ED), 1-hour resolution, 8760h
+non-leap year, Asia/Tbilisi calendar.
 
-This repository is now organized for a **single canonical Python workflow** usable in local environments, Google Colab, and future CI.
+```
+                      ┌───────────────┐                     ┌──────────────────┐
+                      │  HTML UI      │                     │  Python solver   │
+   user input      → │  Export Input │── powersim_input ──▶│  pyomo + highs   │
+   (browser)         │   JSON        │     (schema v1.2)   │  rolling horizon │
+                      │               │◀── powersim_results │                  │
+   user views      ←  │  Import Results JSON                │                  │
+                      └───────────────┘                     └──────────────────┘
+```
+
+The HTML manages **inputs and visualisation**. The Python side runs the
+**MIP solver**. The two never share a process — they only share two JSON
+files. See [`docs/JSON_HANDOFF.md`](docs/JSON_HANDOFF.md) for the contract.
 
 ---
 
-## 1) Repository structure
-
-Current repository layout is a flat root:
+## What's in this repo
 
 ```
 .
-├── powersim_solver.py          # Main UC/ED solver CLI (Pyomo + HiGHS)
-├── powersim_dataio.py          # Project data loaders -> solver input JSON
-├── powersim_asset_mapper.py    # Installed-capacity workbook -> asset config
-├── powersim_schema.py          # Input/output schema + validators
-├── smoke_168h.py               # End-to-end smoke test (168h pipeline)
-├── run_simulation.py           # Canonical single-run pipeline (dataio->solver->validate)
-├── decision_grade_run.py       # Batch runner: MC (P10/P50/P90) + annual
-├── powersim_report.py          # Comparative reporting + cascade/reservoir checks
-├── stage1_smoke_fleet.json     # Baseline 8-asset config
-├── PowerSim_v4.html            # UI for import/export and visualization
-├── requirements.txt            # Python dependencies
+├── html/
+│   └── PowerSim_v4.html          ← open in any browser (no build step)
+├── solver/
+│   ├── powersim_solver.py        ← MIP UC/ED, rolling horizon (Pyomo + HiGHS)
+│   ├── powersim_dataio.py        ← raw GSE files → input JSON
+│   └── powersim_asset_mapper.py  ← installed-capacity workbook → asset list
+├── schema/
+│   └── powersim_schema.py        ← v1.2 input + output validators
+├── tests/
+│   ├── smoke_168h.py             ← end-to-end CI smoke test
+│   ├── stage1_smoke_fleet.json   ← 8-asset minimal fleet (CI only)
+│   ├── gse_2026_baseline.json    ← 27-asset GSE 2026 fleet, v10 LOCKED
+│   └── reservoir_overrides_template.csv
+├── scripts/
+│   ├── build_demo_project.py     ← synthesize project_data/ for trials
+│   ├── run_horizon.py            ← single-scenario horizon run
+│   └── run_mc_sweep.py           ← P10/P50/P90 MC sweep
+├── samples/
+│   ├── sample_input_168h.json                  ← smoke fleet input
+│   ├── sample_input_gse_2026_168h.json         ← GSE 2026 baseline input
+│   ├── sample_results_168h.json                ← smoke fleet results
+│   ├── sample_results_720h.json
+│   ├── sample_results_gse_2026_720h.json       ← GSE baseline 720h results
+│   ├── sample_mc_summary_720h.json
+│   └── sample_mc_summary_gse_720h.json         ← GSE 4-scenario MC summary
+├── docs/
+│   ├── HAPPY_PATH.md             ← clone → result in 5 minutes
+│   ├── JSON_HANDOFF.md           ← input/output schema reference
+│   ├── COLAB.md                  ← run on Google Colab
+│   └── TROUBLESHOOTING.md
+├── requirements.txt
 └── README.md
 ```
 
-Notes:
-- Historical docs/scripts may refer to `solver/`, `schema/`, and `tests/` folders.
-- Runtime scripts in this repo support both historical and flat layouts for key paths.
+`project_data/` and `out/` are local working folders — kept out of git.
 
 ---
 
-## 2) Setup
-
-### Python requirements
-- Python 3.10+
-- HiGHS via `highspy`
-
-Install dependencies:
+## Quick start (5 minutes)
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
-python3 -m pip install --upgrade pip
-python3 -m pip install -r requirements.txt
+git clone <this repo> powersim && cd powersim
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+
+# 1. synthetic data so you can try without GSE files
+python scripts/build_demo_project.py --out project_data
+
+# 2. 168-hour CI smoke test (≈5 s, 8-asset minimal fleet)
+python tests/smoke_168h.py \
+    --project-dir project_data \
+    --config      tests/stage1_smoke_fleet.json \
+    --keep-outputs out/smoke_168h
+
+# 3. or — full GSE 2026 baseline 168h (≈35 s, 27 assets, v10 LOCKED)
+python scripts/run_horizon.py \
+    --project-dir project_data \
+    --config      tests/gse_2026_baseline.json \
+    --hours       168 \
+    --out-dir     out/gse_168h
+
+# 4. open the HTML
+xdg-open html/PowerSim_v4.html      # or just double-click
+# → click "🏭 GSE 2026 Demo ჩატვირთვა"  (loads the same 27-asset fleet)
+# → click "📥 Import Results JSON" → pick out/gse_168h/powersim_results.json
 ```
 
-If you prefer explicit packages:
-
-```bash
-python3 -m pip install pyomo highspy pandas numpy openpyxl xlsxwriter
-```
+Full walkthrough: [`docs/HAPPY_PATH.md`](docs/HAPPY_PATH.md).
+Colab walkthrough: [`docs/COLAB.md`](docs/COLAB.md).
 
 ---
 
-## 3) Canonical project data layout
+## Running real horizons
 
-Set one project data directory (recommended: `./project_data`) and place source files under it.
+### Reference numbers (GSE 2026 baseline, demo project_data)
 
-Minimal expected inputs:
+These should be reproducible verbatim from a clean clone — they are the
+acceptance check for the v10 LOCKED calibration on the demo project_data.
 
+| Horizon | Fleet | Wallclock | Total cost | Avg λ | Unserved | Gas |
+|---------|-------|-----------|------------|-------|----------|-----|
+| 168h    | 27 assets | 35 s  | $9.9 M    | $37.12/MWh | 0 MWh | 20.8 Mm³ |
+| 720h    | 27 assets | 44 s  | $66.2 M   | $49.04/MWh | 0 MWh | 87.3 Mm³ |
+| 8760h   | 27 assets | 217 s | $780.9 M  | $52.27/MWh | 0 MWh | 1069.6 Mm³ |
+| MC sweep 720h × 4 | 27 assets | 180 s | P10/P50/P90 ≈ $66.14M / $66.20M / $66.22M | — | — | gas-cap binding |
+
+Annual gas usage (1069.6 Mm³) is within the 1170 Mm³ cap; closure_gap ≈ 0%
+on every run; all four MC scenarios converge to optimal.
+
+### 720-hour run (1 month)
+
+```bash
+python scripts/run_horizon.py \
+    --project-dir project_data \
+    --config      tests/gse_2026_baseline.json \
+    --hours       720 \
+    --mip-gap     0.02 \
+    --rolling-window 168 --rolling-step 168 \
+    --out-dir     out/gse_720h
 ```
-project_data/
-├── 2026_A_historical_mean.csv          # hydro scenario A_mean
-├── 2026_MC_P10.csv                     # optional
-├── 2026_MC_P50.csv                     # optional
-├── 2026_MC_P90.csv                     # optional
-├── Demand_CharYear.xlsx                # demand shape workbook
-├── generation-2026-forecast-v13.xlsx   # demand absolute workbook
-├── wind_tbilisi_A_mean.csv             # renewable site examples
-├── solar_tbilisi_A_mean.csv
-└── ... other supported source files
+
+Rolling horizon: 720 h ÷ 168 h windows × 168 h step = 5 windows. Each
+window's terminal storage / commitment carries over to the next.
+
+### 8760-hour annual run
+
+```bash
+python scripts/run_horizon.py \
+    --project-dir project_data \
+    --config      tests/gse_2026_baseline.json \
+    --hours       8760 \
+    --mip-gap     0.03 \
+    --rolling-window 168 --rolling-step 168 \
+    --time-limit  600 \
+    --out-dir     out/gse_8760h
 ```
 
-The loader in `powersim_dataio.py` already probes multiple common subdirectories (flat + nested data folders), but keeping everything under a single root avoids ambiguity.
+### Monte-Carlo P10 / P50 / P90 sweep
 
-You can point all commands to this directory with either:
-- `--project-dir /path/to/project_data`, or
-- `POWERSIM_PROJECT_DIR=/path/to/project_data`.
+```bash
+python scripts/run_mc_sweep.py \
+    --project-dir project_data \
+    --config      tests/gse_2026_baseline.json \
+    --hours       720 \
+    --scenarios   A_mean MC_P10 MC_P50 MC_P90 \
+    --out-dir     out/gse_mc_720h
+```
+
+Each scenario writes its own subdirectory; `mc_sweep_720h/mc_summary.json`
+aggregates `total_cost_usd`, `avg_lambda_usd_mwh`, `total_unserved_mwh`,
+`total_gas_mm3` with **P10 / P50 / P90 percentiles** of the cost
+distribution across the requested scenarios.
+
+### Full-fleet (131-plant) build from the GSE workbook
+
+```bash
+python solver/powersim_asset_mapper.py \
+    --excel /path/to/დადგმული_სიმძლავრე__2026.xlsx \
+    --hydro-overrides tests/reservoir_overrides_template.csv \
+    --out tests/full_fleet_2026.json
+```
+
+Then point any of the scripts above at `--config tests/full_fleet_2026.json`.
 
 ---
 
-## 4) Canonical execution workflow
+## What the user does vs. what's automated
 
-## A) 168h smoke / baseline run
+| You | Automated |
+|-----|-----------|
+| Open HTML, enter / import inputs, click **Export Input JSON** | Schema v1.2 validation, time index generation, derived profile keys, SHA-256 fingerprints |
+| Run one Python script (locally or in Colab) | Asset preprocessing, gas-constraint pro-rating, rolling-horizon decomposition, MIP UC + LP ED resolve, closure check, output validation, Excel export |
+| Open HTML, click **Import Results JSON** | Output validation, KPI cards, dispatch chart, lambda chart, monthly bar, per-asset summary |
 
-```bash
-python3 run_simulation.py \
-  --project-dir /path/to/project_data \
-  --config stage1_smoke_fleet.json \
-  --out-dir outputs/smoke_168h \
-  --horizon-hours 168
-```
-
-This pipeline performs:
-1. `build_input_from_project(...)`
-2. `validate_input(...)`
-3. solver run (`powersim_solver.py`)
-4. `validate_output(...)`
-
-Expected outputs:
-- `outputs/smoke_168h/powersim_input.json`
-- `outputs/smoke_168h/powersim_results.json`
-- `outputs/smoke_168h/powersim_results.xlsx`
-
-## B) 720h run
-
-```bash
-python3 run_simulation.py \
-  --project-dir /path/to/project_data \
-  --config stage1_smoke_fleet.json \
-  --out-dir outputs/run_720h \
-  --horizon-hours 720
-```
-
-## C) 8760h run path
-
-```bash
-python3 run_simulation.py \
-  --project-dir /path/to/project_data \
-  --config stage1_smoke_fleet.json \
-  --out-dir outputs/run_8760h \
-  --horizon-hours 8760
-```
-
-For long runs, tune `solver_settings` in config (e.g., `mip_gap`, `time_limit_s`, rolling-window parameters).
+That's the whole product loop.
 
 ---
 
-## 5) Alternative entry points
+## Calibration baseline (v10 LOCKED — do not change without justification)
 
-### Decision-grade batch run (Monte Carlo + annual)
+| Parameter | Value |
+|-----------|-------|
+| Hydro pmax derate | 0.65 (inflow-driven only; Section I excluded) |
+| Gas fuel price | $5.50/MMBtu |
+| Gas startup / no-load | $1000 / $50 |
+| Coal startup / no-load | $4000 / $100 |
+| Thermal pmin | 25% of pmax |
+| Section-I water values | Enguri/Vardnili $35, Zhinvali/Khrami $42, Shaori/Dzevrula $37 |
+| Section-I end-level target | 85% of `reservoir_max` |
+| Section-I end-level penalty | $20/Mm³ |
+| Cascade Enguri → Vardnili | delay = 2 h, gain = 0.97 |
+| Cascade Khrami_1 → Khrami_2 | delay = 1 h, gain = 0.95 |
+| Monthly gas caps | annual 1170 Mm³ (winter ~180, summer ~40) |
 
-```bash
-python3 decision_grade_run.py \
-  --project-dir /path/to/project_data \
-  --base-config stage1_smoke_fleet.json \
-  --output-root outputs \
-  --mc-horizon 720 \
-  --annual-horizon 8760 \
-  --annual-rolling-window 168 \
-  --annual-rolling-step 24
-```
-
-This writes:
-- `outputs/mc/*` for scenario runs,
-- `outputs/annual/*` for the annual run,
-- `outputs/reports/scenario_comparison.csv` and per-scenario diagnostics.
-
-### Smoke test script
-
-```bash
-python3 smoke_168h.py \
-  --project-dir /path/to/project_data \
-  --config stage1_smoke_fleet.json \
-  --keep-outputs outputs/smoke_test
-```
-
-### DataIO only (build input JSON)
-
-```bash
-python3 powersim_dataio.py \
-  --project-dir /path/to/project_data \
-  --config stage1_smoke_fleet.json \
-  --out outputs/input_only/powersim_input.json
-```
-
-### Solver only
-
-```bash
-python3 powersim_solver.py \
-  --input outputs/input_only/powersim_input.json \
-  --output outputs/solver_only/powersim_results.json \
-  --excel outputs/solver_only/powersim_results.xlsx
-```
+These are encoded in the asset mapper and reservoir override template.
 
 ---
 
-## 6) Validation story
+## Versioning
 
-- Input validation: `powersim_schema.validate_input`
-- Output validation: `powersim_schema.validate_output`
-- `run_simulation.py` enforces both for single runs.
-- `decision_grade_run.py` orchestrates scenario runs and then calls `powersim_report.py`.
-- `smoke_168h.py` also validates output shape compatibility expected by HTML import.
-
-If validation fails, scripts print explicit errors and return non-zero exit codes.
-
----
-
-## 7) Google Colab quickstart
-
-```python
-!pip install pyomo highspy pandas numpy openpyxl xlsxwriter
-```
-
-Then upload repository files and data, and run:
-
-```python
-!python run_simulation.py --project-dir /content/project_data --config stage1_smoke_fleet.json --out-dir /content/outputs_168h --horizon-hours 168
-```
+| Component | Version | Source of truth |
+|-----------|---------|-----------------|
+| Schema    | 1.2     | `schema/powersim_schema.py::SCHEMA_VERSION` (1.0 / 1.1 still load with a warning) |
+| Loader    | 1.0.1   | `solver/powersim_dataio.py::LOADER_VERSION` |
+| Solver    | 1.1.0   | `solver/powersim_solver.py::SOLVER_VERSION` |
+| HTML UI   | 1.2     | `html/PowerSim_v4.html::SCHEMA_VERSION` |
 
 ---
 
-## 8) CI readiness suggestions
+## Troubleshooting
 
-Typical CI checks:
-
-```bash
-python3 -m py_compile smoke_168h.py run_simulation.py decision_grade_run.py powersim_report.py powersim_dataio.py powersim_solver.py powersim_schema.py powersim_asset_mapper.py
-python3 smoke_168h.py --project-dir /mnt/project --config stage1_smoke_fleet.json --keep-outputs /tmp/powersim_smoke
-```
-
-Second command requires runtime dependencies and data files to be present.
-
----
-
-## 9) Troubleshooting
-
-### `ModuleNotFoundError` (e.g. pandas/pyomo/highspy)
-Install dependencies from `requirements.txt` in an activated virtualenv.
-
-### `project dir not found`
-Pass `--project-dir` explicitly or set `POWERSIM_PROJECT_DIR`.
-
-### Missing hydro / renewable / xlsx files
-Check your project data root and filenames. The loader error message lists accepted candidate names and folders.
-
-### Solver fails to converge or is too slow
-Adjust config `solver_settings` (`mip_gap`, `time_limit_s`, rolling horizon settings, threads).
-
----
-
-## 10) Non-goals of this hardening pass
-
-This baseline intentionally does **not** alter calibration economics (water values, fuel prices, hydro derating, cascade gains, penalties) except where needed for pure runtime robustness.
+See [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md) for installation,
+schema, solver, and HTML issues.

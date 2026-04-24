@@ -1,0 +1,94 @@
+{
+  "scenarios_run": 4,
+  "scenarios_ok": 4,
+  "horizon_hours": 720,
+  "wallclock_total_s": 33.21,
+  "percentiles": {
+    "total_cost_usd": {
+      "p10": 70846446.0,
+      "p50": 70969843.0,
+      "p90": 71081233.0,
+      "min": 70846446.0,
+      "max": 71081233.0,
+      "mean": 70966789.5
+    },
+    "avg_lambda_usd_mwh": {
+      "p10": 2942.892,
+      "p50": 2946.971,
+      "p90": 2971.446,
+      "min": 2942.892,
+      "max": 2971.446,
+      "mean": 2951.05025
+    },
+    "total_unserved_mwh": {
+      "p10": 655297.59,
+      "p50": 661015.32,
+      "p90": 669590.64,
+      "min": 655297.59,
+      "max": 669590.64,
+      "mean": 661686.4099999999
+    },
+    "total_gas_mm3": {
+      "p10": 53.8387,
+      "p50": 53.8387,
+      "p90": 53.8387,
+      "min": 53.8387,
+      "max": 53.8387,
+      "mean": 53.8387
+    }
+  },
+  "by_scenario": {
+    "A_mean": {
+      "wallclock_s": 8.07,
+      "total_cost_usd": 70969636.0,
+      "avg_lambda_usd_mwh": 2942.892,
+      "total_energy_mwh": 877275.0,
+      "peak_load_mw": 2922.5,
+      "total_gas_mm3": 53.8387,
+      "total_unserved_mwh": 661015.32,
+      "total_curtailed_mwh": 0.0,
+      "closure_ok": true,
+      "closure_gap": 0.0,
+      "solver_status": "solved"
+    },
+    "MC_P10": {
+      "wallclock_s": 8.56,
+      "total_cost_usd": 71081233.0,
+      "avg_lambda_usd_mwh": 2946.971,
+      "total_energy_mwh": 882993.0,
+      "peak_load_mw": 2922.5,
+      "total_gas_mm3": 53.8387,
+      "total_unserved_mwh": 655297.59,
+      "total_curtailed_mwh": 0.0,
+      "closure_ok": true,
+      "closure_gap": 0.0,
+      "solver_status": "solved"
+    },
+    "MC_P50": {
+      "wallclock_s": 8.13,
+      "total_cost_usd": 70969843.0,
+      "avg_lambda_usd_mwh": 2971.446,
+      "total_energy_mwh": 877448.0,
+      "peak_load_mw": 2922.5,
+      "total_gas_mm3": 53.8387,
+      "total_unserved_mwh": 660842.09,
+      "total_curtailed_mwh": 0.0,
+      "closure_ok": true,
+      "closure_gap": 0.0,
+      "solver_status": "solved"
+    },
+    "MC_P90": {
+      "wallclock_s": 8.35,
+      "total_cost_usd": 70846446.0,
+      "avg_lambda_usd_mwh": 2942.892,
+      "total_energy_mwh": 868700.0,
+      "peak_load_mw": 2922.5,
+      "total_gas_mm3": 53.8387,
+      "total_unserved_mwh": 669590.64,
+      "total_curtailed_mwh": 0.0,
+      "closure_ok": true,
+      "closure_gap": 0.0,
+      "solver_status": "solved"
+    }
+  }
+}

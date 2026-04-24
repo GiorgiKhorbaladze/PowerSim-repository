@@ -1,0 +1,25 @@
+# PowerSim v4.0 — Reservoir overrides template
+# Use this CSV to pin per-plant reservoir parameters that should NOT be
+# computed from the pmax-scaled defaults in the asset mapper.
+#
+# Columns:
+#   asset_id            stable id emitted by powersim_asset_mapper
+#                       (lowercase ASCII transliteration of the
+#                       Georgian plant name; see mapping CLI preview)
+#   reservoir_init      Mm³  — initial storage at hour 0
+#   reservoir_min       Mm³  — minimum operating storage (dead pool)
+#   reservoir_max       Mm³  — maximum storage (full reservoir)
+#   reservoir_end_min   Mm³  — minimum allowed end-of-horizon storage
+#   efficiency          MWh/Mm³ — energy yield per Mm³ released
+#   water_value         $/MWh — opportunity cost floor on dispatch MC
+#
+# Blank cells fall back to the per-plant default. Unknown asset_ids are
+# ignored (with a warning) so the file is safe to share across fleets.
+asset_id,reservoir_init,reservoir_min,reservoir_max,reservoir_end_min,efficiency,water_value
+engurhesi,700,100,1100,500,360,35
+vardnilhesi,40,10,80,30,330,35
+zhinvalhesi,150,30,400,200,360,42
+khramhesi_1,80,20,170,100,330,42
+khramhesi_2,15,5,30,12,330,42
+shaorhesi,40,10,90,40,330,37
+dzevrulahesi,8,2,18,6,330,37
