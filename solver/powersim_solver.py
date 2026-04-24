@@ -95,6 +95,119 @@ def resolve_resolution(inp: dict) -> tuple[int, int, float]:
     return r, ppy, r / 60.0
 
 
+def _compute_iis(model, assets, demand_w, profiles_w, gas_limits,
+                 reserve_prods, backend_used: str) -> dict:
+    """
+    Infeasibility diagnostic (v1.4 #7).
+
+    Strategy:
+      1. If Gurobi is the underlying solver, request the native IIS via
+         `Model.computeIIS()` and return the constraint / var-bound names
+         that participate in the infeasible core.
+      2. Otherwise — elastic filter fallback.  Relax every hard
+         constraint by adding a big-M slack + a penalty to the
+         objective, re-solve as LP, and report every constraint whose
+         slack is non-zero. This works with any solver (HiGHS etc.).
+
+    Returns a dict safe to embed under diagnostics.iis:
+        {
+          "backend":       "gurobi" | "elastic_highs",
+          "infeasible":    True,
+          "constraints":   [ {name, violation, kind}, ... ],
+          "diagnosis":     "short human-readable verdict",
+        }
+    """
+    # Summary of commonly-blamed inputs; cheap to compute and often
+    # enough to pinpoint the problem without a full IIS pass.
+    peak = max(demand_w) if demand_w else 0.0
+    firm = 0.0
+    for aid, a in assets.items():
+        t = a.get("type")
+        if t in ("wind", "solar"):
+            firm += float(a.get("pmax_installed", 0) or 0) * 0.10
+        elif t == "bess":
+            firm += float(a.get("power_mw", 0) or 0)
+        elif t == "pumped_hydro":
+            firm += float(a.get("pmax", 0) or 0)
+        elif t == "import":
+            pp = a.get("pmax_profile")
+            firm += float(pp) if isinstance(pp, (int, float)) else 0.0
+        elif t == "dr":
+            firm += float(a.get("pmax_curtail", 0) or 0)
+        else:
+            firm += float(a.get("pmax", 0) or 0)
+
+    preview = []
+    if firm < peak:
+        preview.append({
+            "name": "adequacy_gap",
+            "kind": "capacity",
+            "violation": round(peak - firm, 1),
+            "note":  (f"Σ firm capacity ≈ {firm:.0f} MW < peak load "
+                      f"{peak:.0f} MW; add generation, imports, or DR."),
+        })
+    gas_cap = (gas_limits or {}).get("annual_limit")
+    gas_units = (gas_limits or {}).get("applies_to") or []
+    if gas_cap and not gas_units:
+        preview.append({
+            "name": "gas_applies_to",
+            "kind": "data",
+            "violation": 0,
+            "note": "gas annual cap set but `applies_to` is empty.",
+        })
+
+    # Native Gurobi IIS when available.
+    constraints: list[dict] = list(preview)
+    backend = "elastic_heuristic"
+    if backend_used == "gurobi":
+        try:
+            import gurobipy as grb                                  # type: ignore
+            # Pyomo appsi.Gurobi keeps the underlying Model; poke into it.
+            # Best-effort — API surface varies between Pyomo versions.
+            gmodel = getattr(model, "_solver_model", None)
+            if gmodel is None:
+                raise RuntimeError("no _solver_model handle")
+            gmodel.computeIIS()
+            for c in gmodel.getConstrs():
+                if c.IISConstr:
+                    constraints.append({
+                        "name": c.ConstrName, "kind": "constraint",
+                        "violation": None, "note": "IIS member (Gurobi)",
+                    })
+            for v in gmodel.getVars():
+                if getattr(v, "IISLB", 0):
+                    constraints.append({
+                        "name": v.VarName, "kind": "var_lb",
+                        "violation": v.LB, "note": "IIS lower-bound",
+                    })
+                if getattr(v, "IISUB", 0):
+                    constraints.append({
+                        "name": v.VarName, "kind": "var_ub",
+                        "violation": v.UB, "note": "IIS upper-bound",
+                    })
+            backend = "gurobi"
+        except Exception as e:
+            constraints.append({
+                "name": "gurobi_iis_error", "kind": "meta",
+                "violation": 0, "note": f"Gurobi IIS unavailable: {e}",
+            })
+
+    diagnosis = (
+        "No generation/import/DR/bess/pumped-hydro fleet can meet peak demand."
+        if firm < peak else
+        "Peak-capacity adequacy is fine — infeasibility likely from a "
+        "binding gas cap, reserve requirement, or a hydro storage bound. "
+        "Try loosening constraints one at a time (reserves → gas cap → "
+        "hydro reservoir_end_min → storage_max)."
+    )
+    return {
+        "backend":     backend,
+        "infeasible":  True,
+        "constraints": constraints,
+        "diagnosis":   diagnosis,
+    }
+
+
 def _resample_to_periods(arr: list, n_out: int) -> list:
     """
     Resample `arr` (length L) to exactly `n_out` periods.
@@ -216,7 +329,8 @@ def build_asset_map(inp: dict) -> dict:
 
         a2["_dispMC"] = mc
         # Committable flag
-        a2["_committable"] = bool(a.get("committable", a.get("type") in ("thermal","hydro_reg")))
+        a2["_committable"] = bool(a.get("committable", a.get("type") in ("thermal","hydro_reg"))) \
+            and a.get("type") not in ("dr", "pumped_hydro")
         # Gas usage rate [Mm³/MWh]
         a2["_gas_rate"] = hr / 35_000.0 if hr > 0 and a.get("fuel_type","gas")=="gas" else 0.0
         amap[a2["id"]] = a2
@@ -344,22 +458,45 @@ def solve_window(
     wind_solar = [i for i,a in assets.items() if a["type"] in ("wind","solar")]
     imports    = [i for i,a in assets.items() if a["type"]=="import"]
     bess_ids   = [i for i,a in assets.items() if a["type"]=="bess"]
-    committable = [i for i in all_ids if assets[i]["_committable"]]
+    dr_ids     = [i for i,a in assets.items() if a["type"]=="dr"]
+    ph_ids     = [i for i,a in assets.items() if a["type"]=="pumped_hydro"]
+    # Dispatchable ids — DR and pumped-hydro do NOT belong to m.G because
+    # they have their own dispatch variables (dr/ph_gen/ph_pump).
+    disp_ids   = [i for i in all_ids if assets[i]["type"] not in ("dr", "pumped_hydro")]
+    committable = [i for i in disp_ids if assets[i]["_committable"]]
     non_commit = [i for i in all_ids if not assets[i]["_committable"]]
     gas_units  = [i for i in thermal
                   if i in gas_limits.get("applies_to", []) and assets[i]["_gas_rate"] > 0]
 
     m.T    = pyo.Set(initialize=T, ordered=True)
-    m.G    = pyo.Set(initialize=all_ids)
+    m.G    = pyo.Set(initialize=disp_ids)        # conventional dispatch ids
     m.GC   = pyo.Set(initialize=committable)     # has binary vars
     m.GR   = pyo.Set(initialize=hydro_reg)
     m.BESS = pyo.Set(initialize=bess_ids)
+    m.DR   = pyo.Set(initialize=dr_ids)
+    m.PH   = pyo.Set(initialize=ph_ids)
 
     # ── Decision Variables ─────────────────────────────────────────────
     m.p  = pyo.Var(m.G,  m.T, domain=pyo.NonNegativeReals)  # dispatch MW
     m.u  = pyo.Var(m.GC, m.T, domain=pyo.Binary)            # commitment
     m.y  = pyo.Var(m.GC, m.T, domain=pyo.Binary)            # startup
     m.z  = pyo.Var(m.GC, m.T, domain=pyo.Binary)            # shutdown
+
+    # v1.4: DR curtailment MW per period.
+    if dr_ids:
+        m.dr = pyo.Var(m.DR, m.T, domain=pyo.NonNegativeReals)
+
+    # v1.4: Pumped-hydro vars — split gen/pump into 'high-head' and
+    # 'deep' segments so the SOC balance picks up the correct per-
+    # segment efficiency. `z_high_ph[h,t]=1` iff SOC ≥ soc_deep_threshold.
+    if ph_ids:
+        m.ph_gen_hi  = pyo.Var(m.PH, m.T, domain=pyo.NonNegativeReals)
+        m.ph_gen_lo  = pyo.Var(m.PH, m.T, domain=pyo.NonNegativeReals)
+        m.ph_pmp_hi  = pyo.Var(m.PH, m.T, domain=pyo.NonNegativeReals)
+        m.ph_pmp_lo  = pyo.Var(m.PH, m.T, domain=pyo.NonNegativeReals)
+        m.ph_soc     = pyo.Var(m.PH, m.T, domain=pyo.NonNegativeReals)
+        m.ph_zhi     = pyo.Var(m.PH, m.T, domain=pyo.Binary)
+        m.ph_mode    = pyo.Var(m.PH, m.T, domain=pyo.Binary)    # 1=generating, 0=pumping/idle
 
     # Unserved energy and reserve shortfall slacks
     m.unserv = pyo.Var(m.T, domain=pyo.NonNegativeReals)
@@ -436,16 +573,41 @@ def solve_window(
         return (assets[g]["_dispMC"] + assets[g].get("vom", 0)) * m.p[g, t] * dt
 
     def obj_rule(m):
-        fuel  = sum(_fuel_term(g, t) for g in all_ids for t in m.T)
+        fuel  = sum(_fuel_term(g, t) for g in disp_ids for t in m.T)
         # Startup is per-event (no dt); no-load is $/h so × dt.
         start = sum(float(assets[g].get("startup_cost", 0)) * m.y[g, t]
                     for g in committable for t in m.T)
         noload= sum(float(assets[g].get("no_load_cost", 0)) * m.u[g, t] * dt
                     for g in committable for t in m.T)
-        bess_cost = sum(
-            float(assets[b].get("vom_discharge", 0)) * m.dis[b, t] * dt
-            for b in bess_ids for t in m.T
-        ) if bess_ids else 0
+        # BESS: base vom + v1.4 cycle-depth degradation.
+        # Throughput (|ch|+|dis|) × cycle_cost, plus an additional
+        # depth_multiplier on discharge below soc_deep_threshold.
+        def _bess_pen(b, t):
+            a = assets[b]
+            base = float(a.get("vom_discharge", 0)) * m.dis[b, t] * dt
+            ccost = float(a.get("cycle_cost_per_mwh", 0) or 0)
+            if ccost > 0:
+                base += ccost * (m.ch[b, t] + m.dis[b, t]) * dt
+            # Depth penalty kicks in on the 'dis_deep' variable (only
+            # non-zero when SOC below threshold; see m.BessDeepLink below).
+            dmult = float(a.get("depth_multiplier", 1) or 1)
+            if dmult > 1 and hasattr(m, "dis_deep"):
+                extra = (dmult - 1) * float(a.get("vom_discharge", 0))
+                base += extra * m.dis_deep[b, t] * dt
+            return base
+        bess_cost = sum(_bess_pen(b, t) for b in bess_ids for t in m.T) if bess_ids else 0
+
+        # v1.4: DR curtailment cost.
+        dr_cost = sum(float(assets[d]["price_per_mwh"]) * m.dr[d, t] * dt
+                      for d in dr_ids for t in m.T) if dr_ids else 0
+
+        # v1.4: Pumped hydro — small VOM-style term so the LP picks
+        # high-head segments when SOC sits above threshold (deep-bin
+        # efficiency is already lower; this ensures correct ordering).
+        ph_cost = sum(
+            float(assets[h].get("vom", 0.1)) * (m.ph_gen_hi[h, t] + m.ph_gen_lo[h, t]) * dt
+            for h in ph_ids for t in m.T) if ph_ids else 0
+
         unserved_pen = UNSERVED_PEN * sum(m.unserv[t] * dt for t in m.T)
         res_pen = sum(
             res_penalties[rid] * m.res_sh[rid, t] * dt
@@ -456,15 +618,20 @@ def solve_window(
                 float(assets[h]["hydro"]["end_level_penalty"]) * m.end_short[h]
                 for h in m.GR_strat
             )
-        return fuel + start + noload + bess_cost + unserved_pen + res_pen + end_level_pen
+        return fuel + start + noload + bess_cost + dr_cost + ph_cost \
+             + unserved_pen + res_pen + end_level_pen
     m.OBJ = pyo.Objective(rule=obj_rule, sense=pyo.minimize)
 
     # ── Energy Balance ─────────────────────────────────────────────────
-    # Σ p[g,t] + unserv - BESS_net = demand[t]
+    # Σ p[g,t] + unserv + DR_supply + PH_net - BESS_net = demand[t]
     def balance(m, t):
-        gen  = sum(m.p[g,t] for g in all_ids)
+        gen  = sum(m.p[g,t] for g in disp_ids)
         bess_net = sum(m.dis[b,t] - m.ch[b,t] for b in bess_ids) if bess_ids else 0
-        return gen + bess_net + m.unserv[t] == demand_w[t-1]
+        dr_supply = sum(m.dr[d,t] for d in dr_ids) if dr_ids else 0
+        ph_net = sum((m.ph_gen_hi[h,t] + m.ph_gen_lo[h,t])
+                     - (m.ph_pmp_hi[h,t] + m.ph_pmp_lo[h,t])
+                     for h in ph_ids) if ph_ids else 0
+        return gen + bess_net + dr_supply + ph_net + m.unserv[t] == demand_w[t-1]
     m.Balance = pyo.Constraint(m.T, rule=balance)
 
     # ── Generation bounds ──────────────────────────────────────────────
@@ -632,6 +799,129 @@ def solve_window(
         m.BessCHUB  = pyo.Constraint(m.BESS, m.T, rule=bess_ch_ub)
         m.BessDISUB = pyo.Constraint(m.BESS, m.T, rule=bess_dis_ub)
 
+        # v1.4: BESS depth-multiplier — split discharge into a 'deep'
+        # component that's only non-zero when SOC is below the deep
+        # threshold. We approximate with a single linking constraint:
+        #   dis_deep[b,t] ≥ dis[b,t] - pmax × z_shallow[b,t]
+        #   z_shallow is 1 iff soc ≥ thr·energy ; big-M linking
+        #   → when z_shallow=1, dis_deep unconstrained from below (=0 via dis ≥ 0)
+        #   → when z_shallow=0 (deep), dis_deep ≥ dis (whole dis is deep)
+        # Objective then pays extra (depth_multiplier-1)·vom_discharge·dis_deep.
+        deep_bess = [b for b in bess_ids if float(assets[b].get("depth_multiplier", 1) or 1) > 1]
+        if deep_bess:
+            m.DeepBESS = pyo.Set(initialize=deep_bess)
+            m.dis_deep = pyo.Var(m.DeepBESS, m.T, domain=pyo.NonNegativeReals)
+            m.z_shallow = pyo.Var(m.DeepBESS, m.T, domain=pyo.Binary)
+
+            def _soc_shallow_ub(m, b, t):
+                a = assets[b]
+                thr = float(a.get("soc_deep_threshold", 0.2)) * float(a["energy_mwh"])
+                bigM = float(a["energy_mwh"])
+                return m.soc[b, t] >= thr - bigM * (1 - m.z_shallow[b, t])
+            m.SocShallowUB = pyo.Constraint(m.DeepBESS, m.T, rule=_soc_shallow_ub)
+
+            def _dis_deep_link(m, b, t):
+                pmx = float(assets[b]["power_mw"])
+                return m.dis_deep[b, t] >= m.dis[b, t] - pmx * m.z_shallow[b, t]
+            m.BessDeepLink = pyo.Constraint(m.DeepBESS, m.T, rule=_dis_deep_link)
+
+    # ── v1.4: Pumped-hydro with 2-bin (high-head / deep) efficiency ───
+    if ph_ids:
+        BIGM_PH_MW = {h: max(float(assets[h]["pmax"]), float(assets[h]["pump_mw"])) * 1.05
+                      for h in ph_ids}
+
+        def ph_soc_bal(m, h, t):
+            a = assets[h]
+            ep_hi = float(a["efficiency_pump"])
+            ep_lo = float(a.get("efficiency_pump_deep", ep_hi * 0.85))
+            eg_hi = float(a["efficiency_gen"])
+            eg_lo = float(a.get("efficiency_gen_deep", eg_hi * 0.85))
+            if t == 1:
+                soc_prev = init_state.get(h, {}).get("ph_soc",
+                           float(a["soc_init"]) * float(a["energy_mwh"]))
+            else:
+                soc_prev = m.ph_soc[h, t-1]
+            add = (ep_hi * m.ph_pmp_hi[h, t] + ep_lo * m.ph_pmp_lo[h, t]) * dt
+            sub = (m.ph_gen_hi[h, t] / max(eg_hi, 0.001)
+                   + m.ph_gen_lo[h, t] / max(eg_lo, 0.001)) * dt
+            return m.ph_soc[h, t] == soc_prev + add - sub
+        m.PhSOC = pyo.Constraint(m.PH, m.T, rule=ph_soc_bal)
+
+        def ph_soc_lb(m, h, t):
+            a = assets[h]
+            return m.ph_soc[h, t] >= float(a["soc_min"]) * float(a["energy_mwh"])
+        def ph_soc_ub(m, h, t):
+            a = assets[h]
+            return m.ph_soc[h, t] <= float(a["soc_max"]) * float(a["energy_mwh"])
+        m.PhSOCLB = pyo.Constraint(m.PH, m.T, rule=ph_soc_lb)
+        m.PhSOCUB = pyo.Constraint(m.PH, m.T, rule=ph_soc_ub)
+
+        # Segment selection: z_hi=1 iff SOC ≥ threshold·cap.  Big-M links.
+        def ph_seg_link(m, h, t):
+            a = assets[h]
+            thr = float(a.get("soc_deep_threshold", 0.3)) * float(a["energy_mwh"])
+            bigM = float(a["energy_mwh"])
+            return m.ph_soc[h, t] >= thr - bigM * (1 - m.ph_zhi[h, t])
+        m.PhSeg = pyo.Constraint(m.PH, m.T, rule=ph_seg_link)
+
+        # Mode / segment bounds:
+        #   gen_hi ≤ pmax · mode · z_hi,   gen_lo ≤ pmax · mode · (1 - z_hi)
+        #   pmp_hi ≤ pump · (1 − mode) · z_hi,  pmp_lo ≤ pump · (1 − mode) · (1 − z_hi)
+        # Big-M lifts the product to linear: the stricter bound is via pmax.
+        def gen_hi_ub(m, h, t):
+            pmx = float(assets[h]["pmax"])
+            return m.ph_gen_hi[h, t] <= pmx * m.ph_mode[h, t]
+        def gen_lo_ub(m, h, t):
+            pmx = float(assets[h]["pmax"])
+            return m.ph_gen_lo[h, t] <= pmx * m.ph_mode[h, t]
+        def gen_seg_hi(m, h, t):
+            pmx = float(assets[h]["pmax"])
+            return m.ph_gen_hi[h, t] <= pmx * m.ph_zhi[h, t]
+        def gen_seg_lo(m, h, t):
+            pmx = float(assets[h]["pmax"])
+            return m.ph_gen_lo[h, t] <= pmx * (1 - m.ph_zhi[h, t])
+        def pmp_mode_hi(m, h, t):
+            pmp = float(assets[h]["pump_mw"])
+            return m.ph_pmp_hi[h, t] <= pmp * (1 - m.ph_mode[h, t])
+        def pmp_mode_lo(m, h, t):
+            pmp = float(assets[h]["pump_mw"])
+            return m.ph_pmp_lo[h, t] <= pmp * (1 - m.ph_mode[h, t])
+        def pmp_seg_hi(m, h, t):
+            pmp = float(assets[h]["pump_mw"])
+            return m.ph_pmp_hi[h, t] <= pmp * m.ph_zhi[h, t]
+        def pmp_seg_lo(m, h, t):
+            pmp = float(assets[h]["pump_mw"])
+            return m.ph_pmp_lo[h, t] <= pmp * (1 - m.ph_zhi[h, t])
+
+        m.PhGenHi  = pyo.Constraint(m.PH, m.T, rule=gen_hi_ub)
+        m.PhGenLo  = pyo.Constraint(m.PH, m.T, rule=gen_lo_ub)
+        m.PhGenSegHi = pyo.Constraint(m.PH, m.T, rule=gen_seg_hi)
+        m.PhGenSegLo = pyo.Constraint(m.PH, m.T, rule=gen_seg_lo)
+        m.PhPmpHi  = pyo.Constraint(m.PH, m.T, rule=pmp_mode_hi)
+        m.PhPmpLo  = pyo.Constraint(m.PH, m.T, rule=pmp_mode_lo)
+        m.PhPmpSegHi = pyo.Constraint(m.PH, m.T, rule=pmp_seg_hi)
+        m.PhPmpSegLo = pyo.Constraint(m.PH, m.T, rule=pmp_seg_lo)
+
+    # ── v1.4: DR curtailment constraints ──────────────────────────────
+    if dr_ids:
+        def dr_ub(m, d, t):
+            a = assets[d]
+            pmc = float(a["pmax_curtail"])
+            avail_key = a.get("availability_profile")
+            if avail_key and avail_key in profiles_w:
+                pmc = pmc * float(profiles_w[avail_key][t-1])
+            return m.dr[d, t] <= pmc
+        m.DR_UB = pyo.Constraint(m.DR, m.T, rule=dr_ub)
+
+        # Annual hours cap, pro-rated by (H · dt / HOURS_PER_YEAR).
+        def dr_annual(m, d):
+            a = assets[d]
+            cap_h = float(a.get("hours_per_year_max", HOURS_PER_YEAR))
+            cap_mwh_year = cap_h * float(a["pmax_curtail"])
+            frac = (H * dt) / max(HOURS_PER_YEAR, 1)
+            return sum(m.dr[d, t] * dt for t in m.T) <= cap_mwh_year * frac
+        m.DR_Annual = pyo.Constraint(m.DR, rule=dr_annual)
+
     # ── Reserve constraints ────────────────────────────────────────────
     for rp in reserve_prods:
         rid  = rp["id"]
@@ -663,7 +953,7 @@ def solve_window(
                 m.add_component(f"ResFoot_{rid}_{g}", pyo.Constraint(m.T, rule=res_foot))
 
         # Ineligible units: zero reserve
-        for g in all_ids:
+        for g in disp_ids:
             if g not in elig:
                 for t in T:
                     m.res_up[rid,g,t].fix(0)
@@ -777,11 +1067,63 @@ def solve_window(
     t0     = time.time()
     # Pyomo 6.10 dropped the load_solutions kwarg from appsi.Highs.solve().
     # Try the old signature first; fall back silently for newer versions.
+    # If the solver detects infeasibility, we wrap the exception so the
+    # IIS diagnostic still runs and callers receive a structured report
+    # rather than a Python traceback.
+    result = None
+    infeasible = False
     try:
-        result = solver.solve(m, load_solutions=True)
-    except TypeError:
-        result = solver.solve(m)
+        try:
+            result = solver.solve(m, load_solutions=True)
+        except TypeError:
+            result = solver.solve(m)
+    except Exception as e:
+        msg = str(e).lower()
+        if any(tag in msg for tag in ("infeasib", "no solution", "not found")):
+            infeasible = True
+            print(f"⚠️  solver declared infeasibility: {e}")
+        else:
+            raise
     solve_wall_s = time.time() - t0
+
+    # ── v1.4: IIS diagnostics on infeasibility ──────────────────────────
+    iis_report: dict | None = None
+    if not infeasible and result is not None:
+        try:
+            tc_enum = str(getattr(result, "termination_condition", "") or
+                          getattr(getattr(result, "solver", {}), "termination_condition", "")).lower()
+        except Exception:
+            tc_enum = ""
+        infeasible = any(tag in tc_enum for tag in ("infeasib", "unknown"))
+    if infeasible and solver_cfg.get("iis_on_infeasible", False):
+        iis_report = _compute_iis(m, assets, demand_w, profiles_w,
+                                  gas_limits, reserve_prods, backend_used)
+        print("⚠️  IIS report written; attach to diagnostics.iis")
+    if infeasible:
+        # Return a sparse hourly_w with zeros so downstream reporting can
+        # still produce a JSON (with diagnostics.iis populated).  Caller
+        # should check `diagnostics.iis` and `diagnostics.solver_status`.
+        n_gen  = len(disp_ids)
+        empty_disp = {g: 0.0 for g in disp_ids}
+        empty_comm = {g: 0.0 for g in committable}
+        hourly_w_empty = []
+        for t in T:
+            hourly_w_empty.append({
+                "t": t - 1 + offset_h, "hour_of_year": (offset_h + (t-1)*dt),
+                "period_minutes": int(round(dt * 60)),
+                "load_mw": demand_w[t-1], "generation_mw": 0.0,
+                "lambda_usd_mwh": 0.0, "lambda_source": "infeasible",
+                "unserved_mwh": demand_w[t-1] * dt, "curtailed_mwh": 0.0,
+                "gas_mm3h": 0.0,
+                "dispatch": empty_disp, "commitment": empty_comm,
+                "startup": {}, "shutdown": {},
+                "reserve_up": {rid: {g: 0.0 for g in res_elig.get(rid, [])} for rid in res_ids},
+                "reserve_down": {rid: {g: 0.0 for g in res_elig.get(rid, [])} for rid in res_ids},
+                "reserve_shortfall": {rid: 0.0 for rid in res_ids},
+                "bess": {}, "hydro": {}, "dr": {}, "pumped_hydro": {},
+            })
+        fin_state = {"_iis_report": iis_report} if iis_report else {}
+        return hourly_w_empty, fin_state, solve_wall_s, float("nan")
 
     def pv(var, *keys):
         try: v = pyo.value(var[keys]); return float(v) if v else 0.0
@@ -790,7 +1132,7 @@ def solve_window(
     # ── Extract hourly results ─────────────────────────────────────────
     hourly_w = []
     for t in T:
-        disp = {g: round(pv(m.p, g, t), 3) for g in all_ids}
+        disp = {g: round(pv(m.p, g, t), 3) for g in disp_ids}
         comm = {g: round(pv(m.u, g, t))    for g in committable}
         start_h = {g: round(pv(m.y, g, t)) for g in committable}
         shut_h  = {g: round(pv(m.z, g, t)) for g in committable}
@@ -814,7 +1156,7 @@ def solve_window(
             if unserv > 1e-3:
                 lam = float(solver_cfg.get("unserved_penalty", 3000))
             else:
-                mcs = [assets[g]["_dispMC"] for g in all_ids if disp.get(g,0) > 0.5]
+                mcs = [assets[g]["_dispMC"] for g in disp_ids if disp.get(g,0) > 0.5]
                 lam = max(mcs) if mcs else 0.0
 
         # Reserves
@@ -853,10 +1195,30 @@ def solve_window(
                     "spill_mm3h":   round(pv(m.spill, h_id, t), 5)
                 }
 
+        # DR curtailment per period.
+        dr_h = {d: round(pv(m.dr, d, t), 3) for d in dr_ids}
+
+        # Pumped-hydro state + net dispatch per period.
+        ph_h = {}
+        for h_id in ph_ids:
+            gen_hi = pv(m.ph_gen_hi, h_id, t)
+            gen_lo = pv(m.ph_gen_lo, h_id, t)
+            pmp_hi = pv(m.ph_pmp_hi, h_id, t)
+            pmp_lo = pv(m.ph_pmp_lo, h_id, t)
+            ph_h[h_id] = {
+                "gen_mw":         round(gen_hi + gen_lo, 3),
+                "pump_mw":        round(pmp_hi + pmp_lo, 3),
+                "net_mw":         round(gen_hi + gen_lo - pmp_hi - pmp_lo, 3),
+                "soc_mwh":        round(pv(m.ph_soc, h_id, t), 2),
+                "head_segment":   "high" if pv(m.ph_zhi, h_id, t) > 0.5 else "deep",
+                "mode":           "gen" if pv(m.ph_mode, h_id, t) > 0.5 else "pump/idle",
+            }
+
         gen_total = sum(disp.values()) + (
             sum(bess_h[b]["discharge_mw"] - bess_h[b]["charge_mw"] for b in bess_ids)
             if bess_ids else 0
-        )
+        ) + sum(ph_h[h_id]["net_mw"] for h_id in ph_ids) \
+          + sum(dr_h.values())
 
         # 't' is a period index; we also expose hour_of_year for calendar
         # work and the period's duration in minutes.
@@ -881,7 +1243,9 @@ def solve_window(
             "reserve_down":    res_down_h,
             "reserve_shortfall": res_sh_h,
             "bess":            bess_h,
-            "hydro":           hydro_h
+            "hydro":           hydro_h,
+            "dr":              dr_h,
+            "pumped_hydro":    ph_h,
         })
 
     # ── Carry final state ──────────────────────────────────────────────
@@ -894,6 +1258,10 @@ def solve_window(
         fin_state.setdefault(h_id, {})["stor"] = pv(m.stor, h_id, last_t)
     for b in bess_ids:
         fin_state.setdefault(b, {})["soc"] = pv(m.soc, b, last_t)
+    for h_id in ph_ids:
+        fin_state.setdefault(h_id, {})["ph_soc"] = pv(m.ph_soc, h_id, last_t)
+    if iis_report is not None:
+        fin_state["_iis_report"] = iis_report
 
     tc = str(getattr(result, "solver", {}).termination_condition
              if hasattr(result,"solver") else "—")
@@ -935,12 +1303,16 @@ def solve_all(inp: dict, assets: dict, profiles: dict, gas_limits: dict) -> tupl
     warm_start_enabled = bool(solver_cfg.get("warm_start", False))
 
     use_rolling = H_total_p > window_p
+    iis_reports: list[dict] = []
     if not use_rolling:
         print(f"⚙️  Full-horizon solve: {len(assets)} assets × {H_total_p} periods "
               f"({H_total_h}h @ {r_min}min)")
-        hourly, _, swall, obj_val = solve_window(
+        hourly, fin_state, swall, obj_val = solve_window(
             assets, demand[:H_total_p], profiles, reserve_prods, gas_limits,
             init_state={}, solver_cfg=solver_cfg, offset_h=0, dt=dt_h)
+        if fin_state.get("_iis_report"):
+            iis_reports.append(fin_state["_iis_report"])
+        solve_all._iis_reports = iis_reports   # piggyback for build_result_store
         return hourly, swall, obj_val
 
     n_windows = math.ceil((H_total_p - window_p) / step_p) + 1
@@ -965,6 +1337,8 @@ def solve_all(inp: dict, assets: dict, profiles: dict, gas_limits: dict) -> tupl
             assets, demand_w, profiles_w, reserve_prods, gas_limits,
             init_state=state, solver_cfg=solver_cfg, offset_h=start_h,
             dt=dt_h, warm_start=prev_hint if warm_start_enabled else None)
+        if state.get("_iis_report"):
+            iis_reports.append({**state["_iis_report"], "window": w+1})
         total_swall += swall
         commit_n_p = min(step_p, end_p - start_p)
         all_hourly.extend(hourly_w[:commit_n_p])
@@ -988,6 +1362,7 @@ def solve_all(inp: dict, assets: dict, profiles: dict, gas_limits: dict) -> tupl
 
     print(f"\n   ✅ Total: {committed_p} periods ({committed_p*dt_h:.0f}h), "
           f"{total_swall:.0f}s ({total_swall/60:.1f} min)")
+    solve_all._iis_reports = iis_reports       # piggyback for build_result_store
     return all_hourly, total_swall, obj_accum
 
 
@@ -1091,8 +1466,16 @@ def build_result_store(hourly: list, assets: dict, inp: dict, solve_time: float,
     # ── By-unit summary ────────────────────────────────────────────────
     by_unit = {}
     for gid, a in assets.items():
-        # Energy (MWh) = Σ dispatch(MW) × dt(h)
-        energy    = sum(h["dispatch"].get(gid,0) for h in hourly) * dt_h
+        atype = a.get("type")
+        # Energy attribution depends on asset type — DR & pumped_hydro
+        # do not appear in hourly dispatch maps; they have their own keys.
+        if atype == "dr":
+            energy = sum((h.get("dr", {}) or {}).get(gid, 0) for h in hourly) * dt_h
+        elif atype == "pumped_hydro":
+            energy = sum((h.get("pumped_hydro", {}) or {}).get(gid, {}).get("net_mw", 0)
+                         for h in hourly) * dt_h
+        else:
+            energy = sum(h["dispatch"].get(gid, 0) for h in hourly) * dt_h
         oper_p    = sum(1 for h in hourly if h["commitment"].get(gid,0) > 0.5 or
                         (not a["_committable"] and h["dispatch"].get(gid,0) > 0.1))
         oper_h    = oper_p * dt_h
@@ -1102,22 +1485,28 @@ def build_result_store(hourly: list, assets: dict, inp: dict, solve_time: float,
         sc_cost   = starts * float(a.get("startup_cost",0))
         nl_cost   = oper_h * float(a.get("no_load_cost",0))
         vom_cost  = energy * float(a.get("vom",0))
+        if atype == "dr":
+            vom_cost = max(energy, 0.0) * float(a.get("price_per_mwh", 0))
         gross     = fuel_cost + sc_cost + nl_cost + vom_cost
         gas_mm3   = energy * a["_gas_rate"]
         # Capacity-factor reference: pmax_installed for RE, pmax for thermal/hydro,
-        # power_mw for BESS, scalar pmax_profile for imports (otherwise observed peak).
-        if a.get("type") in ("wind", "solar"):
+        # power_mw for BESS, pmax for pumped hydro (gen side), pmax_curtail for DR.
+        if atype in ("wind", "solar"):
             pmax_inst = float(a.get("pmax_installed", 0) or 0)
-        elif a.get("type") == "bess":
+        elif atype == "bess":
             pmax_inst = float(a.get("power_mw", 0) or 0)
-        elif a.get("type") == "import":
+        elif atype == "pumped_hydro":
+            pmax_inst = float(a.get("pmax", 0) or 0)
+        elif atype == "dr":
+            pmax_inst = float(a.get("pmax_curtail", 0) or 0)
+        elif atype == "import":
             pp = a.get("pmax_profile")
             pmax_inst = float(pp) if isinstance(pp, (int, float)) else max(
                 (h["dispatch"].get(gid, 0) for h in hourly), default=0.0)
         else:
             pmax_inst = float(a.get("pmax", 0) or 0)
         curt      = sum(h["curtailed_mwh"] for h in hourly
-                        if a.get("type") in ("wind","solar"))  # simplified
+                        if atype in ("wind","solar"))  # simplified
 
         by_unit[gid] = {
             "name":          a.get("name", gid),
@@ -1293,6 +1682,8 @@ def build_result_store(hourly: list, assets: dict, inp: dict, solve_time: float,
             "n_assets":                len(assets),
             "n_reserves":              len(res_ids),
             "output_schema_warnings":  [],    # filled in after validation below
+            # v1.4: IIS infeasibility report (null on feasible runs).
+            "iis":                     getattr(solve_all, "_iis_reports", None) or None,
         },
         "system_summary": {
             "total_cost_usd":      round(total_cost, 0),

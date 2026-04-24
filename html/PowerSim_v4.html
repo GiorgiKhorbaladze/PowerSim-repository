@@ -282,6 +282,8 @@ tr:hover td{background:var(--bg3)}
               <option value="solar">☀️ Solar</option>
               <option value="import">🔌 Import</option>
               <option value="bess">🔋 BESS</option>
+              <option value="dr">📉 DR (Interruptible)</option>
+              <option value="pumped_hydro">⛰️ Pumped Hydro</option>
             </select>
           </div>
         </div>
@@ -522,6 +524,11 @@ tr:hover td{background:var(--bg3)}
             <input type="checkbox" id="hor-warmstart" checked> Warm start rolling windows (v1.3 #6)
           </label>
         </div>
+        <div class="field" style="display:flex;align-items:center;gap:6px">
+          <label style="margin:0">
+            <input type="checkbox" id="hor-iis"> IIS on infeasibility (v1.4 #7)
+          </label>
+        </div>
         <div class="field">
           <label>საბაზო წელი</label>
           <select id="hor-year">
@@ -684,6 +691,11 @@ tr:hover td{background:var(--bg3)}
         <div id="c-monthly" style="height:220px"></div>
       </div>
     </div>
+    <!-- v1.4: IIS infeasibility panel (hidden unless diagnostics.iis is non-empty) -->
+    <div class="card" id="iis-panel" style="display:none;border:1px solid var(--red)">
+      <div class="sh" style="color:var(--red)">⚠ Infeasibility Report (IIS)</div>
+      <div id="iis-body" style="font-size:8.5px;color:var(--t2);line-height:1.7"></div>
+    </div>
     <div class="card">
       <div class="sh" style="display:flex;justify-content:space-between;align-items:center">
         <span>🔍 Diagnostics</span>
@@ -758,7 +770,9 @@ const ASSET_TYPES = {
   wind:      {ico:'💨', color:'#00cfb4', label:'Wind'},
   solar:     {ico:'☀️', color:'#f0c040', label:'Solar'},
   import:    {ico:'🔌', color:'#a463f8', label:'Import'},
-  bess:      {ico:'🔋', color:'#20d68a', label:'BESS'}
+  bess:      {ico:'🔋', color:'#20d68a', label:'BESS'},
+  dr:        {ico:'📉', color:'#f07830', label:'DR'},
+  pumped_hydro:{ico:'⛰️',color:'#3d8ef0', label:'Pumped Hydro'}
 };
 
 const MONTHS = ['jan','feb','mar','apr','may','jun',
@@ -855,11 +869,19 @@ function addAsset(){
     wind:      {pmin:0,pmax_installed:50,mc:0,vom:0,curtailment_cost:0,committable:false},
     solar:     {pmin:0,pmax_installed:20,mc:0,vom:0,curtailment_cost:0,committable:false},
     import:    {pmin:0,vom:55,pmax_profile:700,committable:false},
-    bess:      {power_mw:50,energy_mwh:200,soc_init:0.5,soc_min:0.05,soc_max:0.95,eta_charge:0.92,eta_discharge:0.92,vom_discharge:1,reserve_capable:true,committable:false}
+    bess:      {power_mw:50,energy_mwh:200,soc_init:0.5,soc_min:0.05,soc_max:0.95,
+                eta_charge:0.92,eta_discharge:0.92,vom_discharge:1,reserve_capable:true,
+                cycle_cost_per_mwh:0,depth_multiplier:1,soc_deep_threshold:0.2,committable:false},
+    dr:        {pmax_curtail:50,price_per_mwh:200,hours_per_year_max:200,committable:false},
+    pumped_hydro:{pmax:100,pump_mw:95,energy_mwh:600,soc_init:0.5,soc_min:0.05,soc_max:0.95,
+                  efficiency_pump:0.85,efficiency_gen:0.90,
+                  efficiency_pump_deep:0.72,efficiency_gen_deep:0.78,
+                  soc_deep_threshold:0.3,vom:0.5,committable:false}
   };
   const id=`asset_${assetIdCtr++}`;
   const names={thermal:'New Thermal',hydro_reg:'New Hydro Reg',hydro_ror:'New Hydro ROR',
-                wind:'New Wind',solar:'New Solar',import:'New Import',bess:'New BESS'};
+                wind:'New Wind',solar:'New Solar',import:'New Import',bess:'New BESS',
+                dr:'New DR Load',pumped_hydro:'New Pumped Hydro'};
   STATE.assets.push(Object.assign({id,name:names[type],type},defaults[type]||{}));
   renderAssetTable();
   updateDashKpis();
@@ -1673,6 +1695,7 @@ function buildInputPayload(){
       threads: 0,
       solver:     (document.getElementById('hor-solver')||{}).value     || 'auto',
       warm_start: !!(document.getElementById('hor-warmstart')||{}).checked,
+      iis_on_infeasible: !!(document.getElementById('hor-iis')||{}).checked,
     },
     resolution_min: +((document.getElementById('hor-resolution')||{}).value || 60),
     kpi_templates: (STATE.kpiTemplates||[]).length ? STATE.kpiTemplates : undefined,
@@ -1866,6 +1889,29 @@ function renderResults(){
   }
 
   // Diagnostics
+  // v1.4: IIS panel — surfaces infeasibility diagnostics prominently.
+  const iisList = (diag && diag.iis) || [];
+  const iisPanel = document.getElementById('iis-panel');
+  const iisBody  = document.getElementById('iis-body');
+  if(iisPanel && iisBody){
+    if(iisList.length){
+      iisPanel.style.display = 'block';
+      iisBody.innerHTML = iisList.map(entry => {
+        const cons = (entry.constraints||[]).slice(0,15).map(c =>
+          `<div>&bull; <b style="color:var(--red)">${c.kind||''}</b>: ${c.name||''}
+           ${c.violation?`<span style="color:var(--gold)">(Δ=${c.violation})</span>`:''}
+           ${c.note?` — ${c.note}`:''}</div>`).join('');
+        return `<div style="margin-bottom:6px">
+          <div style="color:var(--red);font-weight:700">Backend: ${entry.backend}</div>
+          <div style="color:var(--t3)">${entry.diagnosis||''}</div>
+          <div style="margin-top:4px">${cons||'<i>(no constraints listed)</i>'}</div>
+        </div>`;
+      }).join('<hr style="border-color:var(--border)">');
+    } else {
+      iisPanel.style.display = 'none';
+    }
+  }
+
   const diagEl=document.getElementById('res-diagnostics');
   if(diagEl){
     diagEl.innerHTML=Object.entries(diag)

@@ -42,8 +42,8 @@ from typing import Any
 # ──────────────────────────────────────────────────────────────────────
 # VERSION + FIXED CONSTANTS
 # ──────────────────────────────────────────────────────────────────────
-SCHEMA_VERSION          = "1.3"
-ACCEPTED_SCHEMA_PRIOR   = {"1.0", "1.1", "1.2"}  # accept legacy configs with warning
+SCHEMA_VERSION          = "1.4"
+ACCEPTED_SCHEMA_PRIOR   = {"1.0", "1.1", "1.2", "1.3"}  # accept legacy configs with warning
 MODEL_VERSION           = "PowerSim v4.0"
 TIMEZONE                = "Asia/Tbilisi"
 HOURS_PER_YEAR          = 8760
@@ -82,9 +82,12 @@ HYDRO_INFLOW_UNITS: tuple[str, ...] = ("raw", "Mm3_per_h", "m3_per_s", "normaliz
 # Allowed values for `demand_spec.mode`.
 DEMAND_MODES: tuple[str, ...] = ("absolute", "shape_times_annual")
 
-# Asset type taxonomy, used by validators.
+# Asset type taxonomy, used by validators.  v1.4 adds:
+#   "dr"           — demand response / interruptible load
+#   "pumped_hydro" — pumped-storage with head-dependent efficiency
 ASSET_TYPES: tuple[str, ...] = (
     "thermal", "hydro_reg", "hydro_ror", "wind", "solar", "import", "bess",
+    "dr", "pumped_hydro",
 )
 
 
@@ -330,6 +333,51 @@ def validate_input(inp: dict) -> tuple[bool, list[str], list[str]]:
                       "soc_max", "eta_charge", "eta_discharge"):
                 if f not in a:
                     errors.append(f"bess '{aid}' missing field '{f}'")
+            # v1.4: BESS cycle-depth degradation (optional).
+            ccost = a.get("cycle_cost_per_mwh")
+            if ccost is not None and not (isinstance(ccost, (int, float)) and ccost >= 0):
+                errors.append(f"bess '{aid}': cycle_cost_per_mwh must be ≥ 0")
+            dmult = a.get("depth_multiplier")
+            if dmult is not None and not (isinstance(dmult, (int, float)) and dmult >= 1):
+                errors.append(f"bess '{aid}': depth_multiplier must be ≥ 1")
+            dth = a.get("soc_deep_threshold")
+            if dth is not None and not (isinstance(dth, (int, float)) and 0 <= dth <= 1):
+                errors.append(f"bess '{aid}': soc_deep_threshold must be in [0, 1]")
+
+        elif atype == "dr":
+            # v1.4: demand-response / interruptible loads.
+            for f in ("pmax_curtail", "price_per_mwh"):
+                if f not in a:
+                    errors.append(f"dr '{aid}' missing field '{f}'")
+            pmc = a.get("pmax_curtail", 0)
+            if not (isinstance(pmc, (int, float)) and pmc > 0):
+                errors.append(f"dr '{aid}': pmax_curtail must be > 0 MW")
+            prc = a.get("price_per_mwh", 0)
+            if not (isinstance(prc, (int, float)) and prc > 0):
+                errors.append(f"dr '{aid}': price_per_mwh must be > 0")
+            hpy = a.get("hours_per_year_max")
+            if hpy is not None and not (isinstance(hpy, (int, float))
+                                         and 0 <= hpy <= HOURS_PER_YEAR):
+                errors.append(
+                    f"dr '{aid}': hours_per_year_max must be in "
+                    f"[0, {HOURS_PER_YEAR}]")
+
+        elif atype == "pumped_hydro":
+            # v1.4: pumped-storage with 2-bin head-dependent efficiency.
+            for f in ("pmax", "pump_mw", "energy_mwh",
+                      "soc_init", "soc_min", "soc_max",
+                      "efficiency_pump", "efficiency_gen"):
+                if f not in a:
+                    errors.append(f"pumped_hydro '{aid}' missing field '{f}'")
+            for ekey in ("efficiency_pump", "efficiency_gen",
+                         "efficiency_pump_deep", "efficiency_gen_deep"):
+                v = a.get(ekey)
+                if v is not None and not (isinstance(v, (int, float))
+                                           and 0 < v <= 1):
+                    errors.append(f"pumped_hydro '{aid}': {ekey} must be in (0, 1]")
+            thr = a.get("soc_deep_threshold", 0.3)
+            if not (isinstance(thr, (int, float)) and 0 < thr < 1):
+                errors.append(f"pumped_hydro '{aid}': soc_deep_threshold must be in (0, 1)")
 
     # ── v1.1: profile_bundle ────────────────────────────────────────
     pb = inp.get("profile_bundle")
@@ -526,6 +574,9 @@ def validate_input(inp: dict) -> tuple[bool, list[str], list[str]]:
     ws = scfg.get("warm_start", False)
     if not isinstance(ws, bool):
         errors.append("solver_settings.warm_start must be boolean")
+    iis = scfg.get("iis_on_infeasible", False)
+    if not isinstance(iis, bool):
+        errors.append("solver_settings.iis_on_infeasible must be boolean")
 
     # ── v1.3: stochastic_tree (2-stage UC) ────────────────────────
     st = inp.get("stochastic_tree")
