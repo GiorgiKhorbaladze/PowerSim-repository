@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>PowerSim v4.0 — GSE ER&A Decision Support System</title>
 <script src="https://cdn.jsdelivr.net/npm/apexcharts@3.49.0/dist/apexcharts.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Georgian:wght@300;400;500;600;700;900&family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
 <style>
@@ -750,58 +752,60 @@ tr:hover td{background:var(--bg3)}
   <div id="rep-body" style="display:none">
     <!-- Sub-nav for the 20-card report dashboard -->
     <div class="card" style="margin-bottom:6px;display:flex;flex-wrap:wrap;gap:4px">
-      <button class="btn btn-t btn-s" onclick="repScrollTo('sec-mix')">⚡ Generation</button>
-      <button class="btn btn-t btn-s" onclick="repScrollTo('sec-ldc')">📈 Duration</button>
-      <button class="btn btn-t btn-s" onclick="repScrollTo('sec-hydro')">💧 Hydro</button>
-      <button class="btn btn-t btn-s" onclick="repScrollTo('sec-cf')">🔥 Capacity Factor</button>
-      <button class="btn btn-t btn-s" onclick="repScrollTo('sec-cost')">💲 Cost</button>
+      <button class="btn btn-t btn-s" onclick="repScrollTo('sec-mix')">⚡ გენერაცია</button>
+      <button class="btn btn-t btn-s" onclick="repScrollTo('sec-ldc')">📈 ხანგრძლივობა</button>
+      <button class="btn btn-t btn-s" onclick="repScrollTo('sec-hydro')">💧 ჰიდრო</button>
+      <button class="btn btn-t btn-s" onclick="repScrollTo('sec-cf')">🔥 CF</button>
+      <button class="btn btn-t btn-s" onclick="repScrollTo('sec-cost')">💲 ხარჯი</button>
       <button class="btn btn-t btn-s" onclick="repScrollTo('sec-heat')">🗓 Heatmap</button>
-      <button class="btn btn-t btn-s" onclick="repScrollTo('sec-reserve')">🛡 Reserve</button>
+      <button class="btn btn-t btn-s" onclick="repScrollTo('sec-reserve')">🛡 რეზერვი</button>
       <button class="btn btn-t btn-s" onclick="repScrollTo('sec-curt')">✂ Curtailment</button>
       <button class="btn btn-t btn-s" onclick="repScrollTo('sec-co2')">🌫 CO₂</button>
       <button class="btn btn-t btn-s" onclick="repScrollTo('sec-pl')">💼 P&amp;L</button>
-      <button class="btn btn-t btn-s" onclick="repScrollTo('sec-spill')">🌊 Spillage</button>
+      <button class="btn btn-t btn-s" onclick="repScrollTo('sec-spill')">🌊 დანაკარგი</button>
       <button class="btn btn-t btn-s" onclick="repScrollTo('sec-mclam')">⚖ MC vs λ</button>
-      <button class="btn btn-t btn-s" onclick="repScrollTo('sec-day')">🌓 Day-types</button>
-      <button class="btn btn-t btn-s" onclick="repScrollTo('sec-radar')">🎯 KPI radar</button>
-      <button class="btn btn-t btn-s" onclick="repScrollTo('sec-bess')">🔋 Storage arb.</button>
+      <button class="btn btn-t btn-s" onclick="repScrollTo('sec-day')">🌓 დღის ტიპი</button>
+      <button class="btn btn-t btn-s" onclick="repScrollTo('sec-radar')">🎯 KPI ცხრილი</button>
+      <button class="btn btn-t btn-s" onclick="repScrollTo('sec-bess')">🔋 BESS arb.</button>
       <button class="btn btn-t btn-s" onclick="repScrollTo('sec-target')">🎚 End-level</button>
       <button class="btn btn-t btn-s" onclick="repScrollTo('sec-ramp')">📐 Ramp</button>
       <button class="btn btn-t btn-s" onclick="repScrollTo('sec-snap')">📸 Snapshots</button>
-      <button class="btn btn-t btn-s" onclick="repScrollTo('sec-delta')">Δ Scenario delta</button>
-      <button class="btn btn-g btn-s" style="margin-left:auto" onclick="exportReportsXls()">⬇ Excel rich</button>
+      <button class="btn btn-t btn-s" onclick="repScrollTo('sec-delta')">Δ შედარება</button>
+      <button class="btn btn-g btn-s" style="margin-left:auto" onclick="exportReportsXls()">⬇ Excel</button>
+      <button class="btn btn-b btn-s" onclick="exportReportsPNG()">🖼 PNG</button>
+      <button class="btn btn-p btn-s" onclick="exportReportsPDF()">📄 PDF</button>
     </div>
 
     <!-- ─────────────── Tier 1 ─────────────── -->
     <!-- 1. Technology mix dispatch -->
     <div class="card" id="sec-mix">
-      <div class="sh">⚡ Generation Mix by Technology (stacked, MW)</div>
+      <div class="sh">⚡ გენერაციის მიქსი ტექნოლოგიის მიხედვით (stacked, MW)</div>
       <div id="c-rep-mix" style="height:320px"></div>
       <div id="c-rep-mix-share" style="height:240px;margin-top:6px"></div>
     </div>
 
     <!-- 2. Load + Net Load Duration Curves -->
     <div class="card" id="sec-ldc">
-      <div class="sh">📈 Load &amp; Net-Load Duration Curves</div>
+      <div class="sh">📈 დატვირთვისა და ნეტო-დატვირთვის ხანგრძლივობის მრუდი</div>
       <div id="c-rep-ldc" style="height:300px"></div>
       <div id="rep-ldc-stats" style="font-size:8px;color:var(--t3);margin-top:5px"></div>
     </div>
 
     <!-- 3. Reservoir trajectory (Section-I storage) -->
     <div class="card" id="sec-hydro">
-      <div class="sh">💧 Reservoir Storage Trajectory (Mm³, Section-I HPPs)</div>
+      <div class="sh">💧 წყალსაცავის ტრაექტორია (Mm³, Section-I ჰესები)</div>
       <div id="c-rep-reservoir" style="height:300px"></div>
     </div>
 
     <!-- 4. Capacity factor heatmap (asset × month) -->
     <div class="card" id="sec-cf">
-      <div class="sh">🔥 Capacity-Factor Heatmap (asset × month)</div>
+      <div class="sh">🔥 დატვირთვის კოეფიციენტი (CF, სადგ. × თვე)</div>
       <div id="c-rep-cf-heat" style="overflow:auto;max-height:520px"></div>
     </div>
 
     <!-- 5. Cost waterfall -->
     <div class="card" id="sec-cost">
-      <div class="sh">💲 Cost Waterfall — fuel + startup + no-load + VOM + penalties</div>
+      <div class="sh">💲 ხარჯის წყაროები — საწვავი + startup + no-load + VOM + ჯარიმები</div>
       <div id="c-rep-cost" style="height:300px"></div>
       <div id="rep-cost-tbl" style="margin-top:6px"></div>
     </div>
@@ -809,14 +813,14 @@ tr:hover td{background:var(--bg3)}
     <!-- 6. 24h × 365d hourly heatmap -->
     <div class="card" id="sec-heat">
       <div class="sh" style="display:flex;justify-content:space-between;align-items:center">
-        <span>🗓 Hourly Heatmap (24h × period days)</span>
+        <span>🗓 საათობრივი Heatmap (24h × დღეები)</span>
         <select id="rep-heat-metric" onchange="renderReports()" style="font-size:8px;width:160px">
-          <option value="load_mw" selected>Load (MW)</option>
+          <option value="load_mw" selected>დატვირთვა (MW)</option>
           <option value="lambda_usd_mwh">Lambda ($/MWh)</option>
-          <option value="generation_mw">Generation (MW)</option>
+          <option value="generation_mw">გენერაცია (MW)</option>
           <option value="curtailed_mwh">Curtailment (MWh)</option>
-          <option value="unserved_mwh">Unserved (MWh)</option>
-          <option value="gas_mm3h">Gas (Mm³/h)</option>
+          <option value="unserved_mwh">მიუწოდ. (MWh)</option>
+          <option value="gas_mm3h">გაზი (Mm³/სთ)</option>
         </select>
       </div>
       <div id="c-rep-heat" style="overflow:auto;max-height:520px"></div>
@@ -825,85 +829,85 @@ tr:hover td{background:var(--bg3)}
     <!-- ─────────────── Tier 2 ─────────────── -->
     <!-- 7. Reserve allocation breakdown -->
     <div class="card" id="sec-reserve">
-      <div class="sh">🛡 Reserve Allocation (FCR / aFRR by unit, MW-hours)</div>
+      <div class="sh">🛡 რეზერვის გადანაწილება (FCR / aFRR სადგ.-ის მიხედვით, MW-სთ)</div>
       <div id="rep-reserve-tbl"></div>
       <div id="c-rep-reserve" style="height:280px"></div>
     </div>
 
     <!-- 8. Curtailment by site -->
     <div class="card" id="sec-curt">
-      <div class="sh">✂ Curtailment by Asset (MWh + % of available)</div>
+      <div class="sh">✂ Curtailment ასეტის მიხედვით (MWh + % ხელმისაწვ.)</div>
       <div id="rep-curt-tbl"></div>
       <div id="c-rep-curt" style="height:240px"></div>
     </div>
 
     <!-- 9. CO₂ emissions -->
     <div class="card" id="sec-co2">
-      <div class="sh">🌫 CO₂ Emissions Estimate (tCO₂ by fuel, monthly)</div>
+      <div class="sh">🌫 CO₂ ემისიის შეფასება (tCO₂ საწვავის მიხედვით, თვიური)</div>
       <div id="c-rep-co2" style="height:260px"></div>
       <div id="rep-co2-stats" style="font-size:8px;color:var(--t3);margin-top:5px"></div>
     </div>
 
     <!-- 10. Generator P&L table -->
     <div class="card" id="sec-pl">
-      <div class="sh">💼 Generator P&amp;L (revenue − cost, $)</div>
+      <div class="sh">💼 ფინანსური შედეგი ($, შემოსავალი − ხარჯი)</div>
       <div id="rep-pl-tbl"></div>
     </div>
 
     <!-- 11. Hydro spillage -->
     <div class="card" id="sec-spill">
-      <div class="sh">🌊 Hydro Spillage (Mm³ &amp; lost-energy MWh, by HPP)</div>
+      <div class="sh">🌊 ჰიდროს დანაკარგი (Mm³ + დაკარგ. ენ. MWh, ჰესის მიხედვით)</div>
       <div id="c-rep-spill" style="height:240px"></div>
       <div id="rep-spill-tbl" style="margin-top:6px"></div>
     </div>
 
     <!-- 12. Marginal cost vs λ scatter -->
     <div class="card" id="sec-mclam">
-      <div class="sh">⚖ Marginal Cost vs System λ (each marginal hour)</div>
+      <div class="sh">⚖ ზღვრული ღირებულება vs სისტემური λ</div>
       <div id="c-rep-mclam" style="height:280px"></div>
     </div>
 
     <!-- ─────────────── Tier 3 ─────────────── -->
     <!-- 13. Day-types analysis -->
     <div class="card" id="sec-day">
-      <div class="sh">🌓 Day-Types — peak / shoulder / off-peak avg dispatch</div>
+      <div class="sh">🌓 დღის ტიპი — peak / shoulder / off-peak საშ. dispatch</div>
       <div id="c-rep-day" style="height:280px"></div>
     </div>
 
     <!-- 14. KPI radar chart -->
     <div class="card" id="sec-radar">
-      <div class="sh">🎯 KPI Radar — single-glance scorecard</div>
+      <div class="sh">🎯 KPI Radar — სისტემის ერთი შეხედვის შეფასება</div>
       <div id="c-rep-radar" style="height:320px"></div>
     </div>
 
     <!-- 15. BESS / Pumped-hydro arbitrage -->
     <div class="card" id="sec-bess">
-      <div class="sh">🔋 Storage Arbitrage (charge price vs discharge price)</div>
+      <div class="sh">🔋 Storage Arbitrage (charge vs discharge ფასები)</div>
       <div id="rep-bess-tbl"></div>
     </div>
 
     <!-- 16. Reservoir target deviation -->
     <div class="card" id="sec-target">
-      <div class="sh">🎚 Reservoir End-Level vs Target (Mm³, Section-I)</div>
+      <div class="sh">🎚 წყალსაცავის საბოლოო დონე vs სამიზნე (Mm³, Section-I)</div>
       <div id="c-rep-target" style="height:240px"></div>
     </div>
 
     <!-- 17. Hourly ramp requirement -->
     <div class="card" id="sec-ramp">
-      <div class="sh">📐 Net-Load Ramp Requirements (Δ MW per hour)</div>
+      <div class="sh">📐 ნეტო-დატვირთვის რემპის მოთხოვნები (Δ MW/სთ)</div>
       <div id="c-rep-ramp" style="height:260px"></div>
       <div id="rep-ramp-stats" style="font-size:8px;color:var(--t3);margin-top:5px"></div>
     </div>
 
     <!-- 18. Snapshot days -->
     <div class="card" id="sec-snap">
-      <div class="sh">📸 Snapshot Days — peak / low-hydro / RE-curtailed</div>
+      <div class="sh">📸 Snapshot დღე-ები — peak / curt / unserved</div>
       <div id="rep-snap-cards" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px"></div>
     </div>
 
     <!-- 19. Scenario delta waterfall (only when ≥2 scenarios loaded in Compare) -->
     <div class="card" id="sec-delta">
-      <div class="sh">Δ Scenario Delta Waterfall (decompose cost diff vs baseline)</div>
+      <div class="sh">Δ სცენარული Δ Waterfall (ხარჯის სხვაობის დეკომპოზიცია)</div>
       <div id="c-rep-delta" style="height:300px"></div>
       <div id="rep-delta-note" style="font-size:8px;color:var(--t3);margin-top:5px"></div>
     </div>
@@ -1087,9 +1091,10 @@ function renderAssetTable(){
     const isRE=a.type==='wind'||a.type==='solar';
     const isBESS=a.type==='bess';
     const isImport=a.type==='import';
-    return`<tr>
+    return`<tr ondblclick="showAssetDetail('${a.id}')" title="ორჯერ დააჭირე — დეტალები">
       <td><span style="color:${ti.color}">${ti.ico}</span> ${ti.label}</td>
-      <td class="mono" style="font-size:7.5px">${a.id}</td>
+      <td class="mono" style="font-size:7.5px;cursor:pointer;color:var(--teal)"
+          onclick="showAssetDetail('${a.id}')">${a.id}</td>
       <td><input type="text" value="${a.name}" style="width:110px;font-size:7.5px"
            onchange="STATE.assets[${ci}].name=this.value;renderWorkflowSteps()"></td>
       <td>${isRE||isBESS||isImport?'—':f('pmin')}</td>
@@ -1119,6 +1124,129 @@ function renderAssetTable(){
     `<div>სულ სადგ: <b>${STATE.assets.length}</b></div>`+
     `<div>Pmax: <b>${total.toFixed(0)} MW</b></div>`+
     Object.entries(byType).map(([t,c])=>`<div>${ASSET_TYPES[t]?.ico||'?'} ${t}: ${c}</div>`).join('');
+}
+
+// ── Asset detail panel (#10) ─────────────────────────────────────────
+// Click an asset's id (or double-click the row) → expands a detail card
+// with full field listing, results-aware metrics if a results JSON is
+// loaded, and a small dispatch sparkline.
+function showAssetDetail(id){
+  const a = STATE.assets.find(x=>x.id===id);
+  const panel = document.getElementById('asset-extra-panel');
+  const title = document.getElementById('asset-extra-title');
+  const body  = document.getElementById('asset-extra-content');
+  if(!panel || !a){ return; }
+  const ti = ASSET_TYPES[a.type] || {ico:'?',color:'#888',label:a.type};
+  title.innerHTML = `${ti.ico} ${a.name} <span style="color:var(--t3);font-weight:400">— ${a.id} (${ti.label})</span>`;
+
+  // ── Field table ──
+  const skipKeys = new Set(['id','name','type','hydro','_commiss_year','maint_windows']);
+  const lines = Object.keys(a).filter(k=>!skipKeys.has(k)).map(k=>{
+    let v = a[k];
+    if(typeof v === 'number') v = v.toFixed(3).replace(/\.?0+$/,'');
+    if(v === null) v = '<span style="color:var(--t3)">null</span>';
+    if(typeof v === 'boolean') v = v?'✅':'⬜';
+    return `<tr><td style="color:var(--t3)">${k}</td><td class="mono">${v}</td></tr>`;
+  });
+  let hydroRows = '';
+  if(a.hydro){
+    hydroRows = `<tr><td colspan="2" style="padding-top:6px;color:var(--teal);font-weight:700">hydro</td></tr>`
+      + Object.entries(a.hydro).map(([k,v])=>{
+          let vv = (typeof v==='number') ? v.toFixed(3).replace(/\.?0+$/,'') : (v??'<span style="color:var(--t3)">null</span>');
+          return `<tr><td style="padding-left:14px;color:var(--t3)">${k}</td><td class="mono">${vv}</td></tr>`;
+        }).join('');
+  }
+  const yearStr = a._commiss_year ? `<div style="color:var(--gold)">📅 ექსპლუატაციაში: ${a._commiss_year}</div>` : '';
+
+  // ── Results-aware section (when results loaded) ──
+  let resultsCard = '';
+  if(STATE.results){
+    const bu = (STATE.results.by_unit_summary||{})[id];
+    const hbu = (STATE.results.hourly_by_unit||{})[id] || [];
+    if(bu){
+      const peak = hbu.length ? Math.max(...hbu.map(r=>+r.dispatch_mw||0)).toFixed(1) : '—';
+      // Sparkline of dispatch (first 168h)
+      const dis = hbu.slice(0, Math.min(hbu.length, 168)).map(r=>+r.dispatch_mw||0);
+      const mx = Math.max(...dis,1), mn = Math.min(...dis,0);
+      const w = 320, h = 60;
+      const pts = dis.map((v,i)=>`${(i*w/Math.max(dis.length-1,1)).toFixed(2)},${(h - (h-2)*(v-mn)/Math.max(mx-mn,1e-9)).toFixed(2)}`).join(' ');
+      const spark = dis.length ? `<svg viewBox="0 0 ${w} ${h}" style="width:100%;height:80px">
+        <polyline points="${pts}" fill="none" stroke="var(--teal)" stroke-width="1.4"/>
+      </svg>` : '<div style="font-size:8px;color:var(--t3)">no hourly data</div>';
+      resultsCard = `<div style="margin-top:6px;padding:6px;background:var(--bg2);border-radius:5px">
+        <div style="font-size:8px;color:var(--gold);font-weight:700;margin-bottom:4px">📊 Results-aware metrics</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;font-size:8px">
+          <div><div style="color:var(--t3)">ენერგია</div><b>${(+bu.energy_mwh||0).toLocaleString('en-US',{maximumFractionDigits:0})} MWh</b></div>
+          <div><div style="color:var(--t3)">CF</div><b>${(+bu.capacity_factor||0).toFixed(1)}%</b></div>
+          <div><div style="color:var(--t3)">Peak dispatch</div><b>${peak} MW</b></div>
+          <div><div style="color:var(--t3)">Gross cost</div><b>$${(+bu.gross_cost||0).toLocaleString('en-US',{maximumFractionDigits:0})}</b></div>
+          <div><div style="color:var(--t3)">Avg $/MWh</div><b>$${(+bu.avg_cost_mwh||0).toFixed(2)}</b></div>
+          <div><div style="color:var(--t3)">Starts</div><b>${+bu.starts||0}</b></div>
+        </div>
+        <div style="margin-top:5px">${spark}</div>
+        <div style="font-size:7.5px;color:var(--t3);margin-top:2px">↑ pirveli 168h dispatch (MW)</div>
+      </div>`;
+    }
+  }
+
+  body.innerHTML = `
+    ${yearStr}
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      <div>
+        <div class="sh">⚙️ Schema fields</div>
+        <table style="font-size:8px"><tbody>${lines.join('')}${hydroRows}</tbody></table>
+      </div>
+      <div>${resultsCard || '<div style="color:var(--t3);font-size:8px;padding:10px">📥 Import Results JSON to see operational metrics here.</div>'}</div>
+    </div>`;
+  panel.style.display = 'block';
+  panel.scrollIntoView({behavior:'smooth', block:'nearest'});
+}
+
+// ── PDF / PNG snapshot export (#11) ──────────────────────────────────
+async function exportReportsPNG(){
+  if(!STATE.results){ showBanner('შედეგები არ ჩაიტვ.','r'); return; }
+  if(!window.html2canvas){ showBanner('html2canvas დაუკავშირებელია','r'); return; }
+  const target = document.getElementById('rep-body');
+  if(!target || target.style.display==='none'){ showBanner('Reports tab-ი ცარიელია','o'); return; }
+  showBanner('📸 PNG generating…','b',2000);
+  try {
+    const canvas = await html2canvas(target, {backgroundColor:'#050d1a', scale:1, useCORS:true});
+    const url = canvas.toDataURL('image/png');
+    const a = document.createElement('a');
+    a.href = url; a.download = 'PowerSim_Reports_'+new Date().toISOString().slice(0,10)+'.png';
+    a.click();
+    showBanner('✅ PNG ჩამოიტვირთა','g');
+  } catch(e){ showBanner('❌ PNG: '+e.message,'r'); }
+}
+
+async function exportReportsPDF(){
+  if(!STATE.results){ showBanner('შედეგები არ ჩაიტვ.','r'); return; }
+  if(!window.html2canvas || !window.jspdf){ showBanner('html2canvas/jspdf დაუკავშირებელია','r'); return; }
+  const target = document.getElementById('rep-body');
+  if(!target || target.style.display==='none'){ showBanner('Reports tab-ი ცარიელია','o'); return; }
+  showBanner('📄 PDF generating…','b',3000);
+  try {
+    // Find each .card in Reports body and add as PDF page.
+    const { jsPDF } = window.jspdf;
+    const cards = target.querySelectorAll('.card');
+    const pdf = new jsPDF({orientation:'landscape', unit:'mm', format:'a4'});
+    const pageW = pdf.internal.pageSize.getWidth();
+    const pageH = pdf.internal.pageSize.getHeight();
+    let first = true;
+    for(const card of cards){
+      const c = await html2canvas(card, {backgroundColor:'#0f2240', scale:1.5, useCORS:true});
+      const ratio = c.height / c.width;
+      const w = pageW - 10, h = w * ratio;
+      const finalH = Math.min(h, pageH - 14);
+      if(!first) pdf.addPage();
+      pdf.setFontSize(9); pdf.setTextColor(180,196,224);
+      pdf.text(`PowerSim Reports — ${new Date().toISOString().slice(0,16).replace('T',' ')}`, 5, 7);
+      pdf.addImage(c.toDataURL('image/png'), 'PNG', 5, 10, w, finalH);
+      first = false;
+    }
+    pdf.save('PowerSim_Reports_'+new Date().toISOString().slice(0,10)+'.pdf');
+    showBanner('✅ PDF ჩამოიტვირთა ('+cards.length+' გვერდი)','g');
+  } catch(e){ showBanner('❌ PDF: '+e.message,'r'); }
 }
 
 function removeAsset(id){
