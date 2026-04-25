@@ -2731,24 +2731,401 @@ function _repMCvsLambda(ctx){
     tooltip:{shared:false},
   });
 }
-function _repDayTypes(ctx){ document.getElementById('c-rep-day').innerHTML=''; }
-function _repKPIRadar(ctx){ document.getElementById('c-rep-radar').innerHTML=''; }
-function _repBessArb(ctx){ document.getElementById('rep-bess-tbl').innerHTML='<div style="font-size:8px;color:var(--t3);padding:8px">Phase 5c — coming soon</div>'; }
-function _repReservoirTarget(ctx){ document.getElementById('c-rep-target').innerHTML=''; }
-function _repRampReq(ctx){ document.getElementById('c-rep-ramp').innerHTML=''; document.getElementById('rep-ramp-stats').innerHTML=''; }
-function _repSnapshots(ctx){ document.getElementById('rep-snap-cards').innerHTML=''; }
-function _repScenarioDelta(ctx){
-  document.getElementById('c-rep-delta').innerHTML='';
-  document.getElementById('rep-delta-note').textContent =
-    (STATE.compareSlots && STATE.compareSlots.length>=2)
-      ? 'Phase 5c — coming soon (will use Compare-tab scenarios as input)'
-      : 'Load ≥2 scenarios in Compare tab first.';
+// ── 13. Day-types average dispatch (peak / shoulder / off-peak) ──────
+function _repDayTypes(ctx){
+  const { hs, stack, cats, dt_h } = ctx;
+  // Bin hours-of-day into 3 day-types based on average load profile.
+  // peak    = hours-of-day where avg load > 90th percentile of load[h]
+  // shoulder= 50–90th
+  // off-peak= < 50th
+  const hod = Array.from({length:24},()=>[]);
+  for(let t=0; t<hs.length; t++){
+    const h = ((+hs[t].hour_of_year || hs[t].t || 0) % 24);
+    hod[h].push(+hs[t].load_mw || 0);
+  }
+  const avg = hod.map(arr => arr.reduce((s,v)=>s+v,0)/Math.max(arr.length,1));
+  const sorted = [...avg].sort((a,b)=>a-b);
+  const p90 = sorted[Math.floor(0.9 * 24)];
+  const p50 = sorted[Math.floor(0.5 * 24)];
+  const dayType = h => avg[h] >= p90 ? 'peak' : avg[h] >= p50 ? 'shoulder' : 'off-peak';
+  // For each day-type, average dispatch by category.
+  const dt = {peak:{}, shoulder:{}, 'off-peak':{}};
+  cats.forEach(c => { for(const k of Object.keys(dt)) dt[k][c] = []; });
+  for(let t=0; t<hs.length; t++){
+    const h = ((+hs[t].hour_of_year || hs[t].t || 0) % 24);
+    const k = dayType(h);
+    cats.forEach(c => dt[k][c].push(stack[c][t]));
+  }
+  const labels = ['off-peak','shoulder','peak'];
+  const series = cats.filter(c => stack[c].some(v => Math.abs(v)>0.01)).map(c => ({
+    name: c,
+    data: labels.map(k => +(dt[k][c].reduce((s,v)=>s+v,0)/Math.max(dt[k][c].length,1)).toFixed(1))
+  }));
+  mkChart('c-rep-day', {
+    chart:{type:'bar', height:280, stacked:true, toolbar:{show:false}},
+    series,
+    xaxis:{categories: labels, labels:{style:{fontSize:'9px'}}},
+    yaxis:{labels:{formatter:v=>v.toFixed(0)}, title:{text:'avg dispatch (MW)'}},
+    plotOptions:{bar:{columnWidth:'45%'}},
+    colors: series.map(s => FUEL_PALETTE[s.name]||'#888'),
+    legend:{position:'top', fontSize:'8px'},
+  });
 }
 
+// ── 14. KPI Radar — scorecard ────────────────────────────────────────
+function _repKPIRadar(ctx){
+  const { R, hs, dt_h } = ctx;
+  const sm = R.system_summary || {};
+  // Normalise each KPI to 0–100 (lower-is-better metrics inverted).
+  // Reference scales tuned for a typical Georgian-fleet annual run.
+  const kpis = [
+    {label:'Adequacy',     v: sm.total_unserved_mwh || 0, max:5000,  invert:true},
+    {label:'Cost effic.',  v: sm.avg_lambda_usd_mwh || 0, max:200,    invert:true},
+    {label:'Curtailment',  v: sm.total_curtailed_mwh || 0, max:50000, invert:true},
+    {label:'Gas reliance', v: sm.total_gas_mm3 || 0,       max:1500,   invert:true},
+    {label:'Hydro use',    v: (function(){
+        const re = (R.by_unit_summary||{});
+        return Object.values(re).filter(a=>a.type==='hydro_reg'||a.type==='hydro_ror')
+          .reduce((s,a)=>s+(+a.energy_mwh||0),0);
+      })(),                                                max:10e6, invert:false},
+    {label:'RE penetration', v:(function(){
+        const re = (R.by_unit_summary||{});
+        return Object.values(re).filter(a=>a.type==='wind'||a.type==='solar')
+          .reduce((s,a)=>s+(+a.energy_mwh||0),0);
+      })(),                                                max:1e6, invert:false},
+  ];
+  const series = [{name:'Score', data: kpis.map(k => {
+    const f = Math.max(0, Math.min(1, k.v / k.max));
+    return Math.round(100 * (k.invert ? 1 - f : f));
+  })}];
+  mkChart('c-rep-radar', {
+    chart:{type:'radar', height:320, toolbar:{show:false}},
+    series,
+    xaxis:{categories: kpis.map(k=>k.label), labels:{style:{fontSize:'9px'}}},
+    yaxis:{min:0, max:100, tickAmount:5},
+    colors:['#00cfb4'], stroke:{width:2}, fill:{opacity:0.4},
+    plotOptions:{radar:{polygons:{strokeColors:'rgba(168,196,224,0.3)'}}},
+    dataLabels:{enabled:true, style:{fontSize:'9px',colors:['#fff']}},
+  });
+}
+
+// ── 15. Storage arbitrage (BESS + pumped hydro) ──────────────────────
+function _repBessArb(ctx){
+  const { hs, hbu, bu, dt_h } = ctx;
+  const sids = Object.keys(bu).filter(g => bu[g].type === 'bess' || bu[g].type === 'pumped_hydro');
+  if(!sids.length){
+    document.getElementById('rep-bess-tbl').innerHTML =
+      '<div style="font-size:8px;color:var(--t3);padding:8px">No BESS / pumped-hydro assets</div>';
+    return;
+  }
+  const rows = sids.map(g => {
+    const a = bu[g];
+    const rs = hbu[g] || [];
+    let ch_cost = 0, dis_rev = 0, ch_e = 0, dis_e = 0, cycles = 0;
+    const cap = +(a.energy_mwh || a.power_mw*4 || 1);
+    for(let t=0; t<rs.length; t++){
+      const r = rs[t];
+      const lam = +hs[t].lambda_usd_mwh || 0;
+      let ch=0, dis=0;
+      if(a.type === 'bess' && r.bess){
+        ch  = +r.bess.charge_mw || 0;
+        dis = +r.bess.discharge_mw || 0;
+      }
+      if(a.type === 'pumped_hydro' && r.pumped_hydro){
+        ch  = +r.pumped_hydro.pump_mw || 0;
+        dis = +r.pumped_hydro.gen_mw || 0;
+      }
+      ch_cost += ch * lam * dt_h;
+      dis_rev += dis * lam * dt_h;
+      ch_e   += ch  * dt_h;
+      dis_e  += dis * dt_h;
+    }
+    cycles = (ch_e + dis_e) / (2 * cap);
+    const profit = dis_rev - ch_cost;
+    return {g, name:a.name||g, type:a.type, ch_e, dis_e, ch_cost, dis_rev, profit, cycles,
+            avg_ch_price: ch_e>0  ? ch_cost/ch_e  : 0,
+            avg_dis_price: dis_e>0 ? dis_rev/dis_e : 0};
+  });
+  document.getElementById('rep-bess-tbl').innerHTML =
+    `<table><thead><tr><th>Asset</th><th>Type</th>
+       <th class="mono">Ch MWh</th><th class="mono">Dis MWh</th>
+       <th class="mono">Avg Ch $/MWh</th><th class="mono">Avg Dis $/MWh</th>
+       <th class="mono">Cycles</th><th class="mono">Net P&amp;L</th></tr></thead>
+     <tbody>${rows.map(r=>`<tr><td>${r.name}</td><td>${r.type}</td>
+       <td class="mono">${r.ch_e.toFixed(1)}</td>
+       <td class="mono">${r.dis_e.toFixed(1)}</td>
+       <td class="mono">$${r.avg_ch_price.toFixed(2)}</td>
+       <td class="mono">$${r.avg_dis_price.toFixed(2)}</td>
+       <td class="mono">${r.cycles.toFixed(2)}</td>
+       <td class="mono" style="color:${r.profit>=0?'var(--green)':'var(--red)'}">
+         ${r.profit>=0?'+':''}$${r.profit.toLocaleString('en-US',{maximumFractionDigits:0})}</td>
+     </tr>`).join('')}</tbody></table>`;
+}
+
+// ── 16. Reservoir end-level vs target ────────────────────────────────
+function _repReservoirTarget(ctx){
+  const { hbu, bu } = ctx;
+  const hReg = Object.keys(bu).filter(g => bu[g].type === 'hydro_reg');
+  if(!hReg.length){
+    document.getElementById('c-rep-target').innerHTML=
+      '<div style="font-size:8px;color:var(--t3);padding:8px">No reservoir hydro</div>';
+    return;
+  }
+  const rows = hReg.map(g => {
+    const rs = hbu[g] || [];
+    const last = rs[rs.length-1];
+    const end_actual = (last && last.hydro && +last.hydro.storage_mm3) || 0;
+    return {g, name:bu[g].name||g, end_actual};
+  });
+  // Without access to the input config here, we infer "target" as the
+  // initial storage value (== first hour) — a reasonable proxy.
+  const targets = hReg.map(g => {
+    const rs = hbu[g] || [];
+    const init = (rs[0] && rs[0].hydro && +rs[0].hydro.storage_mm3) || 0;
+    return {g, target: init};
+  });
+  mkChart('c-rep-target', {
+    chart:{type:'bar', height:240, toolbar:{show:false}},
+    series:[
+      {name:'End-of-horizon Mm³',    data: rows.map(r=>+r.end_actual.toFixed(1))},
+      {name:'Initial Mm³ (proxy)',   data: targets.map(t=>+t.target.toFixed(1))},
+    ],
+    xaxis:{categories: rows.map(r=>r.name), labels:{style:{fontSize:'7.5px'}, rotate:-30}},
+    yaxis:{labels:{formatter:v=>v.toFixed(0)}, title:{text:'Mm³'}},
+    legend:{position:'top', fontSize:'8px'},
+    plotOptions:{bar:{columnWidth:'55%'}},
+    colors:['#00B0F0','#a8c4e0'],
+  });
+}
+
+// ── 17. Net-load ramp requirements ───────────────────────────────────
+function _repRampReq(ctx){
+  const { hs, stack, dt_h } = ctx;
+  const load = hs.map(h=>+h.load_mw||0);
+  const netload = load.map((v,t) =>
+    v - (stack.wind[t]||0) - (stack.solar[t]||0) - (stack.hydro_ror[t]||0));
+  const ramps = []; for(let t=1; t<netload.length; t++) ramps.push(netload[t]-netload[t-1]);
+  const sorted = [...ramps].sort((a,b)=>a-b);
+  const pct = q => sorted[Math.floor(q*(sorted.length-1))] || 0;
+  // Histogram of ramps, 21 bins centered around 0.
+  const mn = Math.min(...sorted), mx = Math.max(...sorted);
+  const span = Math.max(Math.abs(mn), Math.abs(mx), 1);
+  const nbins = 21;
+  const w = (2*span) / nbins;
+  const bins = new Array(nbins).fill(0);
+  ramps.forEach(r => {
+    const i = Math.max(0, Math.min(nbins-1, Math.floor((r + span) / w)));
+    bins[i]++;
+  });
+  const labels = bins.map((_,i)=>(-span + (i+0.5)*w).toFixed(0));
+  mkChart('c-rep-ramp', {
+    chart:{type:'bar', height:260, toolbar:{show:false}},
+    series:[{name:'hours', data: bins}],
+    xaxis:{categories: labels, title:{text:'Δ net-load MW per hour'},
+           labels:{style:{fontSize:'7.5px'}}},
+    yaxis:{labels:{formatter:v=>v.toFixed(0)}, title:{text:'count'}},
+    plotOptions:{bar:{distributed:true, columnWidth:'80%'}},
+    colors: bins.map((_,i)=>{
+      const f=Math.abs(i-(nbins-1)/2)/((nbins-1)/2);
+      return f<0.3?'#20d68a':f<0.6?'#f0c040':'#e03144';
+    }),
+    legend:{show:false},
+  });
+  document.getElementById('rep-ramp-stats').innerHTML =
+    `Δ stats — max-up <b style="color:var(--red)">+${Math.max(...ramps).toFixed(0)}</b> MW/h  ·  `+
+    `max-down <b style="color:var(--red)">${Math.min(...ramps).toFixed(0)}</b> MW/h  ·  `+
+    `P95 ±<b>${pct(0.95).toFixed(0)}</b>/<b>${pct(0.05).toFixed(0)}</b>  ·  P50 ±<b>${pct(0.5).toFixed(0)}</b>`;
+}
+
+// ── 18. Snapshot day cards ──────────────────────────────────────────
+function _repSnapshots(ctx){
+  const { hs } = ctx;
+  if(hs.length < 24){
+    document.getElementById('rep-snap-cards').innerHTML='<div style="font-size:8px;color:var(--t3);padding:8px;grid-column:span 3">need ≥24h horizon</div>';
+    return;
+  }
+  // Find peak-load day, max-curtailment day, max-unserved day
+  const days = Math.floor(hs.length / 24);
+  const dayStats = [];
+  for(let d=0; d<days; d++){
+    const sl = hs.slice(d*24, (d+1)*24);
+    dayStats.push({
+      d, peak_load: Math.max(...sl.map(h=>+h.load_mw||0)),
+      curt:       sl.reduce((s,h)=>s+(+h.curtailed_mwh||0),0),
+      unserv:     sl.reduce((s,h)=>s+(+h.unserved_mwh||0),0),
+      avg_lam:    sl.reduce((s,h)=>s+(+h.lambda_usd_mwh||0),0)/24,
+    });
+  }
+  const find = (key) => [...dayStats].sort((a,b)=>b[key]-a[key])[0];
+  const top = [
+    {kind:'peak_load', label:'🔥 Peak-Load Day',          d: find('peak_load'),  metric:'peak_load',  fmt:v=>v.toFixed(0)+' MW'},
+    {kind:'curt',      label:'☀️ Max-Curtailment Day',     d: find('curt'),      metric:'curt',      fmt:v=>v.toFixed(0)+' MWh'},
+    {kind:'unserv',    label:'⚠ Max-Unserved Day',         d: find('unserv'),    metric:'unserv',    fmt:v=>v.toFixed(0)+' MWh'},
+  ];
+  document.getElementById('rep-snap-cards').innerHTML = top.map(t => {
+    const sl = hs.slice(t.d.d*24, (t.d.d+1)*24);
+    const mini = sl.map(h=>+h.load_mw||0);
+    const pts = mini.map((v,i)=>`${(i*100/23).toFixed(1)},${(100-100*(v/Math.max(...mini,1))).toFixed(1)}`).join(' ');
+    return `<div style="background:var(--bg2);padding:8px;border-radius:6px;border:1px solid var(--border)">
+      <div style="font-size:9px;color:var(--t2);font-weight:700">${t.label}</div>
+      <div style="font-size:8px;color:var(--t3)">day ${t.d.d+1}</div>
+      <div style="font-size:14px;color:var(--teal);font-weight:700;margin:4px 0">${t.fmt(t.d[t.metric])}</div>
+      <svg viewBox="0 0 100 100" preserveAspectRatio="none" style="width:100%;height:80px">
+        <polyline points="${pts}" fill="none" stroke="var(--teal)" stroke-width="1.5"/>
+      </svg>
+      <div style="font-size:7.5px;color:var(--t3);display:flex;gap:8px">
+        <span>peak ${t.d.peak_load.toFixed(0)}MW</span>
+        <span>λ̄ $${t.d.avg_lam.toFixed(1)}</span>
+        <span>curt ${t.d.curt.toFixed(1)}</span>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── 19. Scenario delta waterfall ─────────────────────────────────────
+function _repScenarioDelta(ctx){
+  const slots = STATE.compareSlots || [];
+  const note = document.getElementById('rep-delta-note');
+  if(slots.length < 2){
+    document.getElementById('c-rep-delta').innerHTML='';
+    note.textContent = 'Load ≥2 scenarios in Compare tab first.';
+    return;
+  }
+  const A = slots[0].data.system_summary || {};
+  const B = slots[slots.length-1].data.system_summary || {};
+  // Decompose cost delta: fuel / startup / unserved penalty / other.
+  const fuelA = +A.total_fuel_cost || 0, fuelB = +B.total_fuel_cost || 0;
+  const startA = +A.total_startup_cost || 0, startB = +B.total_startup_cost || 0;
+  const unsA = (+A.total_unserved_mwh||0)*3000, unsB = (+B.total_unserved_mwh||0)*3000;
+  const totA = +A.total_cost_usd||0, totB = +B.total_cost_usd||0;
+  const otherA = totA - fuelA - startA - unsA;
+  const otherB = totB - fuelB - startB - unsB;
+  const components = [
+    {label:'Total A',           y: totA},
+    {label:'Δ Fuel',            y: fuelB - fuelA},
+    {label:'Δ Startup',         y: startB - startA},
+    {label:'Δ Unserved',        y: unsB - unsA},
+    {label:'Δ Other',           y: otherB - otherA},
+    {label:'Total B',           y: totB},
+  ];
+  // ApexCharts has no native waterfall — fake with stacked bars (transparent base + delta).
+  let cum = 0;
+  const baseSeries = []; const deltaSeries = [];
+  components.forEach((c,i) => {
+    if(i === 0 || i === components.length-1){
+      baseSeries.push(0);
+      deltaSeries.push(c.y);
+      cum = c.y;
+    } else {
+      baseSeries.push(c.y >= 0 ? cum : cum + c.y);
+      deltaSeries.push(Math.abs(c.y));
+      cum += c.y;
+    }
+  });
+  mkChart('c-rep-delta', {
+    chart:{type:'bar', height:300, stacked:true, toolbar:{show:false}, animations:{enabled:false}},
+    series:[
+      {name:'base',  data: baseSeries.map(v=>+v.toFixed(0)),
+       color:'transparent'},
+      {name:'value', data: components.map((c,i)=>+(i===0||i===components.length-1?c.y:Math.abs(c.y)).toFixed(0))},
+    ],
+    xaxis:{categories: components.map(c=>c.label), labels:{style:{fontSize:'8px'}}},
+    yaxis:{labels:{formatter:v=>'$'+(v>=1e6?(v/1e6).toFixed(2)+'M':(v/1e3).toFixed(0)+'k')}},
+    plotOptions:{bar:{columnWidth:'55%', dataLabels:{position:'top'}}},
+    colors:['#00000000','#3d8ef0'],
+    legend:{show:false},
+    dataLabels:{enabled:true, formatter:(v,o)=>{
+      if(o.seriesIndex !== 1) return '';
+      const c = components[o.dataPointIndex];
+      const sign = c.y > 0 ? '+' : c.y < 0 ? '-' : '';
+      return sign + '$' + (Math.abs(c.y)>=1e6?(Math.abs(c.y)/1e6).toFixed(2)+'M':(Math.abs(c.y)/1e3).toFixed(0)+'k');
+    }, style:{fontSize:'9px',colors:['#fff']}},
+  });
+  note.innerHTML = `Decomposition: <b>${slots[0].scenario||'A'}</b> → <b>${slots[slots.length-1].scenario||'B'}</b>  ·  Δ cost ${(totB-totA>=0?'+':'')}$${(totB-totA).toLocaleString('en-US',{maximumFractionDigits:0})}`;
+}
+
+// ── Excel export — rich pivot tables ─────────────────────────────────
 function exportReportsXls(){
-  // Phase 5c will populate the rich Excel exporter; for now reuse the
-  // basic exporter on the Results tab.
-  exportResultsXls();
+  if(!STATE.results){showBanner('შედეგები არ ჩაიტვ.','r');return;}
+  const R = STATE.results;
+  const ctx = _repBuildContext(R);
+  const wb = XLSX.utils.book_new();
+  const sm = R.system_summary || {};
+  const meta = R.metadata || {};
+  // 1. Summary
+  const summRows = [
+    ['Metric','Value','Unit'],
+    ['Scenario',          meta.scenario || '—', ''],
+    ['Schema version',    meta.schema_version || '—', ''],
+    ['Horizon hours',     meta.horizon_hours || '—', 'h'],
+    ['Resolution',        meta.resolution_min || 60, 'min'],
+    ['Total cost',        sm.total_cost_usd, '$'],
+    ['Total energy',      sm.total_energy_mwh, 'MWh'],
+    ['Avg lambda',        sm.avg_lambda_usd_mwh, '$/MWh'],
+    ['Peak load',         sm.peak_load_mw, 'MW'],
+    ['Total gas',         sm.total_gas_mm3, 'Mm³'],
+    ['Total unserved',    sm.total_unserved_mwh, 'MWh'],
+    ['Total curtailed',   sm.total_curtailed_mwh, 'MWh'],
+    ['Closure ok',        meta.closure_ok ? 'YES' : 'GAP', ''],
+    ['Closure gap',       meta.closure_gap, ''],
+  ];
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(summRows), 'Summary');
+  // 2. Hourly system
+  if(R.hourly_system) XLSX.utils.book_append_sheet(wb,
+    XLSX.utils.json_to_sheet(R.hourly_system), 'Hourly_System');
+  // 3. By unit summary
+  if(R.by_unit_summary){
+    const rows = Object.entries(R.by_unit_summary).map(([id, v]) => ({id, ...v}));
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'By_Unit_Summary');
+  }
+  // 4. Monthly
+  if(R.monthly_summary){
+    const flat = R.monthly_summary.map(m => ({
+      month:m.month, label:m.label, hours:m.hours,
+      total_energy_mwh: m.total_energy_mwh, total_cost_usd: m.total_cost_usd,
+      avg_lambda: m.avg_lambda, gas_mm3: m.gas_mm3,
+      curtailed_mwh: m.curtailed_mwh, unserved_mwh: m.unserved_mwh,
+      peak_load_mw: m.peak_load_mw,
+    }));
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(flat), 'Monthly_System');
+  }
+  // 5. Pivot: monthly × asset energy
+  if(R.monthly_summary){
+    const allAssets = new Set();
+    R.monthly_summary.forEach(m => Object.keys(m.by_unit||{}).forEach(g=>allAssets.add(g)));
+    const cols = ['month','label', ...allAssets];
+    const rows = R.monthly_summary.map(m => {
+      const row = {month:m.month, label:m.label};
+      for(const g of allAssets) row[g] = +((m.by_unit||{})[g] || {}).energy_mwh || 0;
+      return row;
+    });
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows, {header:cols}), 'Pivot_Monthly_Energy');
+  }
+  // 6. Stack/mix series
+  if(ctx.stack){
+    const cats = ctx.cats;
+    const rows = ctx.hs.map((h,t) => {
+      const row = {t, hour_of_year:h.hour_of_year, load_mw:h.load_mw};
+      for(const c of cats) row[c] = +ctx.stack[c][t].toFixed(2);
+      return row;
+    });
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'Tech_Mix_Hourly');
+  }
+  // 7. Diagnostics + IIS
+  const diag = R.diagnostics || {};
+  const dRows = Object.entries(diag).map(([k,v]) => ({key:k, value:typeof v==='object' ? JSON.stringify(v) : v}));
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(dRows), 'Diagnostics');
+  // 8. KPI templates if any
+  if(STATE.kpiTemplates && STATE.kpiTemplates.length){
+    const kpiRows = STATE.kpiTemplates.map(k => {
+      try { return {id:k.id, label:k.label, formula:k.formula,
+                    unit:k.unit, value: evaluateKpiTemplate(k.formula, R)}; }
+      catch(e) { return {id:k.id, label:k.label, formula:k.formula, error:e.message}; }
+    });
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(kpiRows), 'KPI_Templates');
+  }
+  XLSX.writeFile(wb, 'PowerSim_Reports_'+new Date().toISOString().slice(0,10)+'.xlsx');
+  showBanner('✅ Reports rich Excel — 8 sheet გადმოიტვ.','g');
 }
 
 function exportResultsXls(){
