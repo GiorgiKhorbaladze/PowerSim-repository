@@ -2473,13 +2473,264 @@ function _repHourlyHeatmap(ctx){
      <div style="font-size:7.5px;color:var(--t3);margin-top:4px">range: ${mn.toFixed(2)} – ${mx.toFixed(2)}, metric: <b>${metric}</b></div>`;
 }
 
-// ── 7-19 stubs (filled in Phase 5b/5c) ───────────────────────────────
-function _repReserveAlloc(ctx){ document.getElementById('c-rep-reserve').innerHTML=''; document.getElementById('rep-reserve-tbl').innerHTML='<div style="font-size:8px;color:var(--t3);padding:8px">Phase 5b — coming soon</div>'; }
-function _repCurtailment(ctx){ document.getElementById('c-rep-curt').innerHTML=''; document.getElementById('rep-curt-tbl').innerHTML='<div style="font-size:8px;color:var(--t3);padding:8px">Phase 5b — coming soon</div>'; }
-function _repCO2(ctx){ document.getElementById('c-rep-co2').innerHTML=''; document.getElementById('rep-co2-stats').innerHTML='Phase 5b — coming soon'; }
-function _repPnL(ctx){ document.getElementById('rep-pl-tbl').innerHTML='<div style="font-size:8px;color:var(--t3);padding:8px">Phase 5b — coming soon</div>'; }
-function _repSpillage(ctx){ document.getElementById('c-rep-spill').innerHTML=''; document.getElementById('rep-spill-tbl').innerHTML='<div style="font-size:8px;color:var(--t3);padding:8px">Phase 5b — coming soon</div>'; }
-function _repMCvsLambda(ctx){ document.getElementById('c-rep-mclam').innerHTML='<div style="font-size:8px;color:var(--t3);padding:8px">Phase 5b — coming soon</div>'; }
+// ── 7. Reserve allocation breakdown ──────────────────────────────────
+function _repReserveAlloc(ctx){
+  const { hbu, bu, hs, dt_h } = ctx;
+  // Aggregate reserve_up + reserve_down by (product, asset).
+  const totals = {};   // {rid: {gid: {up_mwh, down_mwh}}}
+  for(const gid of Object.keys(hbu)){
+    for(const r of hbu[gid] || []){
+      for(const rid of Object.keys(r.reserve_up || {})){
+        totals[rid] = totals[rid] || {};
+        totals[rid][gid] = totals[rid][gid] || {up_mwh:0, down_mwh:0};
+        totals[rid][gid].up_mwh   += (+r.reserve_up[rid] || 0)   * dt_h;
+        totals[rid][gid].down_mwh += (+(r.reserve_down||{})[rid] || 0) * dt_h;
+      }
+    }
+  }
+  const rids = Object.keys(totals);
+  if(!rids.length){
+    document.getElementById('rep-reserve-tbl').innerHTML =
+      '<div style="font-size:8px;color:var(--t3);padding:8px">No reserve products in this run</div>';
+    document.getElementById('c-rep-reserve').innerHTML='';
+    return;
+  }
+  // Table per product.
+  const html = rids.map(rid => {
+    const rows = Object.entries(totals[rid])
+      .map(([g,v]) => ({g, name:(bu[g]||{}).name||g, ...v}))
+      .filter(r => r.up_mwh + r.down_mwh > 0.01)
+      .sort((a,b)=> (b.up_mwh+b.down_mwh) - (a.up_mwh+a.down_mwh));
+    return `<div style="margin-bottom:6px">
+      <div class="sh" style="margin-bottom:3px">${rid}</div>
+      <table><thead><tr><th>Asset</th><th class="mono">Up MWh</th><th class="mono">Dn MWh</th></tr></thead>
+      <tbody>${rows.map(r=>`<tr><td>${r.name}</td>
+        <td class="mono">${r.up_mwh.toFixed(1)}</td>
+        <td class="mono">${r.down_mwh.toFixed(1)}</td></tr>`).join('')}</tbody></table>
+    </div>`;
+  }).join('');
+  document.getElementById('rep-reserve-tbl').innerHTML = html;
+  // Stacked bar: per asset, stacked by product (sum up+down).
+  const allAssets = new Set();
+  rids.forEach(rid => Object.keys(totals[rid]).forEach(g => allAssets.add(g)));
+  const labels = [...allAssets].map(g => (bu[g]||{}).name || g);
+  const series = rids.map(rid => ({
+    name: rid,
+    data: [...allAssets].map(g => +(((totals[rid][g]||{}).up_mwh||0) + ((totals[rid][g]||{}).down_mwh||0)).toFixed(1))
+  }));
+  mkChart('c-rep-reserve', {
+    chart:{type:'bar', height:280, stacked:true, toolbar:{show:false}, animations:{enabled:false}},
+    series,
+    xaxis:{categories: labels, labels:{style:{fontSize:'7.5px'}, rotate:-30, hideOverlappingLabels:false}},
+    yaxis:{labels:{formatter:v=>v.toFixed(0)}, title:{text:'MWh (up+down)'}},
+    legend:{position:'top', fontSize:'8px'},
+    plotOptions:{bar:{columnWidth:'70%'}},
+    colors:['#3d8ef0','#f0c040','#a463f8','#20d68a','#e03144'],
+  });
+}
+
+// ── 8. Curtailment by asset ──────────────────────────────────────────
+function _repCurtailment(ctx){
+  const { hbu, bu, hs, dt_h, stack } = ctx;
+  // Per-RE asset: sum (potential − dispatch) × dt.
+  const re = Object.keys(bu).filter(g => bu[g].type === 'wind' || bu[g].type === 'solar');
+  if(!re.length){
+    document.getElementById('rep-curt-tbl').innerHTML =
+      '<div style="font-size:8px;color:var(--t3);padding:8px">No wind/solar assets</div>';
+    document.getElementById('c-rep-curt').innerHTML=''; return;
+  }
+  // We don't have potential-MW per asset in results; use total system curtailment
+  // attributed proportional to capacity.  Conservative.
+  const total_curt = (ctx.R.system_summary || {}).total_curtailed_mwh || 0;
+  const totalCap = re.reduce((s,g) => s + ((bu[g].energy_mwh||0)/(((bu[g].capacity_factor||0.001)/100)*8760 || 1)), 0);
+  const rows = re.map(g => {
+    const a = bu[g];
+    const cap = (a.energy_mwh||0)/(((a.capacity_factor||0.001)/100)*8760 || 1);
+    const share = totalCap > 0 ? cap / totalCap : 0;
+    const curt = total_curt * share;
+    const generated = a.energy_mwh || 0;
+    const pct = generated + curt > 0 ? 100 * curt / (generated + curt) : 0;
+    return {g, name: a.name||g, type:a.type, energy:generated, curt, pct};
+  }).sort((a,b)=> b.curt - a.curt);
+  document.getElementById('rep-curt-tbl').innerHTML =
+    `<table><thead><tr><th>Asset</th><th>Type</th><th class="mono">Energy MWh</th>
+       <th class="mono">Curtailed MWh</th><th class="mono">% of avail.</th></tr></thead>
+     <tbody>${rows.map(r=>`<tr><td>${r.name}</td><td>${r.type}</td>
+       <td class="mono">${r.energy.toFixed(0)}</td>
+       <td class="mono" style="color:${r.curt>0.5?'var(--orange)':'var(--t3)'}">${r.curt.toFixed(1)}</td>
+       <td class="mono">${r.pct.toFixed(2)}%</td></tr>`).join('')}</tbody></table>`;
+  mkChart('c-rep-curt', {
+    chart:{type:'bar', height:240, toolbar:{show:false}},
+    series:[
+      {name:'Energy MWh',     data: rows.map(r=>+r.energy.toFixed(0))},
+      {name:'Curtailed MWh',  data: rows.map(r=>+r.curt.toFixed(1))},
+    ],
+    xaxis:{categories: rows.map(r=>r.name), labels:{style:{fontSize:'7.5px'}}},
+    yaxis:{labels:{formatter:v=>v>=1e3?(v/1e3).toFixed(1)+'k':v.toFixed(0)}},
+    legend:{position:'top', fontSize:'8px'},
+    colors:['#20d68a','#f07830'],
+    plotOptions:{bar:{columnWidth:'55%'}},
+  });
+}
+
+// ── 9. CO₂ emissions estimator ───────────────────────────────────────
+function _repCO2(ctx){
+  const { monthly, bu } = ctx;
+  // Emission factors (tCO₂/MWh thermal output) using IEA-ish defaults.
+  const EF = { gas: 0.40, coal: 0.95 };
+  // Per asset: heat_rate, fuel_type from the input asset (not available here);
+  // approximate via type and name keyword.
+  const fuelOf = (a) => {
+    const nm = (a.name||'').toLowerCase();
+    if(a.type !== 'thermal') return null;
+    if(nm.includes('ნახშ') || nm.includes('coal') || nm.includes('ტყიბულ')) return 'coal';
+    return 'gas';
+  };
+  // Monthly by-fuel emissions.
+  const monthsLab = monthly.map(m => m.label || ('M'+m.month));
+  const fuels = ['gas','coal'];
+  const series = fuels.map(f => ({name: f.toUpperCase(),
+    data: monthly.map(m => {
+      let mwh = 0;
+      for(const [g,a] of Object.entries(bu)){
+        if(fuelOf(a) === f){
+          mwh += +((m.by_unit||{})[g] || {}).energy_mwh || 0;
+        }
+      }
+      return +(mwh * EF[f]).toFixed(1);
+    })
+  }));
+  mkChart('c-rep-co2', {
+    chart:{type:'bar', height:260, stacked:true, toolbar:{show:false}},
+    series,
+    xaxis:{categories: monthsLab, labels:{style:{fontSize:'8px'}}},
+    yaxis:{labels:{formatter:v=>v>=1e3?(v/1e3).toFixed(1)+'kt':v.toFixed(0)+'t'}, title:{text:'tCO₂'}},
+    legend:{position:'top', fontSize:'8px'},
+    colors:['#a463f8','#7a4a2a'],
+    plotOptions:{bar:{columnWidth:'55%'}},
+  });
+  const tot_gas  = series[0].data.reduce((s,v)=>s+v,0);
+  const tot_coal = series[1].data.reduce((s,v)=>s+v,0);
+  const tot = tot_gas + tot_coal;
+  const tot_mwh = monthly.reduce((s,m)=>s+(m.total_energy_mwh||0),0);
+  document.getElementById('rep-co2-stats').innerHTML =
+    `Σ CO₂ ≈ ${(tot/1000).toFixed(2)} kt   (gas ${(tot_gas/1000).toFixed(2)} kt + coal ${(tot_coal/1000).toFixed(2)} kt)<br>`
+    + `intensity ≈ ${tot_mwh? (1000*tot/tot_mwh).toFixed(1) : '—'} kgCO₂/MWh system-wide  ·  EF (gas ${EF.gas}, coal ${EF.coal} tCO₂/MWh)`;
+}
+
+// ── 10. Generator P&L ────────────────────────────────────────────────
+function _repPnL(ctx){
+  const { bu, hbu, hs, dt_h } = ctx;
+  // Revenue per asset = Σ dispatch × λ(t) × dt; cost = bu.gross_cost.
+  const lam = hs.map(h => +h.lambda_usd_mwh || 0);
+  const rows = Object.keys(bu).map(g => {
+    const a = bu[g];
+    let revenue = 0;
+    if(hbu[g]){
+      for(let t=0; t<hs.length; t++){
+        const r = hbu[g][t];
+        if(!r) continue;
+        const disp = +r.dispatch_mw || 0;
+        revenue += disp * lam[t] * dt_h;
+      }
+    }
+    const cost = +a.gross_cost || 0;
+    const profit = revenue - cost;
+    return {g, name:a.name||g, type:a.type, energy:+a.energy_mwh||0,
+            revenue, cost, profit};
+  }).sort((a,b)=> b.profit - a.profit);
+  document.getElementById('rep-pl-tbl').innerHTML =
+    `<table><thead><tr><th>Asset</th><th>Type</th><th class="mono">MWh</th>
+       <th class="mono">Revenue</th><th class="mono">Cost</th><th class="mono">P&amp;L</th>
+       <th class="mono">$/MWh</th></tr></thead>
+     <tbody>${rows.map(r=>`<tr>
+       <td>${r.name}</td><td>${r.type}</td>
+       <td class="mono">${r.energy.toLocaleString('en-US',{maximumFractionDigits:0})}</td>
+       <td class="mono">$${r.revenue.toLocaleString('en-US',{maximumFractionDigits:0})}</td>
+       <td class="mono">$${r.cost.toLocaleString('en-US',{maximumFractionDigits:0})}</td>
+       <td class="mono" style="color:${r.profit>=0?'var(--green)':'var(--red)'}">
+         ${r.profit>=0?'+':''}$${r.profit.toLocaleString('en-US',{maximumFractionDigits:0})}</td>
+       <td class="mono">${r.energy>0?(r.profit/r.energy).toFixed(2):'—'}</td>
+     </tr>`).join('')}</tbody></table>`;
+}
+
+// ── 11. Hydro spillage ───────────────────────────────────────────────
+function _repSpillage(ctx){
+  const { hbu, bu, dt_h } = ctx;
+  const hReg = Object.keys(bu).filter(g => bu[g].type === 'hydro_reg');
+  if(!hReg.length){
+    document.getElementById('rep-spill-tbl').innerHTML=
+      '<div style="font-size:8px;color:var(--t3);padding:8px">No reservoir hydro</div>';
+    document.getElementById('c-rep-spill').innerHTML=''; return;
+  }
+  const rows = hReg.map(g => {
+    let spill_mm3 = 0;
+    for(const r of hbu[g] || []){
+      if(r.hydro && r.hydro.spill_mm3h !== undefined){
+        spill_mm3 += (+r.hydro.spill_mm3h || 0) * dt_h;
+      }
+    }
+    // Lost energy ≈ spill_mm3 × efficiency (default 350 MWh/Mm³)
+    const eff = 350;
+    const lost_mwh = spill_mm3 * eff;
+    return {g, name: bu[g].name||g, spill_mm3, lost_mwh};
+  }).sort((a,b)=> b.spill_mm3 - a.spill_mm3);
+  const total = rows.reduce((s,r)=>s+r.spill_mm3,0);
+  document.getElementById('rep-spill-tbl').innerHTML =
+    `<table><thead><tr><th>Asset</th><th class="mono">Spilled Mm³</th>
+       <th class="mono">Est. Lost Energy MWh</th></tr></thead>
+     <tbody>${rows.map(r=>`<tr><td>${r.name}</td>
+       <td class="mono" style="color:${r.spill_mm3>0?'var(--red)':'var(--t3)'}">${r.spill_mm3.toFixed(3)}</td>
+       <td class="mono">${r.lost_mwh.toFixed(0)}</td></tr>`).join('')}
+     <tr><td><b>Total</b></td>
+       <td class="mono"><b>${total.toFixed(3)} Mm³</b></td>
+       <td class="mono"><b>${(total*350).toFixed(0)} MWh</b></td></tr></tbody></table>`;
+  mkChart('c-rep-spill', {
+    chart:{type:'bar', height:240, toolbar:{show:false}},
+    series:[{name:'Spilled Mm³', data: rows.map(r=>+r.spill_mm3.toFixed(3))}],
+    xaxis:{categories: rows.map(r=>r.name), labels:{style:{fontSize:'8px'}}},
+    yaxis:{labels:{formatter:v=>v.toFixed(2)}},
+    plotOptions:{bar:{distributed:true, columnWidth:'55%'}},
+    colors:['#00B0F0','#3d8ef0','#a463f8','#e03144','#f07830','#20d68a','#f0c040'],
+    legend:{show:false},
+  });
+}
+
+// ── 12. Marginal cost vs λ scatter ───────────────────────────────────
+function _repMCvsLambda(ctx){
+  const { hs, hbu, bu } = ctx;
+  // For each hour, the marginal MC ≈ max SRMC of any committed unit.
+  const points = [];
+  const srmcOf = g => +(bu[g] || {}).SRMC || 0;
+  for(let t=0; t<hs.length; t++){
+    let mc = 0;
+    for(const g of Object.keys(hbu)){
+      const r = hbu[g][t];
+      if(!r) continue;
+      if((+r.dispatch_mw||0) > 0.5){
+        const m = srmcOf(g);
+        if(m > mc) mc = m;
+      }
+    }
+    points.push([+(mc).toFixed(2), +(hs[t].lambda_usd_mwh || 0).toFixed(2)]);
+  }
+  // 45° reference line
+  const maxV = Math.max(...points.flat(), 1);
+  mkChart('c-rep-mclam', {
+    chart:{type:'scatter', height:280, toolbar:{show:false}, animations:{enabled:false}, zoom:{enabled:true,type:'xy'}},
+    series:[
+      {name:'hours', data: points},
+      {name:'45°',   data: [[0,0],[maxV,maxV]], type:'line'},
+    ],
+    xaxis:{type:'numeric', title:{text:'max committed-unit SRMC ($/MWh)'},
+           labels:{formatter:v=>v.toFixed(0)}, tickAmount:10},
+    yaxis:{title:{text:'system λ ($/MWh)'}, labels:{formatter:v=>v.toFixed(0)}},
+    stroke:{width:[0,1]}, colors:['#f0c040','#e03144'],
+    legend:{position:'top', fontSize:'8px'},
+    markers:{size:[3,0]},
+    tooltip:{shared:false},
+  });
+}
 function _repDayTypes(ctx){ document.getElementById('c-rep-day').innerHTML=''; }
 function _repKPIRadar(ctx){ document.getElementById('c-rep-radar').innerHTML=''; }
 function _repBessArb(ctx){ document.getElementById('rep-bess-tbl').innerHTML='<div style="font-size:8px;color:var(--t3);padding:8px">Phase 5c — coming soon</div>'; }
