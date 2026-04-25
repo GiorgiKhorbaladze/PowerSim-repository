@@ -107,6 +107,137 @@ def _existing_annual_energy_mwh(inp: dict) -> float:
     return total
 
 
+def plan_multi_year(inp: dict) -> dict:
+    """
+    Multi-year capacity expansion (#9).
+
+    Extends the single-year `plan()` into a Y-year horizon with:
+      • year-over-year linking (build-once-stays-built; cumulative
+        capacity at year y = Σ x_c,y' for y'≤y)
+      • per-year demand growth via `expansion.demand_growth_pct` or
+        an explicit `expansion.peak_load_by_year` list
+      • per-year reserve-margin & energy-closure adequacy
+      • discounted total cost (NPV) objective:
+          Σ_y (1+r)^-y · (Σ_c capex_c · x_c,y · CRF_c + Σ_c opex_c · cum_x_c,y)
+
+    Activates when `expansion.years > 1` AND `expansion.candidates`
+    is supplied.  Falls back to the single-year planner otherwise.
+    """
+    ex = inp.get("expansion") or {}
+    years = int(ex.get("years", 1))
+    cands = ex.get("candidates") or []
+    if years <= 1 or not cands:
+        return plan(inp)            # single-year path
+
+    r = float(ex.get("discount_rate", 0.08))
+    rm_target = float(ex.get("reserve_margin", 0.15))
+    growth = float(ex.get("demand_growth_pct", 2.5)) / 100.0
+    explicit_peaks = ex.get("peak_load_by_year")        # optional list
+    e_target_twh   = ex.get("energy_target_twh")
+    demand = inp.get("profiles", {}).get("demand") or []
+    base_peak = max(demand) if demand else 0.0
+    base_energy = sum(demand) if demand else base_peak * 5000
+    peak_existing = _existing_peak_mw(inp)
+    energy_existing = _existing_annual_energy_mwh(inp)
+
+    # Resolve per-year demand projections.
+    peaks = []
+    energies = []
+    for y in range(1, years + 1):
+        if explicit_peaks and len(explicit_peaks) >= y:
+            p = float(explicit_peaks[y-1])
+        else:
+            p = base_peak * ((1.0 + growth) ** y)
+        peaks.append(p)
+        if e_target_twh:
+            energies.append(float(e_target_twh) * 1e6 * ((1.0 + growth) ** y))
+        else:
+            energies.append(base_energy * ((1.0 + growth) ** y))
+
+    m = pyo.ConcreteModel()
+    cids = [c["id"] for c in cands]
+    yrs  = list(range(1, years + 1))
+    m.C = pyo.Set(initialize=cids, ordered=True)
+    m.Y = pyo.Set(initialize=yrs, ordered=True)
+    m.x = pyo.Var(m.C, m.Y, domain=pyo.NonNegativeReals)        # build in year y
+    m.cum = pyo.Var(m.C, m.Y, domain=pyo.NonNegativeReals)      # cumulative
+
+    CRF   = {c["id"]: _CRF(r, int(c.get("life_yrs", 20))) for c in cands}
+    capex = {c["id"]: float(c.get("capex_per_mw", 0)) for c in cands}
+    opex  = {c["id"]: float(c.get("opex_per_mw_yr", 0)) for c in cands}
+    cap_credit = {c["id"]: float(c.get("capacity_credit", 0.15)) for c in cands}
+    cf_   = {c["id"]: float(c.get("capacity_factor", 0.4)) for c in cands}
+    maxb  = {c["id"]: float(c.get("max_build_mw", 1e6)) for c in cands}
+
+    # Cumulative-capacity recursion: cum[c, y] = cum[c, y-1] + x[c, y].
+    def _cum_rule(m, c, y):
+        if y == 1: return m.cum[c, y] == m.x[c, y]
+        return m.cum[c, y] == m.cum[c, y-1] + m.x[c, y]
+    m.CumLink = pyo.Constraint(m.C, m.Y, rule=_cum_rule)
+
+    # Total cumulative build cap.
+    def _maxb(m, c, y): return m.cum[c, y] <= maxb[c]
+    m.MaxBuild = pyo.Constraint(m.C, m.Y, rule=_maxb)
+
+    # Adequacy: Σ CC · cum[c, y]  ≥  (1+RM) · peaks[y] − existing_firm.
+    def _adeq(m, y):
+        target = max(0.0, (1 + rm_target) * peaks[y-1] - peak_existing)
+        return sum(cap_credit[c] * m.cum[c, y] for c in m.C) >= target
+    m.Adeq = pyo.Constraint(m.Y, rule=_adeq)
+
+    # Energy closure: Σ CF · 8760 · cum[c, y] ≥ energies[y] − existing_energy.
+    def _energy(m, y):
+        target = max(0.0, energies[y-1] - energy_existing)
+        return sum(cf_[c] * 8760 * m.cum[c, y] for c in m.C) >= target
+    m.E = pyo.Constraint(m.Y, rule=_energy)
+
+    # NPV objective: Σ_y (1+r)^-y · (capex × x + opex × cum).
+    def _obj(m):
+        tot = 0
+        for y in yrs:
+            disc = (1.0 + r) ** (-y)
+            tot += disc * (
+                sum(capex[c] * CRF[c] * m.x[c, y] for c in m.C)
+                + sum(opex[c]  * m.cum[c, y] for c in m.C)
+            )
+        return tot
+    m.OBJ = pyo.Objective(rule=_obj, sense=pyo.minimize)
+
+    try:
+        from pyomo.contrib.appsi.solvers.highs import Highs
+        s = Highs(); s.highs_options["log_to_console"] = False
+        try: s.solve(m, load_solutions=True)
+        except TypeError: s.solve(m)
+    except Exception:
+        pyo.SolverFactory("appsi_highs").solve(m)
+
+    builds_by_year = {}
+    cum_by_year    = {}
+    for y in yrs:
+        builds_by_year[y] = {c: round(float(pyo.value(m.x[c, y]) or 0.0), 2)   for c in cids}
+        cum_by_year[y]    = {c: round(float(pyo.value(m.cum[c, y]) or 0.0), 2) for c in cids}
+    annual_capex = {y: round(sum(capex[c] * CRF[c] * builds_by_year[y][c] for c in cids), 0) for y in yrs}
+    annual_opex  = {y: round(sum(opex[c]  * cum_by_year[y][c] for c in cids), 0) for y in yrs}
+    npv_total    = round(float(pyo.value(m.OBJ)), 0)
+
+    return {
+        "mode":                 "multi_year",
+        "years":                years,
+        "discount_rate":        r,
+        "demand_growth_pct":    growth * 100,
+        "CRF":                  {c: round(CRF[c], 6) for c in cids},
+        "peaks_by_year_mw":     [round(p, 1) for p in peaks],
+        "energy_target_by_year_mwh": [round(e, 0) for e in energies],
+        "existing_firm_mw":     round(peak_existing, 1),
+        "existing_energy_mwh":  round(energy_existing, 0),
+        "builds_by_year":       builds_by_year,
+        "cumulative_by_year":   cum_by_year,
+        "annual_capex_by_year": annual_capex,
+        "annual_opex_by_year":  annual_opex,
+        "npv_total":            npv_total,
+    }
+
+
 def plan(inp: dict) -> dict:
     """Build and solve the capacity-expansion LP."""
     ex = inp.get("expansion") or {}
@@ -199,7 +330,9 @@ if __name__ == "__main__":
     ap.add_argument("--output", default="expansion_plan.json")
     args = ap.parse_args()
     inp = json.loads(Path(args.input).read_text(encoding="utf-8"))
-    result = plan(inp)
+    # Auto-pick multi-year planner when expansion.years > 1.
+    yrs = int((inp.get("expansion") or {}).get("years", 1))
+    result = plan_multi_year(inp) if yrs > 1 else plan(inp)
     outp = Path(args.output)
     outp.parent.mkdir(parents=True, exist_ok=True)
     outp.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
