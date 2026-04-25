@@ -170,6 +170,7 @@ tr:hover td{background:var(--bg3)}
     <button class="tab"     data-tab="validate">✅ Validate</button>
     <button class="tab"     data-tab="results">📈 Results</button>
     <button class="tab"     data-tab="compare">🔀 Compare</button>
+    <button class="tab"     data-tab="reports">📊 Reports</button>
   </div>
   <button class="icon-btn" onclick="toggleTheme()" id="theme-btn" title="Dark/Light">🌙</button>
 </div></nav>
@@ -736,6 +737,180 @@ tr:hover td{background:var(--bg3)}
 </div>
 
 <!-- ════════════════════════════════════════════════════════════════ -->
+<!-- TAB 10: REPORTS — PLEXOS-style analysis dashboard                  -->
+<!-- ════════════════════════════════════════════════════════════════ -->
+<div class="pane" id="pane-reports">
+  <div id="rep-empty" style="display:flex;align-items:center;justify-content:center;
+       height:60vh;flex-direction:column;gap:12px;color:var(--t3)">
+    <div style="font-size:48px">📊</div>
+    <div style="font-size:11px;font-weight:700">Reports tab — ჯერ შედეგები არ ჩაიტვ.</div>
+    <div style="font-size:9px">გადადი Results tab-ზე და დააიმპორტე results JSON, შემდეგ დაბრუნდი.</div>
+  </div>
+
+  <div id="rep-body" style="display:none">
+    <!-- Sub-nav for the 20-card report dashboard -->
+    <div class="card" style="margin-bottom:6px;display:flex;flex-wrap:wrap;gap:4px">
+      <button class="btn btn-t btn-s" onclick="repScrollTo('sec-mix')">⚡ Generation</button>
+      <button class="btn btn-t btn-s" onclick="repScrollTo('sec-ldc')">📈 Duration</button>
+      <button class="btn btn-t btn-s" onclick="repScrollTo('sec-hydro')">💧 Hydro</button>
+      <button class="btn btn-t btn-s" onclick="repScrollTo('sec-cf')">🔥 Capacity Factor</button>
+      <button class="btn btn-t btn-s" onclick="repScrollTo('sec-cost')">💲 Cost</button>
+      <button class="btn btn-t btn-s" onclick="repScrollTo('sec-heat')">🗓 Heatmap</button>
+      <button class="btn btn-t btn-s" onclick="repScrollTo('sec-reserve')">🛡 Reserve</button>
+      <button class="btn btn-t btn-s" onclick="repScrollTo('sec-curt')">✂ Curtailment</button>
+      <button class="btn btn-t btn-s" onclick="repScrollTo('sec-co2')">🌫 CO₂</button>
+      <button class="btn btn-t btn-s" onclick="repScrollTo('sec-pl')">💼 P&amp;L</button>
+      <button class="btn btn-t btn-s" onclick="repScrollTo('sec-spill')">🌊 Spillage</button>
+      <button class="btn btn-t btn-s" onclick="repScrollTo('sec-mclam')">⚖ MC vs λ</button>
+      <button class="btn btn-t btn-s" onclick="repScrollTo('sec-day')">🌓 Day-types</button>
+      <button class="btn btn-t btn-s" onclick="repScrollTo('sec-radar')">🎯 KPI radar</button>
+      <button class="btn btn-t btn-s" onclick="repScrollTo('sec-bess')">🔋 Storage arb.</button>
+      <button class="btn btn-t btn-s" onclick="repScrollTo('sec-target')">🎚 End-level</button>
+      <button class="btn btn-t btn-s" onclick="repScrollTo('sec-ramp')">📐 Ramp</button>
+      <button class="btn btn-t btn-s" onclick="repScrollTo('sec-snap')">📸 Snapshots</button>
+      <button class="btn btn-t btn-s" onclick="repScrollTo('sec-delta')">Δ Scenario delta</button>
+      <button class="btn btn-g btn-s" style="margin-left:auto" onclick="exportReportsXls()">⬇ Excel rich</button>
+    </div>
+
+    <!-- ─────────────── Tier 1 ─────────────── -->
+    <!-- 1. Technology mix dispatch -->
+    <div class="card" id="sec-mix">
+      <div class="sh">⚡ Generation Mix by Technology (stacked, MW)</div>
+      <div id="c-rep-mix" style="height:320px"></div>
+      <div id="c-rep-mix-share" style="height:240px;margin-top:6px"></div>
+    </div>
+
+    <!-- 2. Load + Net Load Duration Curves -->
+    <div class="card" id="sec-ldc">
+      <div class="sh">📈 Load &amp; Net-Load Duration Curves</div>
+      <div id="c-rep-ldc" style="height:300px"></div>
+      <div id="rep-ldc-stats" style="font-size:8px;color:var(--t3);margin-top:5px"></div>
+    </div>
+
+    <!-- 3. Reservoir trajectory (Section-I storage) -->
+    <div class="card" id="sec-hydro">
+      <div class="sh">💧 Reservoir Storage Trajectory (Mm³, Section-I HPPs)</div>
+      <div id="c-rep-reservoir" style="height:300px"></div>
+    </div>
+
+    <!-- 4. Capacity factor heatmap (asset × month) -->
+    <div class="card" id="sec-cf">
+      <div class="sh">🔥 Capacity-Factor Heatmap (asset × month)</div>
+      <div id="c-rep-cf-heat" style="overflow:auto;max-height:520px"></div>
+    </div>
+
+    <!-- 5. Cost waterfall -->
+    <div class="card" id="sec-cost">
+      <div class="sh">💲 Cost Waterfall — fuel + startup + no-load + VOM + penalties</div>
+      <div id="c-rep-cost" style="height:300px"></div>
+      <div id="rep-cost-tbl" style="margin-top:6px"></div>
+    </div>
+
+    <!-- 6. 24h × 365d hourly heatmap -->
+    <div class="card" id="sec-heat">
+      <div class="sh" style="display:flex;justify-content:space-between;align-items:center">
+        <span>🗓 Hourly Heatmap (24h × period days)</span>
+        <select id="rep-heat-metric" onchange="renderReports()" style="font-size:8px;width:160px">
+          <option value="load_mw" selected>Load (MW)</option>
+          <option value="lambda_usd_mwh">Lambda ($/MWh)</option>
+          <option value="generation_mw">Generation (MW)</option>
+          <option value="curtailed_mwh">Curtailment (MWh)</option>
+          <option value="unserved_mwh">Unserved (MWh)</option>
+          <option value="gas_mm3h">Gas (Mm³/h)</option>
+        </select>
+      </div>
+      <div id="c-rep-heat" style="overflow:auto;max-height:520px"></div>
+    </div>
+
+    <!-- ─────────────── Tier 2 ─────────────── -->
+    <!-- 7. Reserve allocation breakdown -->
+    <div class="card" id="sec-reserve">
+      <div class="sh">🛡 Reserve Allocation (FCR / aFRR by unit, MW-hours)</div>
+      <div id="rep-reserve-tbl"></div>
+      <div id="c-rep-reserve" style="height:280px"></div>
+    </div>
+
+    <!-- 8. Curtailment by site -->
+    <div class="card" id="sec-curt">
+      <div class="sh">✂ Curtailment by Asset (MWh + % of available)</div>
+      <div id="rep-curt-tbl"></div>
+      <div id="c-rep-curt" style="height:240px"></div>
+    </div>
+
+    <!-- 9. CO₂ emissions -->
+    <div class="card" id="sec-co2">
+      <div class="sh">🌫 CO₂ Emissions Estimate (tCO₂ by fuel, monthly)</div>
+      <div id="c-rep-co2" style="height:260px"></div>
+      <div id="rep-co2-stats" style="font-size:8px;color:var(--t3);margin-top:5px"></div>
+    </div>
+
+    <!-- 10. Generator P&L table -->
+    <div class="card" id="sec-pl">
+      <div class="sh">💼 Generator P&amp;L (revenue − cost, $)</div>
+      <div id="rep-pl-tbl"></div>
+    </div>
+
+    <!-- 11. Hydro spillage -->
+    <div class="card" id="sec-spill">
+      <div class="sh">🌊 Hydro Spillage (Mm³ &amp; lost-energy MWh, by HPP)</div>
+      <div id="c-rep-spill" style="height:240px"></div>
+      <div id="rep-spill-tbl" style="margin-top:6px"></div>
+    </div>
+
+    <!-- 12. Marginal cost vs λ scatter -->
+    <div class="card" id="sec-mclam">
+      <div class="sh">⚖ Marginal Cost vs System λ (each marginal hour)</div>
+      <div id="c-rep-mclam" style="height:280px"></div>
+    </div>
+
+    <!-- ─────────────── Tier 3 ─────────────── -->
+    <!-- 13. Day-types analysis -->
+    <div class="card" id="sec-day">
+      <div class="sh">🌓 Day-Types — peak / shoulder / off-peak avg dispatch</div>
+      <div id="c-rep-day" style="height:280px"></div>
+    </div>
+
+    <!-- 14. KPI radar chart -->
+    <div class="card" id="sec-radar">
+      <div class="sh">🎯 KPI Radar — single-glance scorecard</div>
+      <div id="c-rep-radar" style="height:320px"></div>
+    </div>
+
+    <!-- 15. BESS / Pumped-hydro arbitrage -->
+    <div class="card" id="sec-bess">
+      <div class="sh">🔋 Storage Arbitrage (charge price vs discharge price)</div>
+      <div id="rep-bess-tbl"></div>
+    </div>
+
+    <!-- 16. Reservoir target deviation -->
+    <div class="card" id="sec-target">
+      <div class="sh">🎚 Reservoir End-Level vs Target (Mm³, Section-I)</div>
+      <div id="c-rep-target" style="height:240px"></div>
+    </div>
+
+    <!-- 17. Hourly ramp requirement -->
+    <div class="card" id="sec-ramp">
+      <div class="sh">📐 Net-Load Ramp Requirements (Δ MW per hour)</div>
+      <div id="c-rep-ramp" style="height:260px"></div>
+      <div id="rep-ramp-stats" style="font-size:8px;color:var(--t3);margin-top:5px"></div>
+    </div>
+
+    <!-- 18. Snapshot days -->
+    <div class="card" id="sec-snap">
+      <div class="sh">📸 Snapshot Days — peak / low-hydro / RE-curtailed</div>
+      <div id="rep-snap-cards" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px"></div>
+    </div>
+
+    <!-- 19. Scenario delta waterfall (only when ≥2 scenarios loaded in Compare) -->
+    <div class="card" id="sec-delta">
+      <div class="sh">Δ Scenario Delta Waterfall (decompose cost diff vs baseline)</div>
+      <div id="c-rep-delta" style="height:300px"></div>
+      <div id="rep-delta-note" style="font-size:8px;color:var(--t3);margin-top:5px"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════════ -->
 <!-- JAVASCRIPT                                                        -->
 <!-- ════════════════════════════════════════════════════════════════ -->
 <script>
@@ -798,6 +973,12 @@ function goTab(id){
   if(id==='reserves') renderReservesList();
   if(id==='validate') renderKpiTemplateList();
   if(id==='compare')  renderCompareList();
+  if(id==='reports' && STATE.results) renderReports();
+}
+
+function repScrollTo(id){
+  const el=document.getElementById(id);
+  if(el) el.scrollIntoView({behavior:'smooth', block:'start'});
 }
 document.querySelectorAll('.tab').forEach(t=>{
   t.addEventListener('click',()=>goTab(t.dataset.tab));
@@ -1845,6 +2026,7 @@ function importResults(input){
       renderWorkflowSteps();
       goTab('results');
       renderResults();
+      try { renderReports(); } catch(e) { console.warn('Reports render skipped:', e); }
       showBanner('✅ შედეგები ჩაიტვ. | '+
         (data.metadata?.horizon_hours||'?')+'h | $'+
         fmtNum(data.system_summary?.total_cost_usd||0),'g',8000);
@@ -1989,6 +2171,333 @@ function renderResults(){
       .map(([k,v])=>`<div><span style="color:var(--t3)">${k}:</span> ${JSON.stringify(v)}</div>`)
       .join('');
   }
+}
+
+// ══════════════════════════════════════════════════════════════════
+// REPORTS TAB — PLEXOS-style 20-card analytical dashboard
+// ══════════════════════════════════════════════════════════════════
+const TYPE_PALETTE = {
+  thermal:'#e03144', hydro_reg:'#002060', hydro_ror:'#00B0F0',
+  wind:'#00cfb4', solar:'#f0c040', import:'#a463f8',
+  bess:'#20d68a', dr:'#f07830', pumped_hydro:'#3d8ef0'
+};
+// Fuel-level palette (CCGT/OCGT/coal split out of "thermal").
+const FUEL_PALETTE = {
+  ccgt:'#e03144', ocgt:'#f07830', coal:'#7a4a2a',
+  ...TYPE_PALETTE
+};
+
+function renderReports(){
+  const R = STATE.results;
+  const empty = document.getElementById('rep-empty');
+  const body  = document.getElementById('rep-body');
+  if(!R){
+    if(empty) empty.style.display='flex';
+    if(body)  body.style.display='none';
+    return;
+  }
+  empty.style.display='none'; body.style.display='block';
+  // Pre-compute features used by multiple panels.
+  const ctx = _repBuildContext(R);
+  // ── Tier 1 ──
+  _repTechMix(ctx);            // 1
+  _repLDC(ctx);                // 2
+  _repReservoir(ctx);          // 3
+  _repCFHeatmap(ctx);          // 4
+  _repCostWaterfall(ctx);      // 5
+  _repHourlyHeatmap(ctx);      // 6
+  // ── Tier 2 ──
+  _repReserveAlloc(ctx);       // 7
+  _repCurtailment(ctx);        // 8
+  _repCO2(ctx);                // 9
+  _repPnL(ctx);                // 10
+  _repSpillage(ctx);           // 11
+  _repMCvsLambda(ctx);         // 12
+  // ── Tier 3 ──
+  _repDayTypes(ctx);           // 13
+  _repKPIRadar(ctx);           // 14
+  _repBessArb(ctx);            // 15
+  _repReservoirTarget(ctx);    // 16
+  _repRampReq(ctx);            // 17
+  _repSnapshots(ctx);          // 18
+  _repScenarioDelta(ctx);      // 19  (uses STATE.compareSlots)
+}
+
+// ── Helpers shared across reports ────────────────────────────────────
+function _repBuildContext(R){
+  const hs = R.hourly_system || [];
+  const hbu = R.hourly_by_unit || {};
+  const bu = R.by_unit_summary || {};
+  const monthly = R.monthly_summary || [];
+  const meta = R.metadata || {};
+  const dt_h = (meta.resolution_min || 60) / 60;
+  const H = hs.length;
+
+  // Resolve fuel category per asset.
+  const fuelOf = (gid) => {
+    const a = bu[gid] || {};
+    if(a.type !== 'thermal') return a.type;
+    const heat = (a.heat_rate || 0);
+    // Coal vs gas vs OCGT-vs-CCGT heuristic from asset name + heat rate.
+    const nm = (a.name || gid).toLowerCase();
+    if(nm.includes('ნახშ') || nm.includes('coal')) return 'coal';
+    if(heat >= 9.0)  return 'ocgt';
+    return 'ccgt';
+  };
+
+  // Group hourly dispatch by fuel category.
+  const cats = ['hydro_reg','hydro_ror','ccgt','ocgt','coal','wind','solar','import','bess','dr','pumped_hydro'];
+  const stack = {};
+  cats.forEach(c => stack[c] = new Array(H).fill(0));
+  for(let t=0; t<H; t++){
+    for(const gid of Object.keys(bu)){
+      const cat = fuelOf(gid);
+      const rows = hbu[gid] || [];
+      const v = rows[t] ? +(rows[t].dispatch_mw || 0) : 0;
+      if(v) stack[cat][t] += v;
+    }
+    // BESS net (discharge - charge) treated as supply.
+    for(const gid of Object.keys(bu)){
+      if(bu[gid].type !== 'bess') continue;
+      const r = (hbu[gid] || [])[t];
+      if(r && r.bess){
+        stack.bess[t] += (+r.bess.discharge_mw||0) - (+r.bess.charge_mw||0);
+      }
+    }
+  }
+
+  return { R, hs, hbu, bu, monthly, meta, dt_h, H, fuelOf, cats, stack };
+}
+
+// ── 1. Technology mix dispatch ───────────────────────────────────────
+function _repTechMix(ctx){
+  const { hs, cats, stack } = ctx;
+  const H = Math.min(hs.length, 720);    // cap to ~30d for chart legibility
+  const xs = hs.slice(0, H).map(h=>h.t);
+  const series = cats.filter(c => stack[c].some(v => Math.abs(v) > 0.01))
+                     .map(c => ({name:c, data: stack[c].slice(0, H).map(v=>+v.toFixed(1))}));
+  mkChart('c-rep-mix', {
+    chart:{type:'area', height:320, stacked:true, toolbar:{show:false}, animations:{enabled:false}},
+    series,
+    xaxis:{categories:xs, labels:{show:false}, title:{text:'საათი'}},
+    yaxis:{labels:{formatter:v=>v.toFixed(0)}, title:{text:'MW'}},
+    stroke:{width:0}, fill:{opacity:0.85},
+    colors: series.map(s=>FUEL_PALETTE[s.name]||'#888'),
+    legend:{position:'top', fontSize:'8px'},
+    tooltip:{y:{formatter:v=>v.toFixed(1)+' MW'}},
+  });
+  // Energy share pie/bar
+  const totals = cats.map(c => ({c, e: stack[c].reduce((s,v)=>s+v,0) * ctx.dt_h}))
+                     .filter(x => x.e > 0.1);
+  mkChart('c-rep-mix-share', {
+    chart:{type:'bar', height:240, toolbar:{show:false}},
+    series:[{name:'Energy MWh', data: totals.map(x=>+x.e.toFixed(0))}],
+    xaxis:{categories: totals.map(x=>x.c), labels:{style:{fontSize:'8px'}}},
+    yaxis:{labels:{formatter:v=>(v/1000).toFixed(1)+'k'}},
+    plotOptions:{bar:{distributed:true, columnWidth:'55%'}},
+    colors: totals.map(x=>FUEL_PALETTE[x.c]||'#888'),
+    legend:{show:false},
+    dataLabels:{enabled:true, style:{fontSize:'8px',colors:['#fff']},
+      formatter: (v,o)=> {
+        const sumE = totals.reduce((s,x)=>s+x.e,0);
+        return sumE? ((v/sumE)*100).toFixed(1)+'%' : '';
+      }
+    },
+  });
+}
+
+// ── 2. Load + Net-Load Duration Curve ───────────────────────────────
+function _repLDC(ctx){
+  const { hs, stack, dt_h } = ctx;
+  const load = hs.map(h => +h.load_mw || 0);
+  // Net load = load - VRE (wind+solar+hydro_ror only).
+  const netload = load.map((v, t) =>
+    v - (stack.wind[t]||0) - (stack.solar[t]||0) - (stack.hydro_ror[t]||0));
+  const sortedDesc = arr => [...arr].sort((a,b)=>b-a);
+  const ldc = sortedDesc(load);
+  const nldc = sortedDesc(netload);
+  const xs = ldc.map((_,i)=>+(100*i/(ldc.length-1)).toFixed(2));
+  mkChart('c-rep-ldc', {
+    chart:{type:'line', height:300, toolbar:{show:false}, animations:{enabled:false}},
+    series:[
+      {name:'Load',     data: ldc.map(v=>+v.toFixed(1))},
+      {name:'Net-Load', data: nldc.map(v=>+v.toFixed(1))},
+    ],
+    xaxis:{categories:xs, type:'numeric', title:{text:'duration  (% of horizon)'}, labels:{formatter:v=>v+'%'}},
+    yaxis:{labels:{formatter:v=>v.toFixed(0)}, title:{text:'MW'}},
+    stroke:{width:2}, colors:['#3d8ef0','#f0c040'],
+    fill:{type:'gradient', gradient:{shadeIntensity:0.2}},
+    legend:{position:'top', fontSize:'8px'},
+  });
+  const stat = (a)=>({peak:Math.max(...a), avg:a.reduce((s,v)=>s+v,0)/a.length, base:Math.min(...a)});
+  const sL = stat(load), sN = stat(netload);
+  document.getElementById('rep-ldc-stats').innerHTML =
+    `Load — peak ${sL.peak.toFixed(0)} MW · avg ${sL.avg.toFixed(0)} · min ${sL.base.toFixed(0)};  `+
+    `Net-Load — peak ${sN.peak.toFixed(0)} · avg ${sN.avg.toFixed(0)} · min ${sN.base.toFixed(0)} (negative = curtailment-prone)`;
+}
+
+// ── 3. Reservoir trajectory chart ────────────────────────────────────
+function _repReservoir(ctx){
+  const { hbu, bu, hs } = ctx;
+  const sec1 = Object.keys(bu).filter(g=>bu[g].type==='hydro_reg');
+  if(!sec1.length){
+    mkChart('c-rep-reservoir', {
+      chart:{type:'line', height:300}, series:[],
+      noData:{text:'No reservoir hydro in this run'},
+    });
+    return;
+  }
+  const xs = hs.map(h=>h.t);
+  const series = sec1.map(g => ({
+    name: bu[g].name || g,
+    data: (hbu[g]||[]).map(r => +(r.hydro && r.hydro.storage_mm3 || 0).toFixed(2))
+  }));
+  mkChart('c-rep-reservoir', {
+    chart:{type:'line', height:300, toolbar:{show:false}, animations:{enabled:false}},
+    series, xaxis:{categories:xs, labels:{show:false}, title:{text:'საათი'}},
+    yaxis:{labels:{formatter:v=>v.toFixed(0)}, title:{text:'Mm³'}},
+    stroke:{width:2, curve:'straight'},
+    legend:{position:'top', fontSize:'8px'},
+  });
+}
+
+// ── 4. Capacity-Factor heatmap ───────────────────────────────────────
+function _repCFHeatmap(ctx){
+  const { hbu, bu, monthly, dt_h } = ctx;
+  if(!monthly.length){
+    document.getElementById('c-rep-cf-heat').innerHTML =
+      '<div style="color:var(--t3);font-size:8px;padding:20px">No monthly_summary in results</div>';
+    return;
+  }
+  const months = monthly.map(m=>m.label||('M'+m.month));
+  const rows = Object.keys(bu).map(g => {
+    const a = bu[g];
+    const pmaxRef = a.type === 'wind' || a.type === 'solar'
+        ? +a.energy_mwh && (a.energy_mwh / Math.max(a.capacity_factor/100 * 8760, 1))
+        : null;
+    const denomMW = (function(){
+      // best estimate of nameplate MW — back-calculated from annual CF.
+      const e = a.energy_mwh || 0, cf = (a.capacity_factor||0)/100, hrs = monthly.reduce((s,m)=>s+(m.hours||0),0);
+      return cf>0 && hrs>0 ? e/(cf*hrs) : 0;
+    })();
+    const cells = months.map((_,i)=>{
+      const m = monthly[i];
+      const e = (m.by_unit && m.by_unit[g]) ? +m.by_unit[g].energy_mwh : 0;
+      const cf = denomMW>0 ? 100 * e / Math.max(denomMW * (m.hours||1), 1) : 0;
+      return cf;
+    });
+    return {name: a.name || g, type: a.type, cells};
+  });
+  // Build HTML table
+  const cell = (v) => {
+    const c = Math.max(0, Math.min(100, v));
+    const r = Math.round(255 * (c/100));
+    const g = Math.round(180 * (1 - c/100));
+    return `<td style="text-align:right;padding:2px 4px;font-family:monospace;font-size:8px;
+            background:rgba(${r},${g},80,${0.15+c/250});color:#fff">${c.toFixed(1)}</td>`;
+  };
+  const html = `<table style="font-size:8px;border-collapse:collapse;width:100%">
+    <thead><tr><th style="text-align:left;padding:3px 6px">Asset</th><th>Type</th>
+      ${months.map(m=>`<th style="text-align:right;padding:3px 4px">${m}</th>`).join('')}</tr></thead>
+    <tbody>${rows.map(r=>`<tr><td style="padding:2px 6px">${r.name}</td>
+      <td style="padding:2px 4px;color:var(--t3)">${r.type}</td>
+      ${r.cells.map(cell).join('')}</tr>`).join('')}</tbody></table>`;
+  document.getElementById('c-rep-cf-heat').innerHTML = html;
+}
+
+// ── 5. Cost waterfall ────────────────────────────────────────────────
+function _repCostWaterfall(ctx){
+  const { R, bu, hs, dt_h } = ctx;
+  const sm = R.system_summary || {};
+  const bars = [
+    {label:'Fuel',          v: +sm.total_fuel_cost || 0, color:'#e03144'},
+    {label:'Startup',       v: +sm.total_startup_cost || 0, color:'#f07830'},
+    {label:'No-Load',       v: Object.values(bu).reduce((s,a)=>s+(+a.no_load_cost||0),0), color:'#f0c040'},
+    {label:'VOM',           v: Object.values(bu).reduce((s,a)=>s+(+a.vom_cost||0),0), color:'#20d68a'},
+    {label:'Unserved Pen.', v: (R.diagnostics?.unserved_hours||0)*0 + (sm.total_unserved_mwh||0)*3000, color:'#a463f8'},
+    {label:'Reserve Pen.',  v: 0, color:'#3d8ef0'},
+  ];
+  // Reserve penalty estimate
+  const resSh = sm.reserve_shortfall_mwh || {};
+  const resPen = Object.values(resSh).reduce((s,v)=>s + +v*500, 0);
+  bars[5].v = resPen;
+  const tot = bars.reduce((s,b)=>s+b.v, 0);
+  mkChart('c-rep-cost', {
+    chart:{type:'bar', height:300, toolbar:{show:false}},
+    series:[{name:'$', data: bars.map(b=>+b.v.toFixed(0))}],
+    xaxis:{categories: bars.map(b=>b.label), labels:{style:{fontSize:'9px'}}},
+    yaxis:{labels:{formatter:v=>'$'+(v>=1e6?(v/1e6).toFixed(1)+'M':(v/1e3).toFixed(0)+'k')}},
+    plotOptions:{bar:{distributed:true, columnWidth:'55%'}},
+    colors: bars.map(b=>b.color), legend:{show:false},
+    dataLabels:{enabled:true, style:{fontSize:'9px',colors:['#fff']},
+      formatter: v=> tot ? ((v/tot)*100).toFixed(1)+'%' : ''},
+  });
+  document.getElementById('rep-cost-tbl').innerHTML =
+    `<table><thead><tr><th>Component</th><th class="mono">USD</th><th class="mono">% of total</th></tr></thead>
+     <tbody>${bars.map(b=>`<tr><td>${b.label}</td>
+       <td class="mono">$${(b.v||0).toLocaleString('en-US',{maximumFractionDigits:0})}</td>
+       <td class="mono">${tot?((b.v/tot)*100).toFixed(2)+'%':'—'}</td></tr>`).join('')}
+     <tr><td><b>Total</b></td><td class="mono"><b>$${tot.toLocaleString('en-US',{maximumFractionDigits:0})}</b></td><td>100%</td></tr></tbody></table>`;
+}
+
+// ── 6. Hourly heatmap (24 × days) ────────────────────────────────────
+function _repHourlyHeatmap(ctx){
+  const { hs } = ctx;
+  const metricSel = document.getElementById('rep-heat-metric');
+  const metric = (metricSel && metricSel.value) || 'load_mw';
+  const days = Math.ceil(hs.length / 24);
+  // Build 2D grid [day][hour]
+  const grid = Array.from({length: days}, () => new Array(24).fill(0));
+  let mn = Infinity, mx = -Infinity;
+  for(let t=0; t<hs.length; t++){
+    const v = +hs[t][metric] || 0;
+    const d = Math.floor(t / 24); const h = t % 24;
+    if(d < days) grid[d][h] = v;
+    if(v < mn) mn = v;
+    if(v > mx) mx = v;
+  }
+  if(!isFinite(mn)) mn = 0; if(!isFinite(mx)) mx = 1;
+  const range = Math.max(mx - mn, 1e-6);
+  const cell = v => {
+    const f = (v - mn) / range;
+    const r = Math.round(40 + 215 * f);
+    const g = Math.round(40 + 100 * (1 - Math.abs(f - 0.5) * 2));
+    const b = Math.round(220 - 200 * f);
+    return `<td style="background:rgb(${r},${g},${b});padding:1px 3px;text-align:right;
+            font-family:monospace;font-size:7.5px;color:#fff">${v.toFixed(1)}</td>`;
+  };
+  const hdr = '<tr><th></th>' + Array.from({length:24},(_,h)=>`<th style="font-size:7.5px">${h}</th>`).join('') + '</tr>';
+  const body = grid.map((row,d)=>`<tr><td style="font-size:7.5px;color:var(--t3)">d${d+1}</td>${row.map(cell).join('')}</tr>`).join('');
+  document.getElementById('c-rep-heat').innerHTML =
+    `<table style="border-collapse:collapse;font-size:8px;width:100%"><thead>${hdr}</thead><tbody>${body}</tbody></table>
+     <div style="font-size:7.5px;color:var(--t3);margin-top:4px">range: ${mn.toFixed(2)} – ${mx.toFixed(2)}, metric: <b>${metric}</b></div>`;
+}
+
+// ── 7-19 stubs (filled in Phase 5b/5c) ───────────────────────────────
+function _repReserveAlloc(ctx){ document.getElementById('c-rep-reserve').innerHTML=''; document.getElementById('rep-reserve-tbl').innerHTML='<div style="font-size:8px;color:var(--t3);padding:8px">Phase 5b — coming soon</div>'; }
+function _repCurtailment(ctx){ document.getElementById('c-rep-curt').innerHTML=''; document.getElementById('rep-curt-tbl').innerHTML='<div style="font-size:8px;color:var(--t3);padding:8px">Phase 5b — coming soon</div>'; }
+function _repCO2(ctx){ document.getElementById('c-rep-co2').innerHTML=''; document.getElementById('rep-co2-stats').innerHTML='Phase 5b — coming soon'; }
+function _repPnL(ctx){ document.getElementById('rep-pl-tbl').innerHTML='<div style="font-size:8px;color:var(--t3);padding:8px">Phase 5b — coming soon</div>'; }
+function _repSpillage(ctx){ document.getElementById('c-rep-spill').innerHTML=''; document.getElementById('rep-spill-tbl').innerHTML='<div style="font-size:8px;color:var(--t3);padding:8px">Phase 5b — coming soon</div>'; }
+function _repMCvsLambda(ctx){ document.getElementById('c-rep-mclam').innerHTML='<div style="font-size:8px;color:var(--t3);padding:8px">Phase 5b — coming soon</div>'; }
+function _repDayTypes(ctx){ document.getElementById('c-rep-day').innerHTML=''; }
+function _repKPIRadar(ctx){ document.getElementById('c-rep-radar').innerHTML=''; }
+function _repBessArb(ctx){ document.getElementById('rep-bess-tbl').innerHTML='<div style="font-size:8px;color:var(--t3);padding:8px">Phase 5c — coming soon</div>'; }
+function _repReservoirTarget(ctx){ document.getElementById('c-rep-target').innerHTML=''; }
+function _repRampReq(ctx){ document.getElementById('c-rep-ramp').innerHTML=''; document.getElementById('rep-ramp-stats').innerHTML=''; }
+function _repSnapshots(ctx){ document.getElementById('rep-snap-cards').innerHTML=''; }
+function _repScenarioDelta(ctx){
+  document.getElementById('c-rep-delta').innerHTML='';
+  document.getElementById('rep-delta-note').textContent =
+    (STATE.compareSlots && STATE.compareSlots.length>=2)
+      ? 'Phase 5c — coming soon (will use Compare-tab scenarios as input)'
+      : 'Load ≥2 scenarios in Compare tab first.';
+}
+
+function exportReportsXls(){
+  // Phase 5c will populate the rich Excel exporter; for now reuse the
+  // basic exporter on the Results tab.
+  exportResultsXls();
 }
 
 function exportResultsXls(){
