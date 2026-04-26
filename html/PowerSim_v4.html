@@ -168,6 +168,7 @@ tr:hover td{background:var(--bg3)}
     <button class="tab"     data-tab="profiles">📊 Profiles</button>
     <button class="tab"     data-tab="reserves">🛡 Reserves</button>
     <button class="tab"     data-tab="gas">⛽ Gas</button>
+    <button class="tab"     data-tab="network">🔌 Network</button>
     <button class="tab"     data-tab="horizon">📅 Horizon</button>
     <button class="tab"     data-tab="validate">✅ Validate</button>
     <button class="tab"     data-tab="results">📈 Results</button>
@@ -485,6 +486,72 @@ tr:hover td{background:var(--bg3)}
 </div>
 
 <!-- ════════════════════════════════════════════════════════════════ -->
+<!-- TAB 5b: NETWORK — buses + lines + DC-OPF (v1.5)                    -->
+<!-- ════════════════════════════════════════════════════════════════ -->
+<div class="pane" id="pane-network">
+  <div class="layout-lr">
+    <div class="lpanel">
+      <div class="card">
+        <div class="sh">🔌 ქსელის რეჟიმი</div>
+        <div class="field" style="display:flex;align-items:center;gap:6px">
+          <label style="margin:0">
+            <input type="checkbox" id="net-enable" onchange="toggleNetwork()"> ქსელის მოდელის ჩართვა (DC-OPF)
+          </label>
+        </div>
+        <div style="font-size:7.5px;color:var(--t3);margin-top:4px">
+          ქსელის გათიშვისას — copperplate (ერთი balance).
+          ჩართვისას — per-bus balance, line capacity, nodal LMP.
+        </div>
+      </div>
+      <div class="card" id="net-bus-add" style="display:none">
+        <div class="sh">➕ Bus დამატება</div>
+        <div class="field"><label>ID</label><input type="text" id="bus-id" placeholder="WEST"></div>
+        <div class="field"><label>სახელი</label><input type="text" id="bus-name" placeholder="დასავლეთი"></div>
+        <div class="field"><label>kV</label><input type="number" id="bus-kv" value="500"></div>
+        <div class="field" style="display:flex;align-items:center;gap:6px">
+          <label><input type="checkbox" id="bus-slack"> Slack bus (DC reference)</label>
+        </div>
+        <button class="btn btn-p btn-s" onclick="addBus()">➕ Bus დამატება</button>
+      </div>
+      <div class="card" id="net-line-add" style="display:none">
+        <div class="sh">➕ Line დამატება</div>
+        <div class="field"><label>ID</label><input type="text" id="line-id" placeholder="WEST_TBL_500"></div>
+        <div class="frow f2">
+          <div class="field"><label>From</label><select id="line-from"></select></div>
+          <div class="field"><label>To</label><select id="line-to"></select></div>
+        </div>
+        <div class="frow f2">
+          <div class="field"><label>Cap MW</label><input type="number" id="line-cap" value="500"></div>
+          <div class="field"><label>X p.u.</label><input type="number" id="line-x" value="0.012" step="0.001"></div>
+        </div>
+        <button class="btn btn-p btn-s" onclick="addLine()">➕ Line დამატება</button>
+      </div>
+      <div class="card" id="net-templates">
+        <div class="sh">⚡ ქსელის Demo</div>
+        <button class="btn btn-b btn-s" onclick="loadGeorgiaNetwork3Bus()">🇬🇪 Georgia 3-Bus (WEST/TBL/KTL)</button>
+        <div style="font-size:7.5px;color:var(--t3);margin-top:4px">
+          ენგური/ვარდნილი → WEST · გარდაბანი/თბ-სრესი → KTL · ჟინვალი + იმპორტი → TBL
+        </div>
+      </div>
+    </div>
+    <div class="rpanel">
+      <div class="card">
+        <div class="sh">📊 Buses (<span id="bus-count">0</span>)</div>
+        <div id="bus-tbl-wrap"></div>
+      </div>
+      <div class="card">
+        <div class="sh">🔗 Lines (<span id="line-count">0</span>)</div>
+        <div id="line-tbl-wrap"></div>
+      </div>
+      <div class="card">
+        <div class="sh">📍 Asset → Bus assignment</div>
+        <div id="asset-bus-wrap" style="font-size:8px"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════════ -->
 <!-- TAB 6: HORIZON                                                   -->
 <!-- ════════════════════════════════════════════════════════════════ -->
 <div class="pane" id="pane-horizon">
@@ -771,6 +838,7 @@ tr:hover td{background:var(--bg3)}
       <button class="btn btn-t btn-s" onclick="repScrollTo('sec-ramp')">📐 Ramp</button>
       <button class="btn btn-t btn-s" onclick="repScrollTo('sec-snap')">📸 Snapshots</button>
       <button class="btn btn-t btn-s" onclick="repScrollTo('sec-delta')">Δ შედარება</button>
+      <button class="btn btn-t btn-s" onclick="repScrollTo('sec-net')">🔌 ქსელი (DC-OPF)</button>
       <button class="btn btn-g btn-s" style="margin-left:auto" onclick="exportReportsXls()">⬇ Excel</button>
       <button class="btn btn-b btn-s" onclick="exportReportsPNG()">🖼 PNG</button>
       <button class="btn btn-p btn-s" onclick="exportReportsPDF()">📄 PDF</button>
@@ -911,6 +979,14 @@ tr:hover td{background:var(--bg3)}
       <div id="c-rep-delta" style="height:300px"></div>
       <div id="rep-delta-note" style="font-size:8px;color:var(--t3);margin-top:5px"></div>
     </div>
+
+    <!-- 20. DC-OPF nodal LMP + line congestion (v1.5 only) -->
+    <div class="card" id="sec-net">
+      <div class="sh">🔌 DC-OPF — Nodal LMP & Line Congestion</div>
+      <div id="rep-net-lmp" style="height:240px"></div>
+      <div id="rep-net-cong" style="margin-top:6px"></div>
+      <div id="rep-net-note" style="font-size:7.5px;color:var(--t3);margin-top:5px"></div>
+    </div>
   </div>
 </div>
 
@@ -978,6 +1054,7 @@ function goTab(id){
   if(id==='validate') renderKpiTemplateList();
   if(id==='compare')  renderCompareList();
   if(id==='reports' && STATE.results) renderReports();
+  if(id==='network')  renderNetwork();
 }
 
 function repScrollTo(id){
@@ -1283,6 +1360,182 @@ function clearAssets(){
 //   The asset ids match the powersim_asset_mapper transliteration so the
 //   reservoir-override CSV (tests/reservoir_overrides_template.csv) and
 //   results JSON can be cross-referenced.
+// ══════════════════════════════════════════════════════════════════
+// NETWORK MODEL (#1 DC-OPF) — buses, lines, asset-bus assignment
+// ══════════════════════════════════════════════════════════════════
+STATE.network = {enabled:false, buses:[], lines:[],
+                 demand_by_bus:null, load_share_by_bus:null};
+
+function toggleNetwork(){
+  STATE.network.enabled = !!document.getElementById('net-enable').checked;
+  document.getElementById('net-bus-add').style.display  = STATE.network.enabled?'block':'none';
+  document.getElementById('net-line-add').style.display = STATE.network.enabled?'block':'none';
+  renderNetwork();
+}
+
+function addBus(){
+  const id = document.getElementById('bus-id').value.trim();
+  if(!id){ showBanner('bus id სავ.','r'); return; }
+  if(STATE.network.buses.find(b=>b.id===id)){ showBanner('bus id-ი დუბლირებული','r'); return; }
+  STATE.network.buses.push({
+    id, name: document.getElementById('bus-name').value.trim() || id,
+    voltage_kv: +document.getElementById('bus-kv').value || 500,
+    is_slack:   !!document.getElementById('bus-slack').checked,
+  });
+  renderNetwork();
+}
+
+function removeBus(id){
+  STATE.network.buses  = STATE.network.buses.filter(b=>b.id!==id);
+  STATE.network.lines  = STATE.network.lines.filter(ln=>ln.from_bus!==id && ln.to_bus!==id);
+  STATE.assets.forEach(a=>{ if(a.bus===id) delete a.bus; });
+  renderNetwork();
+}
+
+function addLine(){
+  const id = document.getElementById('line-id').value.trim();
+  if(!id){ showBanner('line id სავ.','r'); return; }
+  if(STATE.network.lines.find(l=>l.id===id)){ showBanner('line id-ი დუბლირებული','r'); return; }
+  const fb = document.getElementById('line-from').value;
+  const tb = document.getElementById('line-to').value;
+  if(fb===tb){ showBanner('from == to','r'); return; }
+  STATE.network.lines.push({
+    id, from_bus:fb, to_bus:tb,
+    capacity_mw: +document.getElementById('line-cap').value || 500,
+    x_pu:        +document.getElementById('line-x').value || 0.012,
+  });
+  renderNetwork();
+}
+
+function removeLine(id){
+  STATE.network.lines = STATE.network.lines.filter(l=>l.id!==id);
+  renderNetwork();
+}
+
+function setAssetBus(aid, bus){
+  const a = STATE.assets.find(x=>x.id===aid);
+  if(a){ a.bus = bus || undefined; if(!bus) delete a.bus; }
+}
+
+function loadGeorgiaNetwork3Bus(){
+  STATE.network.enabled = true;
+  document.getElementById('net-enable').checked = true;
+  STATE.network.buses = [
+    {id:'WEST', name:'დასავლეთი (ენგური/ვარდნილი)', voltage_kv:500, is_slack:false},
+    {id:'TBL',  name:'თბილისი (load center)',       voltage_kv:500, is_slack:true},
+    {id:'KTL',  name:'ქართლი (gen+load)',           voltage_kv:500, is_slack:false},
+  ];
+  STATE.network.lines = [
+    {id:'WEST_TBL_500', from_bus:'WEST', to_bus:'TBL', capacity_mw:1100, x_pu:0.012},
+    {id:'TBL_KTL_500',  from_bus:'TBL',  to_bus:'KTL', capacity_mw:850,  x_pu:0.010},
+    {id:'WEST_KTL_500', from_bus:'WEST', to_bus:'KTL', capacity_mw:400,  x_pu:0.018},
+  ];
+  STATE.network.load_share_by_bus = {WEST:0.18, TBL:0.55, KTL:0.27};
+  // Auto-assign assets by id pattern.
+  const W = ['engurhesi','vardnilhesi','lajanurhesi','vartsikhehesi_1','vartsikhehesi_2',
+             'vartsikhehesi_3','vartsikhehesi_4','shuakhevihesi','gumathesi_1','gumathesi_2',
+             'rionhesi','small_hpp_remainder','old_energy','kirnatihesi','khelvachauri_1',
+             'mestiachala_1','mestiachala_2','khobihesi_2','lakhami_2','nakrahesi'];
+  const K = ['gardabani_1','gardabani_2','tbilsresi_3','tbilsresi_4','mtkvari_energ','g_power',
+             'tkibuli_coal','khramhesi_1','khramhesi_2','dzevrulahesi','shaorhesi',
+             'wind_kartli','wind_dedoplistskaro','wind_telavi','solar_aggr',
+             'solar_kaspis','solar_jugaanis','solar_gamarjvebis','solar_khirsis','solar_kedis','solar_kistauris'];
+  const T = ['zhinvalhesi','chitakhevhesi','import_tr','import_az','import_am',
+             'mtkvarihesi','paravanhesi','darialhesi','larsihesi','khadorhesi','atshesi',
+             'ortachalhesi','zahesi','rachahesi','akhmetahesi','sionhesi','aragvihesi',
+             'sashuala_1','akhalkalaki_1','satskhenhesi','tetrikhevhesi','bzhuzhahesi',
+             'bakhvihesi_3','kasletihesi_2','skhaltahesi','basra_1','dzevrulahesi'];
+  STATE.assets.forEach(a=>{
+    if(W.includes(a.id))      a.bus='WEST';
+    else if(K.includes(a.id)) a.bus='KTL';
+    else if(T.includes(a.id)) a.bus='TBL';
+    else                       a.bus='TBL';
+  });
+  document.getElementById('net-bus-add').style.display='block';
+  document.getElementById('net-line-add').style.display='block';
+  renderNetwork();
+  showBanner('✅ Georgia 3-Bus network ჩაიტვირთა','g');
+}
+
+function renderNetwork(){
+  // Buses table
+  const buses = STATE.network.buses;
+  const lines = STATE.network.lines;
+  document.getElementById('bus-count').textContent  = buses.length;
+  document.getElementById('line-count').textContent = lines.length;
+
+  const bw = document.getElementById('bus-tbl-wrap');
+  if(bw){
+    bw.innerHTML = !buses.length
+      ? '<div style="font-size:8px;color:var(--t3);padding:8px">Bus არ არის — დაამატე ან გამოიყენე "🇬🇪 Georgia 3-Bus" ღილაკი</div>'
+      : `<table><thead><tr><th>id</th><th>სახელი</th><th>kV</th><th>Slack</th><th>✕</th></tr></thead>
+         <tbody>${buses.map(b=>`<tr>
+           <td class="mono"><b>${b.id}</b></td>
+           <td><input type="text" value="${b.name||''}" style="width:170px;font-size:8px"
+                onchange="STATE.network.buses.find(x=>x.id==='${b.id}').name=this.value"></td>
+           <td><input type="number" value="${b.voltage_kv||500}" style="width:55px;font-size:8px"
+                onchange="STATE.network.buses.find(x=>x.id==='${b.id}').voltage_kv=+this.value"></td>
+           <td><input type="checkbox" ${b.is_slack?'checked':''}
+                onchange="STATE.network.buses.forEach(x=>x.is_slack=false); STATE.network.buses.find(x=>x.id==='${b.id}').is_slack=this.checked; renderNetwork()"></td>
+           <td><button onclick="removeBus('${b.id}')" style="background:none;border:none;color:var(--red);cursor:pointer">✕</button></td>
+         </tr>`).join('')}</tbody></table>`;
+  }
+  // Update from/to selects
+  ['line-from','line-to'].forEach(sid=>{
+    const sel=document.getElementById(sid);
+    if(sel){ sel.innerHTML = buses.map(b=>`<option value="${b.id}">${b.id} — ${b.name||''}</option>`).join(''); }
+  });
+  // Lines table
+  const lw = document.getElementById('line-tbl-wrap');
+  if(lw){
+    lw.innerHTML = !lines.length
+      ? '<div style="font-size:8px;color:var(--t3);padding:8px">Line არ არის</div>'
+      : `<table><thead><tr><th>id</th><th>from</th><th>to</th><th>cap MW</th><th>x p.u.</th><th>✕</th></tr></thead>
+         <tbody>${lines.map(l=>`<tr>
+           <td class="mono"><b>${l.id}</b></td>
+           <td class="mono">${l.from_bus}</td>
+           <td class="mono">${l.to_bus}</td>
+           <td><input type="number" value="${l.capacity_mw}" style="width:65px;font-size:8px"
+                onchange="STATE.network.lines.find(x=>x.id==='${l.id}').capacity_mw=+this.value"></td>
+           <td><input type="number" value="${l.x_pu||0.012}" style="width:60px;font-size:8px" step="0.001"
+                onchange="STATE.network.lines.find(x=>x.id==='${l.id}').x_pu=+this.value"></td>
+           <td><button onclick="removeLine('${l.id}')" style="background:none;border:none;color:var(--red);cursor:pointer">✕</button></td>
+         </tr>`).join('')}</tbody></table>`;
+  }
+  // Asset → bus assignment
+  const aw = document.getElementById('asset-bus-wrap');
+  if(aw){
+    if(!buses.length){
+      aw.innerHTML='<div style="color:var(--t3);padding:6px">Bus-ი ჯერ არ შექმნილა.</div>';
+    } else {
+      // Group by bus
+      const byBus = {};
+      buses.forEach(b=>byBus[b.id]=[]);
+      const unassigned = [];
+      STATE.assets.forEach(a=>{
+        if(a.bus && byBus[a.bus]) byBus[a.bus].push(a); else unassigned.push(a);
+      });
+      const opts = '<option value="">— bus —</option>'+buses.map(b=>`<option value="${b.id}">${b.id}</option>`).join('');
+      const renderRow = a => `<tr><td>${a.name||a.id}</td>
+        <td><select style="font-size:8px" onchange="setAssetBus('${a.id}',this.value)">
+          ${opts.replace(`value="${a.bus||''}">`,`value="${a.bus||''}" selected>`)}
+        </select></td>
+        <td class="mono">${(+a.pmax||+a.pmax_installed||+a.pmax_profile||+a.power_mw||0).toFixed(1)} MW</td></tr>`;
+      let out = '';
+      buses.forEach(b=>{
+        out += `<div class="sh" style="margin-top:6px">${b.id} — ${b.name||''} (${byBus[b.id].length} ასეტი)</div>
+                <table><tbody>${byBus[b.id].map(renderRow).join('')||'<tr><td colspan="3" style="color:var(--t3)">—</td></tr>'}</tbody></table>`;
+      });
+      if(unassigned.length){
+        out += `<div class="sh" style="margin-top:6px;color:var(--orange)">⚠ Unassigned (${unassigned.length})</div>
+                <table><tbody>${unassigned.map(renderRow).join('')}</tbody></table>`;
+      }
+      aw.innerHTML = out;
+    }
+  }
+  updateDashKpis();
+}
+
 function loadGSE2026Demo(){
   // ── Helpers — compact constructors for the 77-asset GSE 2026 fleet.
   // v10 LOCKED calibration: gas $5.50/MMBtu, startup $1000 / no-load $50,
@@ -2079,6 +2332,10 @@ function buildInputPayload(){
     },
     resolution_min: +((document.getElementById('hor-resolution')||{}).value || 60),
     kpi_templates: (STATE.kpiTemplates||[]).length ? STATE.kpiTemplates : undefined,
+    // v1.5 DC-OPF — only emitted when network is enabled.
+    buses: (STATE.network && STATE.network.enabled && STATE.network.buses.length) ? STATE.network.buses : undefined,
+    lines: (STATE.network && STATE.network.enabled && STATE.network.lines.length) ? STATE.network.lines : undefined,
+    load_share_by_bus: (STATE.network && STATE.network.enabled && STATE.network.load_share_by_bus) ? STATE.network.load_share_by_bus : undefined,
     scenario_metadata:(function(){
       const sel=document.getElementById('hor-scenario');
       const sid=(sel&&sel.value)||'A_mean';
@@ -3171,6 +3428,80 @@ function _repScenarioDelta(ctx){
   });
   note.innerHTML = `Decomposition: <b>${slots[0].scenario||'A'}</b> → <b>${slots[slots.length-1].scenario||'B'}</b>  ·  Δ cost ${(totB-totA>=0?'+':'')}$${(totB-totA).toLocaleString('en-US',{maximumFractionDigits:0})}`;
 }
+
+// ── 20. DC-OPF nodal LMP + line congestion (v1.5) ───────────────────
+function _repNetwork(ctx){
+  const { hs } = ctx;
+  const lmpDiv = document.getElementById('rep-net-lmp');
+  const cgDiv  = document.getElementById('rep-net-cong');
+  const noteDiv= document.getElementById('rep-net-note');
+  if(!lmpDiv) return;
+  // Detect if any hourly row carries non-empty bus_lmp / line_flow.
+  const hasLMP  = hs.some(h => h.bus_lmp  && Object.keys(h.bus_lmp).length);
+  const hasFlow = hs.some(h => h.line_flow && Object.keys(h.line_flow).length);
+  if(!hasLMP && !hasFlow){
+    lmpDiv.innerHTML = '<div style="font-size:8px;color:var(--t3);padding:8px">DC-OPF არ ჩართულა — ქსელი copperplate</div>';
+    cgDiv.innerHTML  = '';
+    noteDiv.textContent = 'ჩართე Network tab-ზე DC-OPF და გაუშვი ხელახლა.';
+    return;
+  }
+  // Bus LMP time series (one line per bus).
+  const buses = hasLMP ? Object.keys(hs[0].bus_lmp || {}) : [];
+  const xs = hs.map(h=>h.t);
+  const lmpSeries = buses.map(b => ({
+    name: b,
+    data: hs.map(h => +(h.bus_lmp || {})[b] || 0)
+  }));
+  if(lmpSeries.length){
+    mkChart('rep-net-lmp', {
+      chart:{type:'line', height:240, toolbar:{show:false}, animations:{enabled:false}},
+      series: lmpSeries,
+      xaxis:{categories:xs, labels:{show:false}, title:{text:'საათი'}},
+      yaxis:{labels:{formatter:v=>'$'+v.toFixed(0)}, title:{text:'$/MWh'}},
+      stroke:{width:2}, legend:{position:'top', fontSize:'8px'},
+    });
+  }
+  // Line congestion table.
+  if(hasFlow){
+    const lines = Object.keys(hs[0].line_flow || {});
+    const rows = lines.map(lid => {
+      const flows = hs.map(h => +(h.line_flow||{})[lid] || 0);
+      const peak = Math.max(...flows.map(Math.abs));
+      const avg = flows.reduce((s,v)=>s+Math.abs(v),0)/flows.length;
+      // Cap is unknown from results alone — best-effort: peak is "≈cap" if congested.
+      const congested = flows.filter(v => Math.abs(v) >= peak * 0.99).length;
+      return {lid, peak, avg, congested};
+    });
+    cgDiv.innerHTML = `<table><thead><tr><th>Line</th><th class="mono">Peak |MW|</th>
+       <th class="mono">Avg |MW|</th><th class="mono">@peak hrs</th></tr></thead>
+       <tbody>${rows.map(r=>`<tr><td class="mono">${r.lid}</td>
+         <td class="mono">${r.peak.toFixed(1)}</td>
+         <td class="mono">${r.avg.toFixed(1)}</td>
+         <td class="mono" style="color:${r.congested>5?'var(--red)':'var(--t3)'}">${r.congested}</td></tr>`).join('')}</tbody></table>`;
+  }
+  // LMP spread = max-min across buses, peak hour
+  if(buses.length>1){
+    const peakIdx = hs.reduce((mi,h,i)=>{
+      const lmps = Object.values(h.bus_lmp||{}); if(!lmps.length) return mi;
+      const sp = Math.max(...lmps) - Math.min(...lmps);
+      const cur = hs[mi]; const cs = cur ? Math.max(...Object.values(cur.bus_lmp||{0:0})) - Math.min(...Object.values(cur.bus_lmp||{0:0})) : -1;
+      return sp>cs?i:mi;
+    }, 0);
+    const lmps = hs[peakIdx].bus_lmp || {};
+    const sp = Math.max(...Object.values(lmps)) - Math.min(...Object.values(lmps));
+    noteDiv.innerHTML = `Max LMP spread = <b>$${sp.toFixed(2)}/MWh</b> at hour ${peakIdx} `
+      + `(${Object.entries(lmps).map(([b,v])=>`${b}:$${v.toFixed(1)}`).join(' · ')})`;
+  } else {
+    noteDiv.textContent = 'Single bus — no spatial LMP variation.';
+  }
+}
+
+// Hook into renderReports
+const _origRenderReports = renderReports;
+renderReports = function(){
+  _origRenderReports();
+  try { _repNetwork(_repBuildContext(STATE.results)); } catch(e){ console.warn('Network panel:', e); }
+};
 
 // ── Excel export — rich pivot tables ─────────────────────────────────
 function exportReportsXls(){

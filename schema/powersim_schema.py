@@ -42,8 +42,8 @@ from typing import Any
 # ──────────────────────────────────────────────────────────────────────
 # VERSION + FIXED CONSTANTS
 # ──────────────────────────────────────────────────────────────────────
-SCHEMA_VERSION          = "1.4"
-ACCEPTED_SCHEMA_PRIOR   = {"1.0", "1.1", "1.2", "1.3"}  # accept legacy configs with warning
+SCHEMA_VERSION          = "1.5"
+ACCEPTED_SCHEMA_PRIOR   = {"1.0", "1.1", "1.2", "1.3", "1.4"}  # accept legacy configs with warning
 MODEL_VERSION           = "PowerSim v4.0"
 TIMEZONE                = "Asia/Tbilisi"
 HOURS_PER_YEAR          = 8760
@@ -645,6 +645,104 @@ def validate_input(inp: dict) -> tuple[bool, list[str], list[str]]:
             for k in kps:
                 if not (isinstance(k, dict) and k.get("id") and k.get("formula")):
                     errors.append("each kpi_template needs id + formula")
+
+    # ── v1.5: buses + lines + asset.bus + line-outage contingencies ──
+    buses = inp.get("buses") or []
+    bus_ids = set()
+    if buses:
+        if not isinstance(buses, list):
+            errors.append("buses must be a list")
+        else:
+            for b in buses:
+                bid = b.get("id")
+                if not bid:
+                    errors.append("bus missing id"); continue
+                if bid in bus_ids:
+                    errors.append(f"duplicate bus id '{bid}'")
+                bus_ids.add(bid)
+                v = b.get("voltage_kv")
+                if v is not None and not (isinstance(v, (int, float)) and v > 0):
+                    errors.append(f"bus '{bid}': voltage_kv must be > 0")
+            # If buses are declared, also recommend a slack bus.
+            n_slack = sum(1 for b in buses if b.get("is_slack"))
+            if n_slack == 0:
+                warnings.append("buses declared but no is_slack=true; "
+                                "first bus will be used as DC-OPF reference")
+            elif n_slack > 1:
+                errors.append(f"multiple slack buses ({n_slack}); pick exactly one")
+
+    lines = inp.get("lines") or []
+    line_ids = set()
+    if lines:
+        if not isinstance(lines, list):
+            errors.append("lines must be a list")
+        else:
+            for ln in lines:
+                lid = ln.get("id")
+                if not lid:
+                    errors.append("line missing id"); continue
+                if lid in line_ids:
+                    errors.append(f"duplicate line id '{lid}'")
+                line_ids.add(lid)
+                if not buses:
+                    errors.append(f"line '{lid}': lines declared but no buses")
+                fb, tb = ln.get("from_bus"), ln.get("to_bus")
+                if fb not in bus_ids:
+                    errors.append(f"line '{lid}': from_bus '{fb}' not in buses")
+                if tb not in bus_ids:
+                    errors.append(f"line '{lid}': to_bus '{tb}' not in buses")
+                if fb == tb:
+                    errors.append(f"line '{lid}': from_bus == to_bus")
+                cap = ln.get("capacity_mw")
+                if not (isinstance(cap, (int, float)) and cap > 0):
+                    errors.append(f"line '{lid}': capacity_mw must be > 0")
+                x = ln.get("x_pu")
+                if x is not None and not (isinstance(x, (int, float)) and x > 0):
+                    errors.append(f"line '{lid}': x_pu must be > 0 when provided")
+
+    # asset.bus must reference a declared bus (when buses exist).
+    if bus_ids:
+        for a in inp.get("assets") or []:
+            ab = a.get("bus")
+            if ab is not None and ab not in bus_ids:
+                errors.append(f"asset '{a.get('id')}': bus '{ab}' not in buses")
+
+    # demand_by_bus / load_share_by_bus (one or the other, optional).
+    db = inp.get("demand_by_bus")
+    if db is not None:
+        if not isinstance(db, dict):
+            errors.append("demand_by_bus must be a dict {bus_id: [...]}")
+        else:
+            for bid in db:
+                if bus_ids and bid not in bus_ids:
+                    errors.append(f"demand_by_bus key '{bid}' not in buses")
+    ls = inp.get("load_share_by_bus")
+    if ls is not None:
+        if not isinstance(ls, dict):
+            errors.append("load_share_by_bus must be a dict {bus_id: float}")
+        else:
+            tot = 0.0
+            for bid, v in ls.items():
+                if bus_ids and bid not in bus_ids:
+                    errors.append(f"load_share_by_bus key '{bid}' not in buses")
+                if not (isinstance(v, (int, float)) and 0 <= v <= 1):
+                    errors.append(f"load_share_by_bus['{bid}'] must be in [0, 1]")
+                else: tot += v
+            if abs(tot - 1.0) > 1e-3 and ls:
+                warnings.append(
+                    f"load_share_by_bus sums to {tot:.4f} (≠1.0); "
+                    "solver will renormalize")
+
+    # line_outage contingencies require live line ids.
+    for c in inp.get("contingencies") or []:
+        if not isinstance(c, dict):
+            errors.append(f"contingency must be a dict, got {type(c).__name__}"); continue
+        kind = c.get("kind", "unit_outage")
+        if kind not in ("unit_outage", "import_outage", "line_outage", "bus_outage"):
+            errors.append(f"contingency '{c.get('id')}': bad kind '{kind}'")
+        for el in (c.get("elements") or []):
+            if kind == "line_outage" and line_ids and el not in line_ids:
+                errors.append(f"contingency '{c.get('id')}': line '{el}' not in lines")
 
     ok = len(errors) == 0
     return ok, errors, warnings

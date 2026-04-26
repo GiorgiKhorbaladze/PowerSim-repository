@@ -622,17 +622,94 @@ def solve_window(
              + unserved_pen + res_pen + end_level_pen
     m.OBJ = pyo.Objective(rule=obj_rule, sense=pyo.minimize)
 
-    # ── Energy Balance ─────────────────────────────────────────────────
-    # Σ p[g,t] + unserv + DR_supply + PH_net - BESS_net = demand[t]
-    def balance(m, t):
-        gen  = sum(m.p[g,t] for g in disp_ids)
-        bess_net = sum(m.dis[b,t] - m.ch[b,t] for b in bess_ids) if bess_ids else 0
-        dr_supply = sum(m.dr[d,t] for d in dr_ids) if dr_ids else 0
-        ph_net = sum((m.ph_gen_hi[h,t] + m.ph_gen_lo[h,t])
-                     - (m.ph_pmp_hi[h,t] + m.ph_pmp_lo[h,t])
-                     for h in ph_ids) if ph_ids else 0
-        return gen + bess_net + dr_supply + ph_net + m.unserv[t] == demand_w[t-1]
-    m.Balance = pyo.Constraint(m.T, rule=balance)
+    # ── Network model — DC-OPF (v1.5) ────────────────────────────────
+    # When `buses` and `lines` are declared (any non-empty), we switch
+    # from copperplate to per-bus balance + DC line flows + capacity
+    # limits.  Output adds bus_lmp (= dual of per-bus balance) and
+    # line_flow MW.
+    _net_input = solver_cfg.get("_network", {})
+    buses     = _net_input.get("buses") or []
+    lines     = _net_input.get("lines") or []
+    bus_ids   = [b["id"] for b in buses]
+    use_dcopf = bool(buses and lines)
+
+    if use_dcopf:
+        # Map asset → bus (defaults to first bus when missing).
+        slack = next((b["id"] for b in buses if b.get("is_slack")), bus_ids[0])
+        asset_bus = {gid: (assets[gid].get("bus") or bus_ids[0]) for gid in assets}
+        # Demand per bus.  Two formats: explicit demand_by_bus (list per bus)
+        # or load_share_by_bus (fraction of total system demand).
+        demand_by_bus = _net_input.get("demand_by_bus")
+        load_share    = _net_input.get("load_share_by_bus") or {}
+        if not load_share and not demand_by_bus:
+            # Default: distribute load equally across buses.
+            load_share = {b: 1.0/len(bus_ids) for b in bus_ids}
+        if load_share:
+            tot = sum(load_share.values())
+            if tot > 0: load_share = {k: v/tot for k, v in load_share.items()}
+
+        m.B = pyo.Set(initialize=bus_ids)
+        m.L = pyo.Set(initialize=[ln["id"] for ln in lines])
+        m.theta = pyo.Var(m.B, m.T, domain=pyo.Reals)
+        m.fl    = pyo.Var(m.L, m.T, domain=pyo.Reals)         # MW flow from→to (signed)
+
+        line_dict = {ln["id"]: ln for ln in lines}
+        # Slack bus angle = 0
+        def _slack(m, t): return m.theta[slack, t] == 0
+        m.SlackTheta = pyo.Constraint(m.T, rule=_slack)
+        # DC flow: fl = (theta_from - theta_to) / x_pu
+        def _flow(m, lid, t):
+            ln = line_dict[lid]
+            x  = float(ln.get("x_pu", 0.05))
+            return m.fl[lid, t] == (m.theta[ln["from_bus"], t] - m.theta[ln["to_bus"], t]) / x
+        m.LineFlow = pyo.Constraint(m.L, m.T, rule=_flow)
+        # Capacity bounds (both directions)
+        def _cap_pos(m, lid, t):
+            return m.fl[lid, t] <= float(line_dict[lid]["capacity_mw"])
+        def _cap_neg(m, lid, t):
+            return m.fl[lid, t] >= -float(line_dict[lid]["capacity_mw"])
+        m.CapPos = pyo.Constraint(m.L, m.T, rule=_cap_pos)
+        m.CapNeg = pyo.Constraint(m.L, m.T, rule=_cap_neg)
+
+        # Per-bus balance: gen + bess_net + dr + ph + unserv = load_at_b + Σ(out-in flows)
+        # Σ_l_out fl_l - Σ_l_in fl_l   (positive = leaving)
+        from collections import defaultdict
+        out_lines = defaultdict(list); in_lines = defaultdict(list)
+        for ln in lines:
+            out_lines[ln["from_bus"]].append(ln["id"])
+            in_lines[ln["to_bus"]].append(ln["id"])
+
+        def _bus_balance(m, b, t):
+            gen  = sum(m.p[g,t] for g in disp_ids if asset_bus.get(g) == b)
+            bess_net = sum(m.dis[bid,t] - m.ch[bid,t] for bid in bess_ids
+                           if asset_bus.get(bid) == b) if bess_ids else 0
+            dr_supply = sum(m.dr[d,t] for d in dr_ids if asset_bus.get(d) == b) if dr_ids else 0
+            ph_net = sum((m.ph_gen_hi[h,t] + m.ph_gen_lo[h,t])
+                         - (m.ph_pmp_hi[h,t] + m.ph_pmp_lo[h,t])
+                         for h in ph_ids if asset_bus.get(h) == b) if ph_ids else 0
+            net_outflow = sum(m.fl[lid, t] for lid in out_lines[b]) \
+                        - sum(m.fl[lid, t] for lid in in_lines[b])
+            # Demand at bus b
+            if demand_by_bus and b in demand_by_bus:
+                d_b = demand_by_bus[b][t-1] if isinstance(demand_by_bus[b], list) else float(demand_by_bus[b])
+            else:
+                d_b = demand_w[t-1] * float(load_share.get(b, 0.0))
+            # bus-level unserved share = total unserved × bus share (proxy)
+            unserv_b = m.unserv[t] * float(load_share.get(b, 1.0/len(bus_ids)))
+            return gen + bess_net + dr_supply + ph_net + unserv_b - net_outflow == d_b
+        m.Balance = pyo.Constraint(m.B, m.T, rule=_bus_balance)
+    else:
+        # ── Copperplate (legacy) ────────────────────────────────────
+        # Σ p[g,t] + unserv + DR_supply + PH_net - BESS_net = demand[t]
+        def balance(m, t):
+            gen  = sum(m.p[g,t] for g in disp_ids)
+            bess_net = sum(m.dis[b,t] - m.ch[b,t] for b in bess_ids) if bess_ids else 0
+            dr_supply = sum(m.dr[d,t] for d in dr_ids) if dr_ids else 0
+            ph_net = sum((m.ph_gen_hi[h,t] + m.ph_gen_lo[h,t])
+                         - (m.ph_pmp_hi[h,t] + m.ph_pmp_lo[h,t])
+                         for h in ph_ids) if ph_ids else 0
+            return gen + bess_net + dr_supply + ph_net + m.unserv[t] == demand_w[t-1]
+        m.Balance = pyo.Constraint(m.T, rule=balance)
 
     # ── Generation bounds ──────────────────────────────────────────────
     def gen_lb(m, g, t):
@@ -1147,9 +1224,35 @@ def solve_window(
             pot = get_pmax_t(assets[g], t-1, profiles_w)
             curt += max(0.0, pot - disp[g]) * dt
 
-        # Lambda (VOLL-aware, from ED resolve in Phase 2 — here use dual)
-        try:    lam = abs(float(m.dual[m.Balance[t]]))
-        except: lam = 0.0
+        # Lambda (VOLL-aware) — copperplate single λ vs nodal LMP per bus
+        bus_lmp = {}
+        line_flow = {}
+        if use_dcopf:
+            # Per-line MW flows (from primal m.fl).
+            try:
+                for ln in lines:
+                    lid = ln["id"]
+                    line_flow[lid] = round(float(pyo.value(m.fl[lid, t]) or 0.0), 2)
+            except Exception:
+                pass
+            # Per-bus dual.  For MIP runs HiGHS often doesn't surface
+            # constraint duals — when missing, broadcast the system λ
+            # (computed below) so the field is always populated.
+            dcopf_dual_ok = False
+            try:
+                tmp = {}
+                for b in bus_ids:
+                    tmp[b] = round(abs(float(m.dual[m.Balance[b, t]])), 3)
+                if all(isinstance(v, (int, float)) for v in tmp.values()):
+                    bus_lmp = tmp
+                    dcopf_dual_ok = True
+            except Exception:
+                pass
+            try:    lam = abs(float(m.dual[m.Balance[bus_ids[-1], t]]))
+            except: lam = 0.0
+        else:
+            try:    lam = abs(float(m.dual[m.Balance[t]]))
+            except: lam = 0.0
         if lam < 1e-6:
             # VOLL-aware fallback: check unserved → marginal committed
             unserv = pv(m.unserv, t)
@@ -1158,6 +1261,10 @@ def solve_window(
             else:
                 mcs = [assets[g]["_dispMC"] for g in disp_ids if disp.get(g,0) > 0.5]
                 lam = max(mcs) if mcs else 0.0
+        # If DC-OPF is on but MIP duals weren't available, populate
+        # bus_lmp with the system λ (zero-congestion assumption).
+        if use_dcopf and not bus_lmp:
+            bus_lmp = {b: round(lam, 3) for b in bus_ids}
 
         # Reserves
         res_up_h   = {rid: {g: pv(m.res_up,  rid, g, t) for g in res_elig[rid]}
@@ -1246,6 +1353,8 @@ def solve_window(
             "hydro":           hydro_h,
             "dr":              dr_h,
             "pumped_hydro":    ph_h,
+            "bus_lmp":         bus_lmp,
+            "line_flow":       line_flow,
         })
 
     # ── Carry final state ──────────────────────────────────────────────
@@ -1288,7 +1397,14 @@ def solve_all(inp: dict, assets: dict, profiles: dict, gas_limits: dict) -> tupl
     H_total_h = int(sh.get("horizon_hours", len(profiles.get("demand", [])) or HOURS_PER_YEAR))
     demand  = profiles["demand"]
     reserve_prods = inp.get("reserve_products", [])
-    solver_cfg    = inp.get("solver_settings", {})
+    solver_cfg    = dict(inp.get("solver_settings", {}))
+    # Pass network model into solve_window via solver_cfg piggyback.
+    solver_cfg["_network"] = {
+        "buses": inp.get("buses") or [],
+        "lines": inp.get("lines") or [],
+        "demand_by_bus": inp.get("demand_by_bus"),
+        "load_share_by_bus": inp.get("load_share_by_bus"),
+    }
 
     # Resolution → period duration.
     r_min, _ppy, dt_h = resolve_resolution(inp)
@@ -1711,7 +1827,10 @@ def build_result_store(hourly: list, assets: dict, inp: dict, solve_time: float,
                 "unserved_mwh":  h["unserved_mwh"],
                 "curtailed_mwh": h["curtailed_mwh"],
                 "gas_mm3h":      h["gas_mm3h"],
-                "reserve_shortfall": h["reserve_shortfall"]
+                "reserve_shortfall": h["reserve_shortfall"],
+                # v1.5 DC-OPF: only present when network model is on.
+                "bus_lmp":       h.get("bus_lmp", {}),
+                "line_flow":     h.get("line_flow", {}),
             }
             for h in hourly
         ],
