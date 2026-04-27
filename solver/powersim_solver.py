@@ -2203,7 +2203,10 @@ if __name__ == "__main__":
         print(f"   CVaR₉₅:     ${stoch['cvar95']:>12,.0f}")
         print(f"   Risk Prem.: ${stoch['risk_premium']:>12,.0f}")
 
-    # Save
+    # Save — ensure parent directories exist (bug fix r4-1).
+    from pathlib import Path as _P
+    _P(args.output).parent.mkdir(parents=True, exist_ok=True)
+    _P(args.excel).parent.mkdir(parents=True, exist_ok=True)
     with open(args.output, "w", encoding="utf-8") as f:
         json.dump(results, f, ensure_ascii=False, indent=2)
     print(f"\n💾 JSON:  {args.output}")

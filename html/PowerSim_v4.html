@@ -1330,6 +1330,111 @@ function removeAsset(id){
   STATE.assets=STATE.assets.filter(a=>a.id!==id);
   renderAssetTable(); updateDashKpis(); updateGasEligibleUnits();
 }
+// ── Asset CSV/XLSX template download + upload (bug-fix: previously
+//   referenced from HTML but not defined → console error on click). ──
+function downloadAssetTemplate(){
+  // Generate a CSV with the most common columns + 1 example row per type.
+  const cols = ['id','name','type','committable','pmin','pmax','pmax_installed','power_mw','energy_mwh',
+                'mc','heat_rate','fuel_type','fuel_price','vom','startup_cost','no_load_cost',
+                'ramp_up','ramp_down','min_up','min_down','for_rate',
+                'soc_init','soc_min','soc_max','eta_charge','eta_discharge','vom_discharge',
+                'pmax_curtail','price_per_mwh','hours_per_year_max',
+                'pump_mw','efficiency_pump','efficiency_gen','soc_deep_threshold',
+                'pmax_profile','availability_profile','inflow_profile','bus','_commiss_year'];
+  const sample = [
+    {id:'thermal_demo',     name:'CCGT (sample)',     type:'thermal',  committable:true,  pmin:50,  pmax:200, mc:0, heat_rate:6.8, fuel_type:'gas',fuel_price:5.5,vom:2,startup_cost:1000,no_load_cost:50,ramp_up:60,ramp_down:60,min_up:3,min_down:2,for_rate:0.08},
+    {id:'hydro_reg_demo',   name:'Reservoir HPP',     type:'hydro_reg',committable:true,  pmin:0,   pmax:100, vom:0, ramp_up:30, ramp_down:30, for_rate:0.04},
+    {id:'hydro_ror_demo',   name:'RoR HPP (×0.65)',   type:'hydro_ror',committable:false, pmin:0,   pmax:30,  vom:0, ramp_up:9999, ramp_down:9999, for_rate:0.06},
+    {id:'wind_demo',        name:'Wind site',         type:'wind',     committable:false, pmax_installed:50, vom:0},
+    {id:'solar_demo',       name:'Solar site',        type:'solar',    committable:false, pmax_installed:20, vom:0},
+    {id:'bess_demo',        name:'BESS 50/200',       type:'bess',     committable:false, power_mw:50, energy_mwh:200, soc_init:0.5, soc_min:0.05, soc_max:0.95, eta_charge:0.92, eta_discharge:0.92, vom_discharge:1},
+    {id:'dr_demo',          name:'DR — Industrial',   type:'dr',       committable:false, pmax_curtail:50, price_per_mwh:200, hours_per_year_max:200},
+    {id:'pumped_hydro_demo',name:'Pumped Hydro',      type:'pumped_hydro', committable:false, pmax:100, pump_mw:95, energy_mwh:600, soc_init:0.5, soc_min:0.05, soc_max:0.95},
+    {id:'import_demo',      name:'Neighbour import',  type:'import',   committable:false, pmax_profile:500, vom:50},
+  ];
+  const rows = [cols.join(','),
+                ...sample.map(s => cols.map(c => {
+                  const v = s[c]; if(v===undefined||v===null) return '';
+                  if(typeof v==='string' && v.includes(',')) return '"'+v.replace(/"/g,'""')+'"';
+                  return String(v);
+                }).join(','))];
+  const blob = new Blob([rows.join('\n')], {type:'text/csv;charset=utf-8'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'PowerSim_asset_template.csv';
+  a.click(); URL.revokeObjectURL(a.href);
+  showBanner('✅ Template CSV ჩამოიტვირთა (9 example rows)','g');
+}
+
+function uploadAssets(input){
+  const file = input.files && input.files[0]; if(!file) return;
+  const reader = new FileReader();
+  const ext = (file.name.split('.').pop()||'').toLowerCase();
+  reader.onload = e => {
+    try{
+      let rows;
+      if(ext === 'csv' || ext === 'txt'){
+        // Robust CSV parse: handle quoted fields, comma-decimal, BOM.
+        const text = String(e.target.result).replace(/^﻿/,'');
+        const lines = text.split(/\r?\n/).filter(l=>l.trim().length);
+        if(!lines.length) throw new Error('empty file');
+        const split = ln => {
+          // simple quote-aware split
+          const out = []; let cur=''; let q=false;
+          for(const c of ln){
+            if(c==='"'){ q=!q; continue; }
+            if(c===',' && !q){ out.push(cur); cur=''; continue; }
+            cur += c;
+          }
+          out.push(cur); return out.map(s=>s.trim());
+        };
+        const headers = split(lines[0]);
+        rows = lines.slice(1).map(ln => {
+          const cells = split(ln);
+          const o = {};
+          headers.forEach((h, i) => { o[h] = cells[i]; });
+          return o;
+        });
+      } else {
+        if(!window.XLSX) throw new Error('XLSX library not loaded');
+        const data = new Uint8Array(e.target.result);
+        const wb = XLSX.read(data, {type:'array'});
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        rows = XLSX.utils.sheet_to_json(ws, {defval:''});
+      }
+      if(!rows.length) throw new Error('no rows');
+      // Coerce types and load assets.
+      const coerce = (o) => {
+        const a = {...o};
+        for(const k of Object.keys(a)){
+          const v = a[k];
+          if(v === '' || v == null){ delete a[k]; continue; }
+          if(k === 'committable'){ a[k] = (String(v).toLowerCase() === 'true' || v === true || v === 1 || v === '1'); continue; }
+          if(typeof v === 'string'){
+            const num = +v.replace(',', '.');
+            if(!isNaN(num) && /^[-\d.,eE+]+$/.test(v.replace(',', '.'))) { a[k] = num; }
+          }
+        }
+        return a;
+      };
+      const valid = rows.filter(r => r.id && r.type).map(coerce);
+      if(!valid.length) throw new Error('no rows with id+type');
+      STATE.assets = valid;
+      assetIdCtr = STATE.assets.length + 1;
+      renderAssetTable();
+      updateGasEligibleUnits();
+      renderWorkflowSteps();
+      updateDashKpis();
+      showBanner(`✅ ${valid.length} ასეტი ჩაიტვ. (file: ${file.name})`, 'g');
+    } catch(err){
+      showBanner('❌ Asset import: ' + err.message, 'r');
+    }
+    input.value = '';
+  };
+  if(ext === 'csv' || ext === 'txt') reader.readAsText(file, 'utf-8');
+  else                                reader.readAsArrayBuffer(file);
+}
+
 function clearAssets(){
   if(!confirm('ყველა სადგ. წაიშლება?')) return;
   STATE.assets=[]; assetIdCtr=1;
