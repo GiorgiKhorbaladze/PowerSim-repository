@@ -203,13 +203,33 @@ def plan_multi_year(inp: dict) -> dict:
         return tot
     m.OBJ = pyo.Objective(rule=_obj, sense=pyo.minimize)
 
+    # Solve with graceful infeasibility handling — return a structured
+    # error rather than crashing when candidate caps can't meet targets.
     try:
         from pyomo.contrib.appsi.solvers.highs import Highs
         s = Highs(); s.highs_options["log_to_console"] = False
-        try: s.solve(m, load_solutions=True)
-        except TypeError: s.solve(m)
-    except Exception:
-        pyo.SolverFactory("appsi_highs").solve(m)
+        try:    res = s.solve(m, load_solutions=True)
+        except TypeError: res = s.solve(m)
+    except Exception as e:
+        msg = str(e).lower()
+        if any(tag in msg for tag in ("infeasib", "no solution", "not found")):
+            return {
+                "mode":   "multi_year",
+                "error":  "infeasible",
+                "diagnosis": (
+                    "Candidate max_build_mw caps cannot meet adequacy + "
+                    "energy targets across the multi-year horizon. "
+                    "Loosen max_build_mw, raise CF, or reduce "
+                    "demand_growth_pct / reserve_margin."),
+                "years":  years,
+                "peaks_by_year_mw":     [round(p, 1) for p in peaks],
+                "energy_target_by_year_mwh": [round(e, 0) for e in energies],
+                "existing_firm_mw":     round(peak_existing, 1),
+                "existing_energy_mwh":  round(energy_existing, 0),
+            }
+        try: pyo.SolverFactory("appsi_highs").solve(m)
+        except Exception as e2:
+            return {"mode":"multi_year", "error": str(e2)}
 
     builds_by_year = {}
     cum_by_year    = {}
@@ -291,14 +311,30 @@ def plan(inp: dict) -> dict:
         return sum((capex[c] * CRF[c] + opex[c]) * m.x[c] for c in m.C)
     m.OBJ = pyo.Objective(rule=_obj, sense=pyo.minimize)
 
-    # HiGHS is fine for an LP.
+    # HiGHS is fine for an LP.  Same graceful-infeasibility handler
+    # as plan_multi_year (both share the bounded-build LP shape).
     try:
         from pyomo.contrib.appsi.solvers.highs import Highs
         s = Highs(); s.highs_options["log_to_console"] = False
         try: s.solve(m, load_solutions=True)
         except TypeError: s.solve(m)
-    except Exception:
-        pyo.SolverFactory("appsi_highs").solve(m)
+    except Exception as e:
+        msg = str(e).lower()
+        if any(tag in msg for tag in ("infeasib", "no solution", "not found")):
+            return {
+                "mode": "single_year",
+                "error": "infeasible",
+                "diagnosis": (
+                    "Candidate max_build_mw caps cannot satisfy "
+                    "adequacy + energy targets. Raise max_build_mw or "
+                    "reduce reserve_margin / energy_target_twh."),
+                "peak_load_mw":     round(peak_load, 1),
+                "existing_firm_mw": round(peak_existing, 1),
+                "adequacy_target_mw": round(adequacy_target, 1),
+                "energy_target_mwh":  round(e_target_mwh, 0),
+            }
+        try: pyo.SolverFactory("appsi_highs").solve(m)
+        except Exception as e2: return {"mode":"single_year","error":str(e2)}
 
     builds = {c: float(pyo.value(m.x[c]) or 0.0) for c in cids}
     annual_opex = sum(opex[c] * builds[c] for c in cids)
