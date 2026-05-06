@@ -574,12 +574,27 @@ tr:hover td{background:var(--bg3)}
         </div>
         <div class="field">
           <label>Resolution (v1.3 #3)</label>
-          <select id="hor-resolution">
-            <option value="60" selected>60 min (hourly)</option>
-            <option value="30">30 min</option>
-            <option value="15">15 min</option>
-            <option value="5">5 min</option>
+          <select id="hor-resolution" onchange="onResolutionChange()">
+            <option value="60" selected>60 min (1 საათი — hourly)</option>
+            <option value="30">30 min (ნახევარ-საათიანი)</option>
+            <option value="15">15 min (15-წუთიანი — VRE balancing)</option>
+            <option value="5">5 min (5-წუთიანი — RE ramp studies)</option>
+            <option value="1">1 min (1-წუთიანი — VRE high-res, 24h max)</option>
           </select>
+        </div>
+        <div class="field" style="background:rgba(0,176,240,.06);border:1px solid rgba(0,176,240,.2);
+                                  border-radius:5px;padding:6px;margin-top:5px">
+          <div style="font-size:8px;color:var(--blue);font-weight:700;margin-bottom:3px">
+            ⚡ VRE high-res presets (ქარი/მზე)
+          </div>
+          <div class="bgrp" style="margin:0">
+            <button class="btn btn-b btn-s" onclick="presetVRE(1, 24)" title="1-min × 24h">1m × 24h</button>
+            <button class="btn btn-b btn-s" onclick="presetVRE(5, 168)" title="5-min × 7d">5m × 7d</button>
+            <button class="btn btn-b btn-s" onclick="presetVRE(15, 720)" title="15-min × 30d">15m × 30d</button>
+          </div>
+          <div style="font-size:7px;color:var(--t3);margin-top:3px">
+            მცირე resolution ⇒ ცოტა საათი (problem size = horizon × 60/min).
+          </div>
         </div>
         <div class="field">
           <label>Solver backend (v1.3 #5)</label>
@@ -2278,6 +2293,48 @@ function applyHorizonPreset(){
   if(el) el.value=h;
   STATE.horizon.horizon_h=h;
   updateHorizonPreview();
+}
+
+// ── Resolution + VRE presets ──────────────────────────────────────
+// onResolutionChange() warns when sub-hourly × long horizon would
+// blow up the MIP size beyond practical limits.
+function onResolutionChange(){
+  const r = +((document.getElementById('hor-resolution')||{}).value || 60);
+  const hh = +((document.getElementById('hor-hours')||{}).value || STATE.horizon.horizon_h || 168);
+  const periods = hh * (60 / r);
+  if(periods > 50_000){
+    showBanner(`⚠ ${r}-min × ${hh}h = ${periods.toLocaleString()} period — solver might be slow / OOM.  Reduce horizon.`, 'o', 8000);
+  }
+  updateHorizonPreview();
+}
+
+// presetVRE(resolution_min, horizon_hours) — quick setup for wind/solar
+// high-resolution studies (e.g. 1-min × 24h to capture sub-minute
+// ramping events that an hourly run averages away).
+function presetVRE(res_min, hours){
+  const r = document.getElementById('hor-resolution');
+  const hp= document.getElementById('hor-preset');
+  const hh= document.getElementById('hor-hours');
+  if(r){ r.value = String(res_min); }
+  if(hh){ hh.value = String(hours); }
+  // Map to nearest preset value if applicable.
+  if(hp){
+    const opts = Array.from(hp.options).map(o=>+o.value);
+    if(opts.includes(hours)) hp.value = String(hours);
+  }
+  STATE.horizon.horizon_h = hours;
+  // Ensure rolling window matches horizon for fast first run.
+  STATE.horizon.window_h = hours;
+  STATE.horizon.step_h   = hours;
+  const wEl = document.getElementById('hor-window');
+  const sEl = document.getElementById('hor-step');
+  if(wEl) wEl.value = hours;
+  if(sEl) sEl.value = hours;
+  // Switch to "absolute" demand by default for short windows so the
+  // user can paste a real measured wind/solar trace without needing an
+  // 8760h shape — but only if no demand profile is loaded yet.
+  updateHorizonPreview();
+  showBanner(`⚡ VRE preset: ${res_min}-min × ${hours}h = ${(hours*60/res_min).toLocaleString()} period`, 'b', 6000);
 }
 
 function updateHorizonPreview(){

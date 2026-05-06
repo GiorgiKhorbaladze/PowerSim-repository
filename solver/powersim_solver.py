@@ -86,11 +86,13 @@ SOLVER_VERSION = "powersim_solver 1.3.0"   # v1.3: sub-hourly, Gurobi, warm-star
 def resolve_resolution(inp: dict) -> tuple[int, int, float]:
     """
     Pick (resolution_min, periods_per_year, period_hours) from the input.
-    Defaults to 60-min (hourly) for back-compat. Only {5,15,30,60} are valid.
+    Defaults to 60-min (hourly) for back-compat. Allowed: {1,5,15,30,60}.
+    1-min × 8760h = 525,600 periods — only practical on short windows
+    (24-168h) for VRE high-resolution studies.
     """
     r = int(inp.get("resolution_min", 60))
-    if r not in (5, 15, 30, 60):
-        raise ValueError(f"resolution_min={r} not in (5,15,30,60)")
+    if r not in (1, 5, 15, 30, 60):
+        raise ValueError(f"resolution_min={r} not in (1,5,15,30,60)")
     ppy = HOURS_PER_YEAR * (60 // r)
     return r, ppy, r / 60.0
 
@@ -1248,8 +1250,10 @@ def solve_window(
                     dcopf_dual_ok = True
             except Exception:
                 pass
-            try:    lam = abs(float(m.dual[m.Balance[bus_ids[-1], t]]))
-            except: lam = 0.0
+            # Use slack-bus dual as system λ; if duals weren't loaded
+            # the bus_lmp dict was just broadcast from system λ below.
+            try:    lam = abs(float(m.dual[m.Balance[slack, t]]))
+            except: lam = sum(bus_lmp.values())/max(len(bus_lmp),1) if bus_lmp else 0.0
         else:
             try:    lam = abs(float(m.dual[m.Balance[t]]))
             except: lam = 0.0
@@ -1492,7 +1496,17 @@ def compute_marginal_prices(hourly: list, assets: dict, profiles: dict,
     Post-process: fix commitment from UC solve, re-run LP ED to get
     clean dual-based marginal prices (lambda).
     This is the correct method for MIP → LP duality extraction.
+
+    Note: this is a copperplate LP resolve.  When DC-OPF is enabled
+    (`solver_cfg["_network"]["buses"]` non-empty), the per-bus LMPs
+    already come from the MIP balance duals / fallback in
+    `solve_window`; calling --ed-resolve on a DC-OPF run would
+    overwrite those with a copperplate λ and lose nodal information,
+    so we skip the resolve and emit a warning.
     """
+    if (solver_cfg.get("_network") or {}).get("buses"):
+        print("ℹ️  ED resolve skipped — DC-OPF is on; nodal LMPs already in bus_lmp.")
+        return hourly
     print("⚡ ED resolve for marginal prices (LP, fixed commitment)...")
     demand = [h["load_mw"] for h in hourly]
     H = len(demand)
@@ -1639,6 +1653,9 @@ def build_result_store(hourly: list, assets: dict, inp: dict, solve_time: float,
             "avg_cost_mwh":  round(gross / max(energy,1), 3),
             "gas_mm3":       round(gas_mm3, 4),
             "SRMC":          round(a["_dispMC"], 2),
+            "heat_rate":     float(a.get("heat_rate", 0) or 0),       # bug fix r-A1
+            "fuel_type":     a.get("fuel_type"),                       # bug fix r-A1
+            "bus":           a.get("bus"),                              # for DC-OPF
             "curtailed_mwh": round(curt, 1)
         }
 

@@ -50,7 +50,7 @@ HOURS_PER_YEAR          = 8760
 
 # Allowed sub-hourly resolutions (minutes per period).
 # The default remains 60 for full backward-compatibility with v1.0..v1.2.
-ALLOWED_RESOLUTIONS_MIN: tuple[int, ...] = (60, 30, 15, 5)
+ALLOWED_RESOLUTIONS_MIN: tuple[int, ...] = (60, 30, 15, 5, 1)
 
 # Back-ends the solver can drive. 'auto' → HiGHS if Gurobi isn't importable.
 ALLOWED_SOLVER_BACKENDS: tuple[str, ...] = ("auto", "highs", "gurobi", "cplex")
