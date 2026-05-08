@@ -36,7 +36,8 @@ jobs:
               scripts/powersim_report.py \
               scripts/db_ingest.py \
               scripts/batch.py \
-              tests/smoke_168h.py
+              tests/smoke_168h.py \
+              tests/check_json_contract.py
       - name: Dependency sanity
         run: |
           python - <<'PY'
@@ -49,6 +50,8 @@ jobs:
           PY
       - name: Schema self-test
         run: python schema/powersim_schema.py
+      - name: JSON contract regression checks
+        run: python tests/check_json_contract.py
       - name: Smoke test (synthetic project_data → solver → validate)
         run: |
           python scripts/build_demo_project.py --out project_data
