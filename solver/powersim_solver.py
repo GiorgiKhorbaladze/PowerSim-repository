@@ -441,6 +441,12 @@ def solve_window(
     offset_h:     int = 0,       # global hour offset for calendar
     dt:           float = 1.0,   # hours per period (60-min default)
     warm_start:   dict | None = None,   # optional {varname: {keys: value}} hints
+    commit_periods: int | None = None,  # rolling-horizon: periods committed
+                                        # to all_hourly from this window;
+                                        # fin_state is computed at this
+                                        # boundary so cumulative budgets and
+                                        # min-up/down state propagate
+                                        # correctly to the next window.
 ) -> tuple[list, dict, float, float]:
     """
     Solve one rolling window.
@@ -674,6 +680,31 @@ def solve_window(
         end = min(t + mdt_p - 1, T[-1])
         return sum(m.z[g,tau] for tau in range(t, end+1)) <= 1 - m.u[g,t]
     m.MinDn = pyo.Constraint(m.GC, m.T, rule=min_dn)
+
+    # ── Boundary state: periods_on / periods_off carry-over ───────────
+    # If the previous window left a unit ON for fewer periods than its
+    # min_up requires, this window must keep it ON for the remainder.
+    # Symmetric for OFF / min_down.  These constraints are no-ops on the
+    # very first window (init_state has no periods_on/off info).
+    for g in committable:
+        prev = init_state.get(g, {}) if isinstance(init_state, dict) else {}
+        u0   = int(prev.get("u", 0))
+        on0  = int(prev.get("periods_on", 0))
+        off0 = int(prev.get("periods_off", 0))
+        mut_p = _hours_to_periods(float(assets[g].get("min_up", 0)))
+        mdt_p = _hours_to_periods(float(assets[g].get("min_down", 0)))
+        # Force ON for remaining min-up periods when previous window
+        # finished with the unit on but hasn't met min_up yet.
+        if u0 == 1 and on0 > 0 and on0 < mut_p:
+            need_on = min(mut_p - on0, len(T))
+            for t_force in range(1, need_on + 1):
+                m.u[g, t_force].fix(1)
+        # Force OFF for remaining min-down periods when previous window
+        # finished with the unit off but hasn't met min_down yet.
+        if u0 == 0 and off0 > 0 and off0 < mdt_p:
+            need_off = min(mdt_p - off0, len(T))
+            for t_force in range(1, need_off + 1):
+                m.u[g, t_force].fix(0)
 
     # ── Ramp constraints (ramp_up/down are MW per HOUR → MW per period = ramp*dt)
     def ramp_up_c(m, g, t):
@@ -913,13 +944,24 @@ def solve_window(
             return m.dr[d, t] <= pmc
         m.DR_UB = pyo.Constraint(m.DR, m.T, rule=dr_ub)
 
-        # Annual hours cap, pro-rated by (H · dt / HOURS_PER_YEAR).
+        # ── Annual hours cap with rolling-window carry-over ────────────
+        # init_state["_dr_remaining_hours"][asset_id] holds the hours-of-
+        # call-out remaining for this study year.  When absent (single-
+        # shot solves), we fall back to a fresh pro-rate of the full
+        # hours_per_year_max.
+        dr_remaining_in = (init_state or {}).get("_dr_remaining_hours") or {}
         def dr_annual(m, d):
             a = assets[d]
-            cap_h = float(a.get("hours_per_year_max", HOURS_PER_YEAR))
-            cap_mwh_year = cap_h * float(a["pmax_curtail"])
-            frac = (H * dt) / max(HOURS_PER_YEAR, 1)
-            return sum(m.dr[d, t] * dt for t in m.T) <= cap_mwh_year * frac
+            pmc = float(a["pmax_curtail"])
+            if d in dr_remaining_in:
+                cap_h = max(0.0, float(dr_remaining_in[d]))
+                cap_mwh_window = cap_h * pmc
+            else:
+                cap_h = float(a.get("hours_per_year_max", HOURS_PER_YEAR))
+                cap_mwh_year = cap_h * pmc
+                frac = (H * dt) / max(HOURS_PER_YEAR, 1)
+                cap_mwh_window = cap_mwh_year * frac
+            return sum(m.dr[d, t] * dt for t in m.T) <= cap_mwh_window
         m.DR_Annual = pyo.Constraint(m.DR, rule=dr_annual)
 
     # ── Reserve constraints ────────────────────────────────────────────
@@ -959,21 +1001,30 @@ def solve_window(
                     m.res_up[rid,g,t].fix(0)
                     m.res_down[rid,g,t].fix(0)
 
-    # ── Gas constraints ────────────────────────────────────────────────
+    # ── Gas constraints with rolling-window carry-over ────────────────
     # Gas flow per period = gas_rate[Mm³/MWh] × p[MW] × dt[h].
+    #
+    # Carry-over:
+    #   gas_limits["_remaining_annual_mm3"]   — Mm³ left in this study year.
+    #   gas_limits["_remaining_monthly_mm3"]  — {1..12: Mm³ left in that month}.
+    # When solve_all is driving the rolling horizon it decrements these
+    # after each committed slice and threads the residual through to
+    # the next solve_window call.  When absent (single-shot solves) we
+    # fall back to the original full annual / per-month caps.
     gas_mode = gas_limits.get("mode","none")
     if gas_mode != "none" and gas_units:
-        H_hours = H * dt
-        def gas_total(m):
-            return sum(assets[g]["_gas_rate"] * m.p[g,t] * dt
-                       for g in gas_units for t in m.T) <= \
-                   gas_limits.get("daily_limit", 9999) * H_hours
-        if gas_mode in ("annual","annual+monthly") and gas_limits.get("daily_limit"):
+        annual_cap_full = (gas_limits.get("annual_limit") or 0)
+        remaining_annual = gas_limits.get("_remaining_annual_mm3", annual_cap_full)
+        if gas_mode in ("annual","annual+monthly") and annual_cap_full:
+            # Capture remaining_annual via a local for safe closure binding.
+            _cap_annual = float(remaining_annual)
+            def gas_total(m):
+                return sum(assets[g]["_gas_rate"] * m.p[g, t] * dt
+                           for g in gas_units for t in m.T) <= _cap_annual
             m.GasTotal = pyo.Constraint(rule=gas_total)
-        # ── Real per-calendar-month gas cap ────────────────────────────
-        # Map each window period t to its calendar month via the global
-        # hour offset and the period duration.
+        # ── Real per-calendar-month gas cap with carry-over ────────────
         monthly = gas_limits.get("monthly_limits")
+        remaining_monthly = gas_limits.get("_remaining_monthly_mm3") or {}
         if gas_mode in ("monthly","annual+monthly") and monthly:
             HOURS_PER_MONTH = (
                 31*24, 28*24, 31*24, 30*24, 31*24, 30*24,
@@ -997,10 +1048,14 @@ def solve_window(
                 def _gas_month_rule(m, mo):
                     periods = month_to_periods[mo]
                     cap_full = float(monthly[mo])
-                    # Pro-rate: hours (= periods × dt) covered by window vs full month.
-                    hours_in_window = len(periods) * dt
-                    frac = hours_in_window / float(HOURS_PER_MONTH[mo - 1])
-                    cap_window = cap_full * frac
+                    # Decide between fresh-window pro-rate (no carry-over
+                    # provided) and remaining-month enforcement (carry-over).
+                    if mo in remaining_monthly:
+                        cap_window = max(0.0, float(remaining_monthly[mo]))
+                    else:
+                        hours_in_window = len(periods) * dt
+                        frac = hours_in_window / float(HOURS_PER_MONTH[mo - 1])
+                        cap_window = cap_full * frac
                     return sum(assets[g]["_gas_rate"] * m.p[g, t] * dt
                                for g in gas_units for t in periods) <= cap_window
                 m.GasMonthly = pyo.Constraint(m.GasMonthlyIdx, rule=_gas_month_rule)
@@ -1249,17 +1304,45 @@ def solve_window(
         })
 
     # ── Carry final state ──────────────────────────────────────────────
-    last_t = T[-1]
+    # `boundary_t` is the last *committed* period.  In rolling-horizon
+    # solves the look-ahead tail (periods commit_periods+1 .. H) is
+    # discarded by solve_all, so the state we hand to the next window
+    # must come from the boundary, not the last solved period.
+    boundary_t = int(commit_periods) if commit_periods else T[-1]
+    boundary_t = max(1, min(boundary_t, T[-1]))
     fin_state = {}
     for g in committable:
-        fin_state[g] = {"u": round(pv(m.u, g, last_t)),
-                        "p": pv(m.p,  g, last_t)}
+        # Read the committed-slice u-trace and count trailing on/off
+        # periods so the next window can enforce the remainder of
+        # min_up / min_down via the boundary fix-and-force constraints.
+        u_series = [int(round(pv(m.u, g, t))) for t in range(1, boundary_t + 1)]
+        last_u = u_series[-1] if u_series else 0
+        trail_on = 0
+        for u in reversed(u_series):
+            if u == 1: trail_on += 1
+            else: break
+        # If the entire committed slice is on, extend with whatever the
+        # previous window had carried in.
+        if trail_on == len(u_series):
+            trail_on += int((init_state.get(g, {}) or {}).get("periods_on", 0))
+        trail_off = 0
+        for u in reversed(u_series):
+            if u == 0: trail_off += 1
+            else: break
+        if trail_off == len(u_series):
+            trail_off += int((init_state.get(g, {}) or {}).get("periods_off", 0))
+        fin_state[g] = {
+            "u":            last_u,
+            "p":            pv(m.p, g, boundary_t),
+            "periods_on":   trail_on  if last_u == 1 else 0,
+            "periods_off":  trail_off if last_u == 0 else 0,
+        }
     for h_id in hydro_reg:
-        fin_state.setdefault(h_id, {})["stor"] = pv(m.stor, h_id, last_t)
+        fin_state.setdefault(h_id, {})["stor"] = pv(m.stor, h_id, boundary_t)
     for b in bess_ids:
-        fin_state.setdefault(b, {})["soc"] = pv(m.soc, b, last_t)
+        fin_state.setdefault(b, {})["soc"] = pv(m.soc, b, boundary_t)
     for h_id in ph_ids:
-        fin_state.setdefault(h_id, {})["ph_soc"] = pv(m.ph_soc, h_id, last_t)
+        fin_state.setdefault(h_id, {})["ph_soc"] = pv(m.ph_soc, h_id, boundary_t)
     if iis_report is not None:
         fin_state["_iis_report"] = iis_report
 
@@ -1323,6 +1406,31 @@ def solve_all(inp: dict, assets: dict, profiles: dict, gas_limits: dict) -> tupl
     committed_p = 0
     prev_hint: dict | None = None
 
+    # ── Carry-over budgets (rolling-horizon correctness) ────────────
+    # These trackers ensure the cumulative gas use, monthly gas use,
+    # and DR call-out hours respect the original input caps even when
+    # the optimisation is decomposed across many windows.
+    annual_cap_full = float(gas_limits.get("annual_limit") or 0)
+    remaining_annual = annual_cap_full
+    monthly_caps = dict(gas_limits.get("monthly_limits") or {})
+    remaining_monthly = {mo: float(v) for mo, v in monthly_caps.items()}
+    HOURS_PER_MONTH_LOCAL = (
+        31*24, 28*24, 31*24, 30*24, 31*24, 30*24,
+        31*24, 31*24, 30*24, 31*24, 30*24, 31*24,
+    )
+    def _hour_to_month_local(global_h: int) -> int:
+        acc = 0
+        for i, hpm in enumerate(HOURS_PER_MONTH_LOCAL, start=1):
+            if global_h < acc + hpm: return i
+            acc += hpm
+        return 12
+    gas_units_global = [a["id"] for a in inp.get("assets", [])
+                        if a.get("type") == "thermal"
+                        and a["id"] in (gas_limits.get("applies_to") or [])]
+    dr_assets = [a for a in inp.get("assets", []) if a.get("type") == "dr"]
+    remaining_dr_hours = {a["id"]: float(a.get("hours_per_year_max", HOURS_PER_YEAR))
+                          for a in dr_assets}
+
     for w in range(n_windows):
         start_p = w * step_p
         end_p   = min(start_p + window_p, H_total_p)
@@ -1333,14 +1441,25 @@ def solve_all(inp: dict, assets: dict, profiles: dict, gas_limits: dict) -> tupl
                       for k, v in profiles.items()}
         start_h    = start_p // periods_per_h
 
+        # Inject remaining budgets into per-window gas_limits / state.
+        gas_limits_window = dict(gas_limits)
+        if annual_cap_full:
+            gas_limits_window["_remaining_annual_mm3"] = remaining_annual
+        if remaining_monthly:
+            gas_limits_window["_remaining_monthly_mm3"] = dict(remaining_monthly)
+        if remaining_dr_hours:
+            state = dict(state)
+            state["_dr_remaining_hours"] = dict(remaining_dr_hours)
+
+        commit_n_p = min(step_p, end_p - start_p)
         hourly_w, state, swall, obj_w = solve_window(
-            assets, demand_w, profiles_w, reserve_prods, gas_limits,
+            assets, demand_w, profiles_w, reserve_prods, gas_limits_window,
             init_state=state, solver_cfg=solver_cfg, offset_h=start_h,
-            dt=dt_h, warm_start=prev_hint if warm_start_enabled else None)
+            dt=dt_h, warm_start=prev_hint if warm_start_enabled else None,
+            commit_periods=commit_n_p)
         if state.get("_iis_report"):
             iis_reports.append({**state["_iis_report"], "window": w+1})
         total_swall += swall
-        commit_n_p = min(step_p, end_p - start_p)
         all_hourly.extend(hourly_w[:commit_n_p])
         committed_p += commit_n_p
         if obj_w == obj_w and len(hourly_w) > 0:
@@ -1348,6 +1467,29 @@ def solve_all(inp: dict, assets: dict, profiles: dict, gas_limits: dict) -> tupl
         pct = committed_p / H_total_p * 100
         print(f"   window {w+1:3d}/{n_windows}: p{start_p:6d}-{start_p+commit_n_p-1:6d} "
               f"| {swall:5.1f}s | {pct:5.1f}% done")
+
+        # ── Decrement remaining budgets from the COMMITTED slice ─────
+        # gas_mm3h on the row is the per-period rate; volume = rate × dt.
+        for j, row in enumerate(hourly_w[:commit_n_p]):
+            gas_used = float(row.get("gas_mm3h") or 0) * dt_h
+            if gas_used > 0:
+                if annual_cap_full:
+                    remaining_annual = max(0.0, remaining_annual - gas_used)
+                if remaining_monthly:
+                    gh = (start_h + int(j * dt_h)) % HOURS_PER_YEAR
+                    mo = _hour_to_month_local(gh)
+                    if mo in remaining_monthly:
+                        remaining_monthly[mo] = max(0.0, remaining_monthly[mo] - gas_used)
+            if remaining_dr_hours:
+                dr_dispatch = row.get("dr") or {}
+                for d in remaining_dr_hours:
+                    pmc = next((float(a["pmax_curtail"]) for a in dr_assets
+                                if a["id"] == d), 0.0)
+                    if pmc > 0:
+                        mw = float(dr_dispatch.get(d, 0) or 0)
+                        # hours-of-call-out = MW dispatched / pmax_curtail × dt
+                        used_h = (mw / pmc) * dt_h
+                        remaining_dr_hours[d] = max(0.0, remaining_dr_hours[d] - used_h)
 
         # Build a warm-start hint from the values this window produced.
         # Uses rolled-forward assignments: period τ in new window ≈ period τ+step in old window.
