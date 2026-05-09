@@ -50,6 +50,7 @@ body{font-family:'Noto Sans Georgian',sans-serif;background:var(--bg);color:var(
            color:var(--t2);cursor:pointer;font-size:14px;padding:4px 8px;
            transition:all .15s}
 .icon-btn:hover{background:var(--card);color:var(--t1)}
+.lang-select{background:var(--bg2);border:1px solid var(--border);border-radius:6px;color:var(--t2);font-family:'Noto Sans Georgian',sans-serif;font-size:9px;font-weight:700;padding:4px 6px;cursor:pointer}
 
 /* ── Layout ───────────────────────────────────────────────────────── */
 .pane{display:none;padding:10px;height:calc(100vh - var(--nav-h));overflow-y:auto}
@@ -171,6 +172,10 @@ tr:hover td{background:var(--bg3)}
     <button class="tab"     data-tab="results">📈 Results</button>
     <button class="tab"     data-tab="compare">🔀 Compare</button>
   </div>
+  <select id="lang-select" class="lang-select" onchange="setLanguage(this.value)" title="Language / ენა" aria-label="Language selector">
+    <option value="ka">ქართული</option>
+    <option value="en">English</option>
+  </select>
   <button class="icon-btn" onclick="toggleTheme()" id="theme-btn" title="Dark/Light">🌙</button>
 </div></nav>
 
@@ -761,6 +766,264 @@ const SCHEMA_VERSION = '1.2';
 const ACCEPTED_OUTPUT_SCHEMAS = new Set(['1.2','1.1','1.0']);
 const MODEL_VERSION  = 'PowerSim v4.0';
 let   assetIdCtr     = 1;
+
+// ══════════════════════════════════════════════════════════════════
+// LOCALIZATION — visible UI copy only; internal schema/variables stay English
+// ══════════════════════════════════════════════════════════════════
+const I18N_STORAGE_KEY = 'powersim.language';
+const I18N_DEFAULT_LANG = 'ka';
+let CURRENT_LANG = I18N_DEFAULT_LANG;
+
+const I18N = {
+  'Workflow': {ka:'სამუშაო პროცესი', en:'Workflow'},
+  'Assets': {ka:'სადგურები', en:'Assets'},
+  'Profiles': {ka:'პროფილები', en:'Profiles'},
+  'Reserves': {ka:'რეზერვები', en:'Reserves'},
+  'Gas': {ka:'გაზი', en:'Gas'},
+  'Horizon': {ka:'ჰორიზონტი', en:'Horizon'},
+  'Validate': {ka:'ვალიდაცია', en:'Validate'},
+  'Results': {ka:'შედეგები', en:'Results'},
+  'Compare': {ka:'შედარება', en:'Compare'},
+  'Dark/Light': {ka:'მუქი/ღია თემა', en:'Dark/Light'},
+  'გამოთვლა...': {ka:'მიმდინარეობს გამოთვლა...', en:'Calculating...'},
+  'სამუშაო პროცესი': {ka:'სამუშაო პროცესი', en:'Workflow'},
+  'სწრაფი ქმედებები': {ka:'სწრაფი ქმედებები', en:'Quick actions'},
+  'GSE 2026 Demo ჩატვირთვა': {ka:'GSE 2026 დემოს ჩატვირთვა', en:'Load GSE 2026 demo'},
+  'ვალიდაცია': {ka:'ვალიდაცია', en:'Validation'},
+  'Export Input JSON': {ka:'Input JSON-ის ექსპორტი', en:'Export input JSON'},
+  'Import Results': {ka:'შედეგების იმპორტი', en:'Import results'},
+  'სისტემის მდგომარეობა': {ka:'სისტემის მდგომარეობა', en:'System status'},
+  'მონაცემები არ ჩაიტვირთა': {ka:'მონაცემები ჯერ არ არის ჩატვირთული', en:'No data loaded yet'},
+  'PowerSim v4.0 — მომხმარებლის სახელმძღვანელო': {ka:'PowerSim v4.0 — მომხმარებლის სახელმძღვანელო', en:'PowerSim v4.0 — User guide'},
+  'HTML პლატფორმა': {ka:'HTML პლატფორმა', en:'HTML platform'},
+  'სადგურების მართვა': {ka:'სადგურების მართვა', en:'Asset management'},
+  'პროფილების ატვირთვა': {ka:'პროფილების ატვირთვა', en:'Profile upload'},
+  'რეზერვ-პროდუქტების შექმნა': {ka:'რეზერვული პროდუქტების შექმნა', en:'Reserve product setup'},
+  'გაზის ლიმიტების დაყენება': {ka:'გაზის ლიმიტების დაყენება', en:'Gas cap setup'},
+  'სტუდიის ჰორიზონტის არჩევა': {ka:'საკვლევი ჰორიზონტის არჩევა', en:'Study horizon selection'},
+  'შეყვანის ვალიდაცია': {ka:'შეყვანილი მონაცემების ვალიდაცია', en:'Input validation'},
+  'შედეგების import ← Python': {ka:'შედეგების იმპორტი ← Python', en:'Import results ← Python'},
+  'ვიზუალიზაცია და ანგარიში': {ka:'ვიზუალიზაცია და ანგარიშგება', en:'Visualization and reporting'},
+  'ატვირთე input JSON': {ka:'ატვირთეთ input JSON', en:'upload input JSON'},
+  'ჩამოტვირთე results JSON': {ka:'ჩამოტვირთეთ results JSON', en:'download results JSON'},
+  'ატვირთე HTML-ში': {ka:'ატვირთეთ HTML-ში', en:'upload into HTML'},
+  'მნიშვნელოვანი:': {ka:'მნიშვნელოვანია:', en:'Important:'},
+  'მიმდინარე Session KPI-ები': {ka:'მიმდინარე სესიის KPI-ები', en:'Current session KPIs'},
+  'სადგ.': {ka:'სადგურები', en:'Assets'},
+  'სულ Pmax': {ka:'ჯამური Pmax', en:'Total Pmax'},
+  'პროფილი': {ka:'პროფილი', en:'Profile'},
+  'სცენარი': {ka:'სცენარი', en:'Scenario'},
+  'სადგ. დამატება': {ka:'სადგურის დამატება', en:'Add asset'},
+  'ტიპი': {ka:'ტიპი', en:'Type'},
+  'დამატება': {ka:'დამატება', en:'Add'},
+  'Registry KPI': {ka:'რეესტრის KPI', en:'Registry KPIs'},
+  'სადგ. არ დამატებულა': {ka:'სადგური ჯერ არ არის დამატებული', en:'No assets added yet'},
+  'ქმედებები': {ka:'ქმედებები', en:'Actions'},
+  'GSE 2026 ჩასმა': {ka:'GSE 2026 დემოს ჩასმა', en:'Insert GSE 2026 demo'},
+  'ყველა წაშლა': {ka:'ყველას წაშლა', en:'Clear all'},
+  'Template XLS': {ka:'XLS შაბლონი', en:'XLS template'},
+  'Excel/CSV ატვ.': {ka:'Excel/CSV ატვირთვა', en:'Upload Excel/CSV'},
+  'სადგურები': {ka:'სადგურები', en:'Assets'},
+  'სახელი': {ka:'სახელი', en:'Name'},
+  'ჩართ.': {ka:'ჩართვა', en:'Commit'},
+  'დეტალები': {ka:'დეტალები', en:'Details'},
+  'პროფილის სახელი (key)': {ka:'პროფილის სახელი (key)', en:'Profile name (key)'},
+  'სვეტი (CSV/Excel)': {ka:'სვეტი (CSV/Excel)', en:'Column (CSV/Excel)'},
+  'CSV / Excel ატვ.': {ka:'CSV / Excel ატვირთვა', en:'Upload CSV / Excel'},
+  'ატვირთული პროფილები': {ka:'ატვირთული პროფილები', en:'Uploaded profiles'},
+  'პროფილი ჯერ არ ატვირთულა': {ka:'პროფილი ჯერ არ არის ატვირთული', en:'No profiles uploaded yet'},
+  'პროფილის Preview': {ka:'პროფილის გადახედვა', en:'Profile preview'},
+  '— აირჩიე —': {ka:'— აირჩიეთ —', en:'— Select —'},
+  'Reserve Product': {ka:'რეზერვული პროდუქტი', en:'Reserve product'},
+  'Direction': {ka:'მიმართულება', en:'Direction'},
+  'Req. MW': {ka:'მოთხოვნა, MW', en:'Requirement, MW'},
+  'Penalty $/MWh': {ka:'ჯარიმა, $/MWh', en:'Penalty, $/MWh'},
+  'Response time': {ka:'რეაგირების დრო', en:'Response time'},
+  'Reserve Products': {ka:'რეზერვული პროდუქტები', en:'Reserve products'},
+  'Reserve product ჯერ არ შექმნილა': {ka:'რეზერვული პროდუქტი ჯერ არ არის შექმნილი', en:'No reserve products created yet'},
+  'Eligible Units:': {ka:'დაშვებული აგრეგატები:', en:'Eligible units:'},
+  'გაზის ლიმიტები': {ka:'გაზის ლიმიტები', en:'Gas caps'},
+  'Constraint Mode': {ka:'შეზღუდვის რეჟიმი', en:'Constraint mode'},
+  'None (შეუზღუდავი)': {ka:'გარეშე (შეუზღუდავი)', en:'None (unlimited)'},
+  'Annual Only': {ka:'მხოლოდ წლიური', en:'Annual only'},
+  'Monthly Only': {ka:'მხოლოდ თვიური', en:'Monthly only'},
+  'Annual + Monthly': {ka:'წლიური + თვიური', en:'Annual + monthly'},
+  'Annual Cap (Mm³)': {ka:'წლიური გაზის ბიუჯეტი (მლნ მ³)', en:'Annual gas budget (Mm³)'},
+  'თვიური ლიმიტები (Mm³)': {ka:'თვიური გაზის ბიუჯეტი (მლნ მ³)', en:'Monthly gas budget (Mm³)'},
+  'მოქმედი სადგურები': {ka:'მოქმედი თბოსადგურები', en:'Eligible thermal units'},
+  'Gas Budget Preview': {ka:'გაზის ბიუჯეტის გადახედვა', en:'Gas budget preview'},
+  'სტუდიის ჰორიზონტი': {ka:'საკვლევი ჰორიზონტი', en:'Study horizon'},
+  'Timezone': {ka:'დროის სარტყელი', en:'Timezone'},
+  'სცენარი (Scenario)': {ka:'სცენარი', en:'Scenario'},
+  'საბაზო (historical mean)': {ka:'საბაზო (ისტორიული საშუალო)', en:'Base (historical mean)'},
+  'სველი (P10)': {ka:'წყალუხვი (P10)', en:'Wet (P10)'},
+  'საშუალო (P50)': {ka:'საშუალო (P50)', en:'Median (P50)'},
+  'მშრალი (P90)': {ka:'მშრალი (P90)', en:'Dry (P90)'},
+  'Resolution (v1.3 #3)': {ka:'გარჩევადობა (v1.3 #3)', en:'Resolution (v1.3 #3)'},
+  'Solver backend (v1.3 #5)': {ka:'Solver backend (v1.3 #5)', en:'Solver backend (v1.3 #5)'},
+  'საბაზო წელი': {ka:'საბაზო წელი', en:'Base year'},
+  'Start Date (Asia/Tbilisi)': {ka:'დაწყების თარიღი (Asia/Tbilisi)', en:'Start date (Asia/Tbilisi)'},
+  'Start Hour (0-23)': {ka:'დაწყების საათი (0-23)', en:'Start hour (0-23)'},
+  'Horizon Mode': {ka:'ჰორიზონტის რეჟიმი', en:'Horizon mode'},
+  'Preset': {ka:'წინასწარი არჩევანი', en:'Preset'},
+  'Horizon Hours': {ka:'ჰორიზონტი, საათი', en:'Horizon hours'},
+  'Rolling Horizon:': {ka:'Rolling horizon:', en:'Rolling horizon:'},
+  'ავტო (>168h)': {ka:'ავტო (>168სთ)', en:'auto (>168h)'},
+  'Window:': {ka:'ფანჯარა:', en:'Window:'},
+  'Step:': {ka:'ბიჯი:', en:'Step:'},
+  'time_index Preview': {ka:'time_index-ის გადახედვა', en:'time_index preview'},
+  'ჰორიზონტის ვიზუალიზაცია': {ka:'ჰორიზონტის ვიზუალიზაცია', en:'Horizon visualization'},
+  'ვალიდაციის გაშვება': {ka:'ვალიდაციის გაშვება', en:'Run validation'},
+  'Export': {ka:'ექსპორტი', en:'Export'},
+  'Export Solver Input JSON': {ka:'Solver Input JSON-ის ექსპორტი', en:'Export solver input JSON'},
+  'ვალიდაციის შემდეგ ხელმისაწვდომია.': {ka:'ხელმისაწვდომია ვალიდაციის შემდეგ.', en:'Available after validation.'},
+  'Import Results': {ka:'შედეგების იმპორტი', en:'Import results'},
+  'Import Solver Results JSON': {ka:'Solver Results JSON-ის იმპორტი', en:'Import solver results JSON'},
+  'Solver-დან მიღებული results JSON ფაილი': {ka:'Solver-დან მიღებული results JSON ფაილი', en:'results JSON file produced by the solver'},
+  'ვალიდაციის ანგარიში': {ka:'ვალიდაციის ანგარიში', en:'Validation report'},
+  'გაუშვი ვალიდაცია →': {ka:'გაუშვით ვალიდაცია →', en:'Run validation →'},
+  'Input JSON Preview': {ka:'Input JSON-ის გადახედვა', en:'Input JSON preview'},
+  '— ვალიდაციის შემდეგ —': {ka:'— ვალიდაციის შემდეგ —', en:'— after validation —'},
+  'KPI Templates (#19)': {ka:'KPI შაბლონები (#19)', en:'KPI templates (#19)'},
+  'Add': {ka:'დამატება', en:'Add'},
+  'Defaults': {ka:'ნაგულისხმევი', en:'Defaults'},
+  'Evaluate': {ka:'შეფასება', en:'Evaluate'},
+  'მაგ.:': {ka:'მაგ.:', en:'e.g.:'},
+  'შედეგები ჯერ არ ჩაიტვირთა': {ka:'შედეგები ჯერ არ არის ჩატვირთული', en:'No results loaded yet'},
+  'Solver გაუშვი → Import Results JSON': {ka:'გაუშვით solver და შემოიტანეთ Results JSON', en:'Run the solver → import Results JSON'},
+  'Dispatch Stack': {ka:'დისპეტჩირების სტეკი', en:'Dispatch stack'},
+  'System Lambda': {ka:'სისტემური λ ფასი', en:'System lambda'},
+  'სადგ. შედეგები': {ka:'სადგურების შედეგები', en:'Unit results'},
+  'Monthly Summary': {ka:'თვიური შეჯამება', en:'Monthly summary'},
+  'Infeasibility Report (IIS)': {ka:'შეუსრულებლობის ანგარიში (IIS)', en:'Infeasibility report (IIS)'},
+  'Diagnostics': {ka:'დიაგნოსტიკა', en:'Diagnostics'},
+  'Scenario Comparison — N-way': {ka:'სცენარების შედარება — N-way', en:'Scenario comparison — N-way'},
+  'Add Scenario(s)': {ka:'სცენარ(ებ)ის დამატება', en:'Add scenario(s)'},
+  'Clear': {ka:'გასუფთავება', en:'Clear'},
+  '0 loaded': {ka:'0 ჩატვირთული', en:'0 loaded'},
+  'Dispatch results': {ka:'დისპეტჩირების შედეგები', en:'Dispatch results'},
+  'Export report': {ka:'ანგარიშის ექსპორტი', en:'Export report'},
+  'Thermal': {ka:'თბოგენერაცია', en:'Thermal'},
+  'Hydro Reservoir': {ka:'წყალსაცავიანი ჰესი', en:'Hydro reservoir'},
+  'Hydro Reg': {ka:'წყალსაცავიანი ჰესი', en:'Hydro reservoir'},
+  'Hydro ROR': {ka:'მდინარის მოდინებაზე ჰესი', en:'Run-of-river hydro'},
+  'Wind': {ka:'ქარი', en:'Wind'},
+  'Solar': {ka:'მზე', en:'Solar'},
+  'Import': {ka:'იმპორტი', en:'Import'},
+  'Pumped Hydro': {ka:'ჰიდროაკუმულაცია', en:'Pumped hydro'},
+  'სულ ხარჯი': {ka:'ჯამური ხარჯი', en:'Total cost'},
+  'სულ ენ.': {ka:'ჯამური ენერგია', en:'Total energy'},
+  'გაზი': {ka:'გაზი', en:'Gas'},
+  'Unserved': {ka:'მიუწოდებელი ენერგია', en:'Unserved energy'},
+  'Peak Load': {ka:'პიკური დატვირთვა', en:'Peak load'},
+  'Solve': {ka:'ამოხსნა', en:'Solve'},
+  'Closure': {ka:'დახურვა', en:'Closure'},
+  'საათი': {ka:'საათი', en:'Hour'},
+  'ენ. MWh': {ka:'ენერგია, MWh', en:'Energy, MWh'},
+  'ხარჯი k$': {ka:'ხარჯი, ათასი $', en:'Cost, k$'},
+  'ენ.MWh': {ka:'ენერგია, MWh', en:'Energy, MWh'},
+  'ოპ.სთ': {ka:'ოპერ. სთ', en:'Operating h'},
+  'ხარჯი$': {ka:'ხარჯი, $', en:'Cost, $'},
+  'AvgMC': {ka:'საშ. MC', en:'Avg MC'},
+  'GasMm³': {ka:'გაზი, Mm³', en:'Gas, Mm³'},
+  'სადგ. შეყვანა': {ka:'სადგურების შეყვანა', en:'Enter assets'},
+  'პროფ. ატვ.': {ka:'პროფილების ატვირთვა', en:'Upload profiles'},
+  'ჰორიზ. არჩ.': {ka:'ჰორიზონტის არჩევა', en:'Choose horizon'},
+  'ვალიდ. + Exp.': {ka:'ვალიდაცია + ექსპორტი', en:'Validate + export'},
+  'Colab Run': {ka:'Colab-ში გაშვება', en:'Run in Colab'},
+  'Import Results': {ka:'შედეგების იმპორტი', en:'Import results'},
+  'Assets tab-ში სადგ. დაამატე ან GSE 2026 ჩასვი': {ka:'Assets ჩანართში დაამატეთ სადგურები ან ჩასვით GSE 2026 დემო', en:'Add assets or insert the GSE 2026 demo in the Assets tab'},
+  'Profiles tab-ში demand, wind, solar, hydro CF ატვირთე': {ka:'Profiles ჩანართში ატვირთეთ demand, wind, solar და hydro CF პროფილები', en:'Upload demand, wind, solar, and hydro CF profiles in the Profiles tab'},
+  'Reserves tab-ში FCR, aFRR და სხვ. reserve products შექმენი': {ka:'Reserves ჩანართში შექმენით FCR, aFRR და სხვა რეზერვული პროდუქტები', en:'Create FCR, aFRR, and other reserve products in the Reserves tab'},
+  'Gas tab-ში წლ./თვ. გაზის ლიმიტები დაყენე': {ka:'Gas ჩანართში დააყენეთ წლიური და თვიური გაზის ბიუჯეტები', en:'Set annual and monthly gas budgets in the Gas tab'},
+  'Horizon tab-ში სასწავლო პერიოდი აირჩიე': {ka:'Horizon ჩანართში აირჩიეთ საკვლევი პერიოდი', en:'Choose the study period in the Horizon tab'},
+  'Validate tab-ში გადაამოწმე და Export JSON': {ka:'Validate ჩანართში გადაამოწმეთ და გაიტანეთ JSON', en:'Validate inputs and export JSON in the Validate tab'},
+  '!python powersim_solver_v2.py → results JSON/Excel': {ka:'!python powersim_solver_v2.py → results JSON/Excel', en:'!python powersim_solver_v2.py → results JSON/Excel'},
+  'Results tab-ში results JSON ატვირთე': {ka:'Results ჩანართში ატვირთეთ results JSON', en:'Upload results JSON in the Results tab'},
+  '🔍 ძიება...': {ka:'🔍 ძიება...', en:'🔍 Search...'},
+  'სვეტის სახელი ან 1': {ka:'სვეტის სახელი ან 1', en:'Column name or 1'}
+};
+
+const I18N_LOOKUP = Object.create(null);
+for(const [key, val] of Object.entries(I18N)){
+  I18N_LOOKUP[key] = key;
+  if(val.ka) I18N_LOOKUP[val.ka] = key;
+  if(val.en) I18N_LOOKUP[val.en] = key;
+}
+function t(key, lang=CURRENT_LANG){
+  const canon = I18N_LOOKUP[String(key)] || key;
+  return (I18N[canon] && (I18N[canon][lang] || I18N[canon].en)) || key;
+}
+function translateVisibleText(root=document.body){
+  if(!root) return;
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+    acceptNode(node){
+      const parent=node.parentElement;
+      if(!parent || ['SCRIPT','STYLE','TEXTAREA','INPUT'].includes(parent.tagName)) return NodeFilter.FILTER_REJECT;
+      return node.nodeValue.trim() ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
+    }
+  });
+  const nodes=[];
+  while(walker.nextNode()) nodes.push(walker.currentNode);
+  nodes.forEach(node=>{
+    const raw=node.nodeValue;
+    const trimmed=raw.trim();
+    const canon=I18N_LOOKUP[trimmed];
+    if(canon){
+      node.nodeValue=raw.replace(trimmed,t(canon));
+      return;
+    }
+    let next=raw;
+    const terms=Object.entries(I18N_LOOKUP)
+      .filter(([source])=>source && source.length>2 && next.includes(source))
+      .sort((a,b)=>b[0].length-a[0].length);
+    for(const [source, key] of terms){
+      next=next.split(source).join(t(key));
+    }
+    if(next!==raw) node.nodeValue=next;
+  });
+}
+function translateAttributes(){
+  document.querySelectorAll('[placeholder]').forEach(el=>{
+    const canon=I18N_LOOKUP[el.getAttribute('placeholder')];
+    if(canon) el.setAttribute('placeholder', t(canon));
+  });
+  document.querySelectorAll('[title]').forEach(el=>{
+    const canon=I18N_LOOKUP[el.getAttribute('title')];
+    if(canon) el.setAttribute('title', t(canon));
+  });
+}
+function renderLocalizedViews(){
+  renderWorkflowSteps();
+  renderAssetTable();
+  renderProfileList();
+  renderReservesList();
+  updateGasUI();
+  updateHorizonPreview();
+  updateDashKpis();
+  renderKpiTemplateList();
+  renderCompareList();
+  if(STATE.results) renderResults();
+}
+function applyTranslations(){
+  document.documentElement.lang=CURRENT_LANG;
+  const sel=document.getElementById('lang-select');
+  if(sel) sel.value=CURRENT_LANG;
+  translateVisibleText();
+  translateAttributes();
+}
+function setLanguage(lang, opts={}){
+  CURRENT_LANG = lang === 'en' ? 'en' : 'ka';
+  localStorage.setItem(I18N_STORAGE_KEY, CURRENT_LANG);
+  if(!opts.skipRender) renderLocalizedViews();
+  applyTranslations();
+}
+function initLanguage(){
+  CURRENT_LANG = localStorage.getItem(I18N_STORAGE_KEY) || I18N_DEFAULT_LANG;
+  const sel=document.getElementById('lang-select');
+  if(sel) sel.value=CURRENT_LANG;
+}
+
 
 // ── Asset type definitions ─────────────────────────────────────────
 const ASSET_TYPES = {
@@ -2338,6 +2601,7 @@ function evaluateKpiTemplatesOnResults(){
 // INIT
 // ══════════════════════════════════════════════════════════════════
 function init(){
+  initLanguage();
   renderWorkflowSteps();
   updateDashKpis();
   updateHorizonPreview();
@@ -2355,6 +2619,7 @@ function init(){
       </div>`).join('');
     Object.assign(STATE.gasConfig.monthly,defaults);
   }
+  applyTranslations();
 }
 init();
 </script>
