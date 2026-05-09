@@ -37,7 +37,8 @@ jobs:
               scripts/db_ingest.py \
               scripts/batch.py \
               tests/smoke_168h.py \
-              tests/check_json_contract.py
+              tests/check_json_contract.py \
+              tests/test_rolling_carryover.py
       - name: Dependency sanity
         run: |
           python - <<'PY'
@@ -52,6 +53,8 @@ jobs:
         run: python schema/powersim_schema.py
       - name: JSON contract regression checks
         run: python tests/check_json_contract.py
+      - name: Rolling carry-over regression tests
+        run: python tests/test_rolling_carryover.py
       - name: Smoke test (synthetic project_data → solver → validate)
         run: |
           python scripts/build_demo_project.py --out project_data
