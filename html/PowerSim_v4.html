@@ -152,6 +152,19 @@ tr:hover td{background:var(--bg3)}
            font-size:8px}
 .prof-name{flex:1;color:var(--t2)}
 .prof-len{font-family:'JetBrains Mono',monospace;color:var(--t3);min-width:50px;text-align:right}
+
+
+/* ── Interactive chart controls ───────────────────────────────────── */
+.chart-toolbar{display:flex;gap:6px;align-items:flex-end;flex-wrap:wrap;margin-bottom:6px}
+.chart-toolbar .field{min-width:120px;max-width:180px;flex:0 1 160px}
+.chart-actions{margin-left:auto;display:flex;gap:5px;flex-wrap:wrap}
+.unit-toggle-grid{display:flex;gap:4px;flex-wrap:wrap;max-height:66px;overflow:auto;padding:4px;background:var(--bg2);border:1px solid var(--border);border-radius:5px}
+.unit-chip{border:1px solid var(--border2);background:rgba(61,142,240,.08);color:var(--t2);border-radius:14px;font-size:7.5px;font-weight:700;padding:3px 7px;cursor:pointer}
+.unit-chip.off{opacity:.45;text-decoration:line-through;background:transparent}
+.chart-empty{height:100%;min-height:160px;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:6px;color:var(--t3);font-size:9px;text-align:center;border:1px dashed var(--border2);border-radius:6px;background:rgba(255,255,255,.02)}
+.chart-note{font-size:7.5px;color:var(--t3);line-height:1.5;margin-top:3px}
+@media (max-width:1100px){.results-grid{grid-template-columns:1fr!important}.chart-actions{margin-left:0}.chart-toolbar .field{flex:1 1 130px}}
+
 </style>
 </head>
 <body>
@@ -676,17 +689,32 @@ tr:hover td{background:var(--bg3)}
   <div id="results-panel" style="display:none">
     <!-- KPI row -->
     <div class="kpi-grid" id="res-kpis" style="margin-bottom:6px"></div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px">
+    <div class="card" style="margin-bottom:6px">
+      <div class="sh">🎛 Chart Controls</div>
+      <div class="chart-toolbar">
+        <div class="field"><label>View</label><select id="res-view" onchange="setResultsChartOption('view',this.value)"><option value="hourly">Hourly</option><option value="monthly">Monthly</option></select></div>
+        <div class="field"><label>Metric</label><select id="res-metric" onchange="setResultsChartOption('metric',this.value)"></select></div>
+        <div class="field"><label>Chart type</label><select id="res-chart-type" onchange="setResultsChartOption('chartType',this.value)"><option value="area">Area</option><option value="line">Line</option><option value="bar">Bar</option></select></div>
+        <div class="chart-actions">
+          <button class="btn btn-b btn-s" onclick="exportChartPng('c-dispatch')">⬇ PNG</button>
+          <button class="btn btn-g btn-s" onclick="exportVisibleChartCsv()">⬇ CSV</button>
+        </div>
+      </div>
+      <div class="sh" style="margin-top:4px">Technology / unit visibility</div>
+      <div id="res-unit-toggles" class="unit-toggle-grid"></div>
+      <div class="chart-note">Uses only fields already present in the imported results JSON. Future backend metric request: emissions/CO₂ by unit and marginal unit per hour would make chart diagnostics richer.</div>
+    </div>
+    <div class="results-grid" style="display:grid;grid-template-columns:1.2fr .8fr;gap:6px;margin-bottom:6px">
       <div class="card">
-        <div class="sh">⚡ Dispatch Stack</div>
-        <div id="c-dispatch" style="height:280px"></div>
+        <div class="sh" id="dispatch-title">⚡ Dispatch Stack</div>
+        <div id="c-dispatch" style="height:320px"></div>
       </div>
       <div class="card">
         <div class="sh">💲 System Lambda</div>
-        <div id="c-lambda" style="height:280px"></div>
+        <div id="c-lambda" style="height:320px"></div>
       </div>
     </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px">
+    <div class="results-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px">
       <div class="card">
         <div class="sh">🏭 სადგ. შედეგები</div>
         <div class="tbl-wrap" id="res-gen-table-wrap"></div>
@@ -728,6 +756,20 @@ tr:hover td{background:var(--bg3)}
       <button class="btn btn-o btn-s" onclick="clearScenarios()">🗑 Clear</button>
       <span id="cmp-count" style="font-size:8px;color:var(--t3)">0 loaded</span>
     </div>
+    <div class="chart-toolbar" style="margin-top:6px">
+      <div class="field"><label>Comparison metric</label><select id="cmp-metric" onchange="STATE.compareMetric=this.value;if(STATE.compareSlots.length)runComparison()">
+        <option value="total_cost_usd">Total cost $</option>
+        <option value="avg_lambda_usd_mwh">Avg λ $/MWh</option>
+        <option value="peak_load_mw">Peak MW</option>
+        <option value="total_energy_mwh">Total energy MWh</option>
+        <option value="total_gas_mm3">Gas Mm³</option>
+        <option value="total_unserved_mwh">Unserved MWh</option>
+        <option value="total_curtailed_mwh">Curtailed MWh</option>
+      </select></div>
+      <div class="field"><label>Chart type</label><select id="cmp-chart-type" onchange="STATE.compareChartType=this.value;if(STATE.compareSlots.length)runComparison()"><option value="bar">Bar</option><option value="line">Line</option></select></div>
+      <div class="field"><label>Baseline scenario</label><select id="cmp-baseline" onchange="STATE.compareBaseIndex=+this.value;runComparison()"><option value="0">#1 baseline</option></select></div>
+      <div class="chart-actions"><button class="btn btn-b btn-s" onclick="exportChartPng('c-compare-cost')">⬇ PNG</button><button class="btn btn-g btn-s" onclick="exportCompareCsv()">⬇ CSV</button></div>
+    </div>
     <div style="font-size:7.5px;color:var(--t3);margin-top:5px">
       ჩატვირთე ერთი ან მეტი results JSON — ცხრილი ავტომატურად გადავა pivot რეჟიმში.
     </div>
@@ -759,7 +801,13 @@ const STATE = {
   results:        null,   // last imported results JSON
   scenarioA:      null,
   scenarioB:      null,
-  validated:      false
+  validated:      false,
+  resultsChart:   {view:'hourly', metric:'dispatch_mw', chartType:'area', hiddenUnits:{}},
+  lastChartRows:  [],
+  compareMetric:  'total_cost_usd',
+  compareChartType:'bar',
+  compareBaseIndex:0,
+  lastCompareRows:[]
 };
 
 const SCHEMA_VERSION = '1.2';
@@ -2052,7 +2100,8 @@ function importResults(input){
 // RESULTS RENDERING
 // ══════════════════════════════════════════════════════════════════
 function renderResults(){
-  const R=STATE.results; if(!R) return;
+  const R=STATE.results;
+  if(!R){showResultsEmptyState(); return;}
   document.getElementById('no-results').style.display='none';
   document.getElementById('results-panel').style.display='block';
 
@@ -2069,70 +2118,194 @@ function renderResults(){
       kpiCard('სულ ენ.',fmtNum(sm.total_energy_mwh||0),'MWh','blue'),
       kpiCard('გაზი',(sm.total_gas_mm3||0).toFixed(2),'Mm³',''),
       kpiCard('Unserved',(sm.total_unserved_mwh||0).toFixed(1),'MWh',sm.total_unserved_mwh>0?'red':'green'),
-      kpiCard('Solve',diag.solve_time_s+'s','',''),
+      kpiCard('Solve',(diag.solve_time_s??'—')+'s','',''),
       kpiCard('Closure',meta.closure_ok?'✅ OK':'⚠️ GAP',meta.closure_ok?'':'',''),
     ].join('');
   }
 
-  // Dispatch chart
+  renderResultControls();
+  renderInteractiveResultCharts();
+  renderGeneratorSummaryTable(R);
+  renderDiagnosticsPanels(diag);
+}
+
+function showResultsEmptyState(){
+  document.getElementById('no-results').style.display='flex';
+  document.getElementById('results-panel').style.display='none';
+}
+
+const RESULT_CHART_METRICS={
+  hourly:[
+    {key:'dispatch_mw', label:'Dispatch by visible units', unit:'MW', source:'unit'},
+    {key:'load_mw', label:'Load', unit:'MW', source:'system'},
+    {key:'generation_mw', label:'Generation', unit:'MW', source:'system'},
+    {key:'lambda_usd_mwh', label:'System lambda', unit:'$/MWh', source:'system'},
+    {key:'unserved_mwh', label:'Unserved energy', unit:'MWh', source:'system'},
+    {key:'curtailed_mwh', label:'Curtailed energy', unit:'MWh', source:'system'},
+    {key:'gas_mm3h', label:'Gas burn', unit:'Mm³/h', source:'system'}
+  ],
+  monthly:[
+    {key:'total_energy_mwh', label:'Energy', unit:'MWh', source:'monthly'},
+    {key:'total_cost_usd', label:'Cost', unit:'$', source:'monthly'},
+    {key:'avg_lambda', label:'Avg lambda', unit:'$/MWh', source:'monthly'},
+    {key:'gas_mm3', label:'Gas', unit:'Mm³', source:'monthly'},
+    {key:'unserved_mwh', label:'Unserved energy', unit:'MWh', source:'monthly'},
+    {key:'curtailed_mwh', label:'Curtailed energy', unit:'MWh', source:'monthly'},
+    {key:'peak_load_mw', label:'Peak load', unit:'MW', source:'monthly'},
+    {key:'dispatch_mw', label:'Energy by visible units', unit:'MWh', source:'monthlyUnit'}
+  ]
+};
+
+function setResultsChartOption(key,value){
+  STATE.resultsChart[key]=value;
+  if(key==='view'){
+    const allowed=RESULT_CHART_METRICS[value].map(m=>m.key);
+    if(!allowed.includes(STATE.resultsChart.metric)) STATE.resultsChart.metric=allowed[0];
+    if(value==='monthly' && STATE.resultsChart.chartType==='area') STATE.resultsChart.chartType='bar';
+  }
+  renderResultControls();
+  renderInteractiveResultCharts();
+}
+
+function renderResultControls(){
+  const R=STATE.results; if(!R) return;
+  const cfg=STATE.resultsChart;
+  const viewSel=document.getElementById('res-view');
+  const metricSel=document.getElementById('res-metric');
+  const typeSel=document.getElementById('res-chart-type');
+  if(viewSel) viewSel.value=cfg.view;
+  if(metricSel){
+    metricSel.innerHTML=RESULT_CHART_METRICS[cfg.view].map(m=>`<option value="${m.key}">${m.label}</option>`).join('');
+    metricSel.value=cfg.metric;
+  }
+  if(typeSel) typeSel.value=cfg.chartType;
+  const toggles=document.getElementById('res-unit-toggles');
+  if(toggles){
+    const ids=Object.keys(R.by_unit_summary||{});
+    toggles.innerHTML=ids.length?ids.map(uid=>{
+      const b=R.by_unit_summary[uid]||{};
+      const off=!!cfg.hiddenUnits[uid];
+      return `<button class="unit-chip ${off?'off':''}" onclick="toggleResultUnit('${uid.replace(/'/g,'\\\'')}')">${off?'○':'●'} ${(b.name||uid).slice(0,18)}</button>`;
+    }).join(''):'<div style="color:var(--t3);font-size:8px">No by-unit series in this results JSON.</div>';
+  }
+}
+
+function toggleResultUnit(uid){
+  STATE.resultsChart.hiddenUnits[uid]=!STATE.resultsChart.hiddenUnits[uid];
+  renderResultControls();
+  renderInteractiveResultCharts();
+}
+
+function visibleUnitIds(R){
+  return Object.keys(R.by_unit_summary||{}).filter(uid=>!STATE.resultsChart.hiddenUnits[uid]);
+}
+
+function renderInteractiveResultCharts(){
+  const R=STATE.results; if(!R) return;
+  const cfg=STATE.resultsChart;
   const hourly=R.hourly_system||[];
-  const byUnit=R.hourly_by_unit||{};
-  if(hourly.length){
-    const H=Math.min(hourly.length,720);
-    const hrs=hourly.slice(0,H).map(h=>h.t);
-
-    // Stacked dispatch
-    const unitIds=Object.keys(byUnit);
-    const series=unitIds.slice(0,8).map(uid=>{
-      const nm=(R.by_unit_summary||{})[uid]?.name||uid;
-      return{name:nm.slice(0,12), data:byUnit[uid].slice(0,H).map(r=>+(r.dispatch_mw||0).toFixed(1))};
-    });
-    series.push({name:'Unserved',data:hourly.slice(0,H).map(h=>+(h.unserved_mwh||0).toFixed(1))});
-
-    mkChart('c-dispatch',{
-      chart:{type:'area',height:280,stacked:true,toolbar:{show:false},animations:{enabled:false}},
-      series,
-      xaxis:{categories:hrs,labels:{show:false},title:{text:'საათი'}},
-      yaxis:{labels:{formatter:v=>v.toFixed(0)},title:{text:'MW'}},
-      stroke:{width:0},fill:{opacity:0.85},
-      legend:{position:'top',fontSize:'8px',onItemClick:{toggleDataSeries:true}},
-      tooltip:{y:{formatter:v=>v.toFixed(1)+' MW'}}
-    });
-
-    // Lambda chart
-    mkChart('c-lambda',{
-      chart:{type:'line',height:280,toolbar:{show:false},animations:{enabled:false}},
-      series:[{name:'λ $/MWh',data:hourly.slice(0,H).map(h=>+(h.lambda_usd_mwh||0).toFixed(2))}],
-      xaxis:{categories:hrs,labels:{show:false},title:{text:'საათი'}},
-      yaxis:{labels:{formatter:v=>'$'+v.toFixed(0)},title:{text:'$/MWh'}},
-      stroke:{width:2},colors:['#f0c040'],
-      fill:{type:'gradient',gradient:{shadeIntensity:.8,type:'vertical'}},
-      tooltip:{y:{formatter:v=>'$'+v.toFixed(2)+'/MWh'}}
-    });
-  }
-
-  // Monthly chart
   const monthly=R.monthly_summary||[];
-  if(monthly.length){
-    mkChart('c-monthly',{
-      chart:{type:'bar',height:220,toolbar:{show:false}},
-      series:[
-        {name:'ენ. MWh', data:monthly.map(m=>+(m.total_energy_mwh||0).toFixed(0))},
-        {name:'ხარჯი k$',data:monthly.map(m=>+(((m.total_cost_usd||m.total_cost||0))/1000).toFixed(0))}
-      ],
-      xaxis:{categories:monthly.map(m=>m.label||''),labels:{style:{fontSize:'8px'}}},
-      yaxis:{labels:{formatter:v=>v.toFixed(0)}},
-      colors:['#3d8ef0','#e03144'],
-      legend:{position:'top',fontSize:'8px'},
-      plotOptions:{bar:{columnWidth:'60%'}}
-    });
-  }
+  const metric=(RESULT_CHART_METRICS[cfg.view]||[]).find(m=>m.key===cfg.metric) || RESULT_CHART_METRICS.hourly[0];
+  const title=document.getElementById('dispatch-title');
+  if(title) title.textContent=`📈 ${cfg.view==='hourly'?'Hourly':'Monthly'} — ${metric.label}`;
 
-  // Generator summary table
+  if(cfg.view==='monthly') renderMonthlyMetricChart(R, metric);
+  else renderHourlyMetricChart(R, metric);
+  renderMonthlySummaryChart(R);
+
+  if(hourly.length){
+    const H=Math.min(hourly.length, cfg.view==='hourly'?720:hourly.length);
+    const hrs=hourly.slice(0,H).map(h=>h.t);
+    mkChart('c-lambda',{
+      chart:{type:'line',height:320,toolbar:{show:true},animations:{enabled:false},zoom:{enabled:true}},
+      series:[{name:'λ $/MWh',data:hourly.slice(0,H).map(h=>+(h.lambda_usd_mwh||0).toFixed(2))}],
+      xaxis:{categories:hrs,labels:{show:false},title:{text:'hour'}},
+      yaxis:{labels:{formatter:v=>'$'+Number(v).toFixed(0)},title:{text:'$/MWh'}},
+      stroke:{width:2,curve:'smooth'},colors:['#f0c040'],markers:{size:0},
+      tooltip:{shared:false,x:{formatter:v=>'Hour '+v},y:{formatter:v=>'$'+Number(v).toFixed(2)+'/MWh'}}
+    });
+  } else renderChartEmpty('c-lambda','No hourly lambda data found in this results JSON.');
+}
+
+function renderHourlyMetricChart(R, metric){
+  const hourly=R.hourly_system||[];
+  if(!hourly.length){renderChartEmpty('c-dispatch','No hourly_system array found in this results JSON.'); return;}
+  const H=Math.min(hourly.length,720);
+  const hrs=hourly.slice(0,H).map(h=>h.t);
+  let series=[];
+  if(metric.source==='unit'){
+    const byUnit=R.hourly_by_unit||{};
+    series=visibleUnitIds(R).filter(uid=>Array.isArray(byUnit[uid])).map(uid=>{
+      const nm=(R.by_unit_summary||{})[uid]?.name||uid;
+      return {name:nm.slice(0,18), data:byUnit[uid].slice(0,H).map(r=>+(r.dispatch_mw||0).toFixed(2))};
+    });
+    if(hourly.some(h=>(h.unserved_mwh||0)>0)) series.push({name:'Unserved',data:hourly.slice(0,H).map(h=>+(h.unserved_mwh||0).toFixed(2))});
+  } else {
+    series=[{name:metric.label, data:hourly.slice(0,H).map(h=>+(h[metric.key]||0).toFixed(2))}];
+  }
+  if(!series.length){renderChartEmpty('c-dispatch','No visible unit data. Turn on at least one technology/unit.'); return;}
+  STATE.lastChartRows=seriesToRows('hour', hrs, series);
+  mkChart('c-dispatch',{
+    chart:{type:cfgChartType(),height:320,stacked:metric.source==='unit'&&STATE.resultsChart.chartType!=='line',toolbar:{show:true},animations:{enabled:false},zoom:{enabled:true}},
+    series,
+    xaxis:{categories:hrs,labels:{show:false},title:{text:'hour'}},
+    yaxis:{labels:{formatter:v=>Number(v).toFixed(0)},title:{text:metric.unit}},
+    stroke:{width:STATE.resultsChart.chartType==='line'?2:0,curve:'smooth'},fill:{opacity:.85},
+    legend:{position:'top',fontSize:'8px',onItemClick:{toggleDataSeries:true}},
+    tooltip:{shared:true,intersect:false,x:{formatter:v=>'Hour '+v},y:{formatter:v=>Number(v).toLocaleString(undefined,{maximumFractionDigits:2})+' '+metric.unit}}
+  });
+}
+
+function renderMonthlyMetricChart(R, metric){
+  const monthly=R.monthly_summary||[];
+  if(!monthly.length){renderChartEmpty('c-dispatch','No monthly_summary array found in this results JSON.'); return;}
+  const cats=monthly.map(m=>m.label||MONTH_LABELS[(m.month||1)-1]||String(m.month||''));
+  let series=[];
+  if(metric.source==='monthlyUnit'){
+    series=visibleUnitIds(R).map(uid=>{
+      const nm=(R.by_unit_summary||{})[uid]?.name||uid;
+      return {name:nm.slice(0,18), data:monthly.map(m=>+((m.by_unit&&m.by_unit[uid]?.energy_mwh)||0).toFixed(2))};
+    });
+  } else {
+    series=[{name:metric.label, data:monthly.map(m=>+(m[metric.key]||0).toFixed(2))}];
+  }
+  if(!series.length){renderChartEmpty('c-dispatch','No visible monthly unit data.'); return;}
+  STATE.lastChartRows=seriesToRows('month', cats, series);
+  mkChart('c-dispatch',{
+    chart:{type:cfgChartType(),height:320,stacked:metric.source==='monthlyUnit'&&STATE.resultsChart.chartType!=='line',toolbar:{show:true},animations:{enabled:false}},
+    series,xaxis:{categories:cats,labels:{style:{fontSize:'8px'}}},
+    yaxis:{labels:{formatter:v=>Number(v).toLocaleString(undefined,{maximumFractionDigits:0})},title:{text:metric.unit}},
+    stroke:{width:STATE.resultsChart.chartType==='line'?2:0,curve:'smooth'},fill:{opacity:.85},
+    legend:{position:'top',fontSize:'8px'},tooltip:{shared:true,y:{formatter:v=>Number(v).toLocaleString(undefined,{maximumFractionDigits:2})+' '+metric.unit}}
+  });
+}
+
+function cfgChartType(){ return STATE.resultsChart.chartType==='bar'?'bar':(STATE.resultsChart.chartType==='line'?'line':'area'); }
+
+
+function renderMonthlySummaryChart(R){
+  const monthly=R.monthly_summary||[];
+  if(!monthly.length){renderChartEmpty('c-monthly','No monthly_summary data found.'); return;}
+  mkChart('c-monthly',{
+    chart:{type:'bar',height:220,toolbar:{show:true},animations:{enabled:false}},
+    series:[
+      {name:'ენ. MWh', data:monthly.map(m=>+(m.total_energy_mwh||0).toFixed(0))},
+      {name:'ხარჯი k$',data:monthly.map(m=>+(((m.total_cost_usd||m.total_cost||0))/1000).toFixed(0))}
+    ],
+    xaxis:{categories:monthly.map(m=>m.label||MONTH_LABELS[(m.month||1)-1]||''),labels:{style:{fontSize:'8px'}}},
+    yaxis:{labels:{formatter:v=>Number(v).toLocaleString(undefined,{maximumFractionDigits:0})}},
+    colors:['#3d8ef0','#e03144'],
+    legend:{position:'top',fontSize:'8px'},
+    plotOptions:{bar:{columnWidth:'60%'}},
+    tooltip:{shared:true,y:{formatter:v=>Number(v).toLocaleString(undefined,{maximumFractionDigits:0})}}
+  });
+}
+
+function renderGeneratorSummaryTable(R){
   const bu=R.by_unit_summary||{};
   const wrap=document.getElementById('res-gen-table-wrap');
-  if(wrap){
-    const rows=Object.entries(bu).map(([id,b])=>`
+  if(!wrap) return;
+  const rows=Object.entries(bu).map(([id,b])=>`
       <tr>
         <td>${b.name||id}</td>
         <td>${b.type||'—'}</td>
@@ -2144,15 +2317,14 @@ function renderResults(){
         <td class="mono">$${(b.avg_cost_mwh||0).toFixed(2)}</td>
         <td class="mono">${(b.gas_mm3||0).toFixed(2)}</td>
       </tr>`).join('');
-    wrap.innerHTML=`<table>
+  wrap.innerHTML=rows?`<table>
       <thead><tr>
         <th>სახელი</th><th>ტიპი</th><th>ენ.MWh</th><th>CF%</th>
         <th>ოპ.სთ</th><th>Start</th><th>ხარჯი$</th><th>AvgMC</th><th>GasMm³</th>
-      </tr></thead><tbody>${rows}</tbody></table>`;
-  }
+      </tr></thead><tbody>${rows}</tbody></table>`:'<div class="chart-empty">No by_unit_summary data found.</div>';
+}
 
-  // Diagnostics
-  // v1.4: IIS panel — surfaces infeasibility diagnostics prominently.
+function renderDiagnosticsPanels(diag){
   const iisList = (diag && diag.iis) || [];
   const iisPanel = document.getElementById('iis-panel');
   const iisBody  = document.getElementById('iis-body');
@@ -2170,14 +2342,11 @@ function renderResults(){
           <div style="margin-top:4px">${cons||'<i>(no constraints listed)</i>'}</div>
         </div>`;
       }).join('<hr style="border-color:var(--border)">');
-    } else {
-      iisPanel.style.display = 'none';
-    }
+    } else iisPanel.style.display = 'none';
   }
-
   const diagEl=document.getElementById('res-diagnostics');
   if(diagEl){
-    diagEl.innerHTML=Object.entries(diag)
+    diagEl.innerHTML=Object.entries(diag||{})
       .map(([k,v])=>`<div><span style="color:var(--t3)">${k}:</span> ${JSON.stringify(v)}</div>`)
       .join('');
   }
@@ -2253,6 +2422,14 @@ function renderCompareList(){
   const list=document.getElementById('cmp-list');
   const cnt=document.getElementById('cmp-count');
   if(cnt) cnt.textContent = STATE.compareSlots.length+' loaded';
+  const baseSel=document.getElementById('cmp-baseline');
+  if(baseSel){
+    if(STATE.compareBaseIndex >= STATE.compareSlots.length) STATE.compareBaseIndex = 0;
+    baseSel.innerHTML = STATE.compareSlots.length
+      ? STATE.compareSlots.map((s,i)=>`<option value="${i}">#${i+1} ${s.scenario}</option>`).join('')
+      : '<option value="0">#1 baseline</option>';
+    baseSel.value = String(STATE.compareBaseIndex||0);
+  }
   if(!list) return;
   if(!STATE.compareSlots.length){ list.innerHTML=''; return; }
   list.innerHTML=STATE.compareSlots.map((s,i)=>`
@@ -2295,34 +2472,42 @@ function runComparison(){
   const slots = STATE.compareSlots;
   if(!slots.length){showBanner('⚠️ ჩატვირთე მინიმუმ ერთი სცენარი','o');return;}
   const kpis=[
-    ['სულ ხარჯი $','total_cost_usd'],
-    ['Avg λ $/MWh','avg_lambda_usd_mwh'],
-    ['Peak MW','peak_load_mw'],
-    ['სულ ენ. MWh','total_energy_mwh'],
-    ['Gas Mm³','total_gas_mm3'],
-    ['Unserved MWh','total_unserved_mwh'],
-    ['Curtailed MWh','total_curtailed_mwh'],
+    ['სულ ხარჯი $','total_cost_usd','$'],
+    ['Avg λ $/MWh','avg_lambda_usd_mwh','$/MWh'],
+    ['Peak MW','peak_load_mw','MW'],
+    ['სულ ენ. MWh','total_energy_mwh','MWh'],
+    ['Gas Mm³','total_gas_mm3','Mm³'],
+    ['Unserved MWh','total_unserved_mwh','MWh'],
+    ['Curtailed MWh','total_curtailed_mwh','MWh'],
   ];
-  const fmt=v=>(typeof v==='number')?(v>=1e6?(v/1e6).toFixed(2)+'M':v>=1e3?(v/1e3).toFixed(1)+'k':v.toFixed(2)):(v??'—');
-  const baseSM = slots[0].data.system_summary||{};
-  // Header
-  const hdrs = ['Metric', ...slots.map((s,i)=>`#${i+1} ${s.scenario}`), ...(slots.length>1?['Δ% vs #1']:[])];
+  const selected = kpis.find(k=>k[1]===STATE.compareMetric) || kpis[0];
+  const fmt=v=>(typeof v==='number')?(Math.abs(v)>=1e6?(v/1e6).toFixed(2)+'M':Math.abs(v)>=1e3?(v/1e3).toFixed(1)+'k':v.toFixed(2)):(v??'—');
+  const baseIndex=Math.min(Math.max(STATE.compareBaseIndex||0,0),slots.length-1);
+  const hdrs = ['Metric', ...slots.map((s,i)=>`#${i+1} ${s.scenario}`)];
+  if(slots.length>1) hdrs.push('Range', `Last Δ vs #${baseIndex+1}`);
   const rows = kpis.map(([lbl,k])=>{
     const vals = slots.map(s=>+(s.data.system_summary||{})[k]||0);
-    const base = vals[0]||0;
+    const base = vals[baseIndex]||0;
+    const min = Math.min(...vals), max = Math.max(...vals);
     const cells = [`<td>${lbl}</td>`, ...vals.map((v,i)=>{
-      const d = i>0 ? v-base : 0;
-      const cls = i>0 ? (d>0?'color:var(--red)':d<0?'color:var(--green)':'color:var(--t3)') : '';
-      return `<td class="mono" style="${cls}">${fmt(v)}</td>`;
+      const d = i===baseIndex ? 0 : v-base;
+      const cls = i===baseIndex ? '' : (d>0?'color:var(--red)':d<0?'color:var(--green)':'color:var(--t3)');
+      const pct = (i!==baseIndex && base) ? ` <span style="color:var(--t3)">(${d>=0?'+':''}${(100*d/base).toFixed(1)}%)</span>` : '';
+      return `<td class="mono" style="${cls}">${fmt(v)}${pct}</td>`;
     })];
     if(slots.length>1){
-      const pct = base? 100*(vals[vals.length-1]-base)/base : 0;
-      const cls = pct>0?'color:var(--red)':pct<0?'color:var(--green)':'color:var(--t3)';
-      cells.push(`<td class="mono" style="${cls}">${base?(pct>=0?'+':'')+pct.toFixed(1)+'%':'—'}</td>`);
+      const last = vals[vals.length-1];
+      const d = last-base;
+      const pct = base?100*d/base:0;
+      cells.push(`<td class="mono">${fmt(max-min)}</td>`);
+      cells.push(`<td class="mono" style="${d>0?'color:var(--red)':d<0?'color:var(--green)':'color:var(--t3)'}">${base?(pct>=0?'+':'')+pct.toFixed(1)+'%':'—'}</td>`);
     }
     return `<tr>${cells.join('')}</tr>`;
   }).join('');
-  // Pivot chart — total_cost across scenarios
+  const labels=slots.map((s,i)=>`#${i+1} ${s.scenario}`);
+  const values=slots.map(s=>+(s.data.system_summary||{})[selected[1]]||0);
+  STATE.lastCompareRows=labels.map((label,i)=>({scenario:label, metric:selected[1], value:values[i]}));
+  renderCompareList();
   const content=document.getElementById('compare-content');
   content.innerHTML=`
     <div class="card" style="margin-bottom:6px">
@@ -2333,24 +2518,75 @@ function runComparison(){
           <tbody>${rows}</tbody>
         </table>
       </div>
+      <div class="chart-note">Percent deltas compare each scenario to the selected baseline. Red/green indicate numeric increase/decrease; business desirability depends on the metric.</div>
     </div>
     <div class="card">
-      <div class="sh">📊 Cost / Lambda — Scenario Pivot</div>
-      <div id="c-compare-cost" style="height:240px"></div>
+      <div class="sh">📊 Selected metric — ${selected[0]}</div>
+      <div id="c-compare-cost" style="height:280px"></div>
     </div>`;
   mkChart('c-compare-cost', {
-    chart:{type:'bar',height:240,toolbar:{show:false},animations:{enabled:false}},
-    series:[
-      {name:'Total cost $M', data:slots.map(s=>+((s.data.system_summary?.total_cost_usd||0)/1e6).toFixed(2))},
-      {name:'Avg λ $/MWh',    data:slots.map(s=>+((s.data.system_summary?.avg_lambda_usd_mwh||0)).toFixed(2))},
-    ],
-    xaxis:{categories:slots.map((s,i)=>`#${i+1} ${s.scenario}`),labels:{style:{fontSize:'8px'}}},
-    yaxis:[{labels:{formatter:v=>v.toFixed(1)}}, {opposite:true, labels:{formatter:v=>'$'+v.toFixed(0)}}],
-    colors:['#3d8ef0','#f0c040'],
-    plotOptions:{bar:{columnWidth:'55%'}},
-    legend:{position:'top',fontSize:'8px'}
+    chart:{type:STATE.compareChartType||'bar',height:280,toolbar:{show:true},animations:{enabled:false},zoom:{enabled:true}},
+    series:[{name:selected[0], data:values.map(v=>+v.toFixed(2))}],
+    xaxis:{categories:labels,labels:{style:{fontSize:'8px'},rotate:-20}},
+    yaxis:{labels:{formatter:v=>fmt(Number(v))},title:{text:selected[2]}},
+    colors:['#3d8ef0'],
+    plotOptions:{bar:{columnWidth:'55%',distributed:false}},
+    dataLabels:{enabled:slots.length<=6,formatter:v=>fmt(Number(v)),style:{fontSize:'8px'}},
+    legend:{show:false},
+    tooltip:{y:{formatter:v=>fmt(Number(v))+' '+selected[2]}}
   });
 }
+
+function renderChartEmpty(id,msg){
+  if(_charts[id]){_charts[id].destroy(); delete _charts[id];}
+  const el=document.getElementById(id);
+  if(el) el.innerHTML=`<div class="chart-empty"><div style="font-size:26px">📭</div><div>${msg}</div></div>`;
+}
+
+function seriesToRows(categoryName,categories,series){
+  return categories.map((cat,i)=>{
+    const row={[categoryName]:cat};
+    series.forEach(s=>{row[s.name]=s.data[i]??'';});
+    return row;
+  });
+}
+
+function downloadTextFile(name,text,type='text/plain'){
+  const blob=new Blob([text],{type});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob); a.download=name; a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+}
+
+function rowsToCsv(rows){
+  if(!rows.length) return '';
+  const cols=Object.keys(rows[0]);
+  const esc=v=>'"'+String(v??'').replace(/"/g,'""')+'"';
+  return [cols.map(esc).join(','), ...rows.map(r=>cols.map(c=>esc(r[c])).join(','))].join('\n');
+}
+
+function exportVisibleChartCsv(){
+  if(!STATE.lastChartRows.length){showBanner('⚠️ Visible chart data not available','o');return;}
+  downloadTextFile('PowerSim_visible_chart_'+new Date().toISOString().slice(0,10)+'.csv', rowsToCsv(STATE.lastChartRows), 'text/csv');
+  showBanner('✅ CSV exported','g');
+}
+
+function exportCompareCsv(){
+  if(!STATE.lastCompareRows.length){showBanner('⚠️ Comparison chart data not available','o');return;}
+  downloadTextFile('PowerSim_compare_chart_'+new Date().toISOString().slice(0,10)+'.csv', rowsToCsv(STATE.lastCompareRows), 'text/csv');
+  showBanner('✅ Compare CSV exported','g');
+}
+
+function exportChartPng(id){
+  const ch=_charts[id];
+  if(!ch || !ch.dataURI){showBanner('⚠️ Chart is not rendered yet','o');return;}
+  ch.dataURI().then(({imgURI})=>{
+    const a=document.createElement('a');
+    a.href=imgURI; a.download=id+'_'+new Date().toISOString().slice(0,10)+'.png'; a.click();
+    showBanner('✅ PNG exported','g');
+  }).catch(()=>showBanner('❌ PNG export failed','r'));
+}
+
 
 // ══════════════════════════════════════════════════════════════════
 // CHARTS HELPER
