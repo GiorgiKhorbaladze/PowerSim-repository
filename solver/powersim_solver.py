@@ -77,7 +77,7 @@ except ImportError:
 SCHEMA_VERSION = _SCHEMA_VER
 MODEL_VERSION  = _MODEL_VER
 HOURS_PER_YEAR = 8760
-SOLVER_VERSION = "powersim_solver 1.3.0"   # v1.3: sub-hourly, Gurobi, warm-start, heat-rate curves
+SOLVER_VERSION = "powersim_solver 1.4.0"   # v1.4: rolling carry-over, BESS/hydro boundary, sub-hourly ramp fix
 
 
 # ══════════════════════════════════════════════════════════════════════

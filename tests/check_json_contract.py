@@ -2,12 +2,10 @@
 PowerSim JSON contract regression checks.
 
 Fast, deterministic checks for CI that do not run the optimizer:
-  * committed sample input/result JSON still validates against Python schema, and
-  * the known HTML output validator accepts committed sample result versions.
-
-The active HTML/Python schema-version sync is handled by PR #4; this check
-intentionally avoids duplicating that code fix while still guarding the
-committed sample handoff contract.
+  * committed sample input/result JSON still validates against Python schema,
+  * the HTML output validator accepts committed sample result versions, and
+  * the HTML SCHEMA_VERSION constant matches the Python SCHEMA_VERSION exactly
+    (catches the v1.2 vs v1.4 class of silent round-trip breakage).
 """
 
 from __future__ import annotations
@@ -59,7 +57,12 @@ def check_sample_outputs() -> list[str]:
     return errors
 
 
-def check_html_sample_result_versions() -> list[str]:
+def check_html_schema_sync() -> list[str]:
+    """
+    Fail if the HTML SCHEMA_VERSION constant diverges from the Python one.
+    This is the primary guard against the 'v1.2 vs v1.4' class of silent
+    round-trip breakage where the solver emits a version the HTML rejects.
+    """
     errors: list[str] = []
     html_path = ROOT / "html" / "PowerSim_v4.html"
     text = html_path.read_text(encoding="utf-8")
@@ -69,15 +72,32 @@ def check_html_sample_result_versions() -> list[str]:
         return ["html/PowerSim_v4.html missing const SCHEMA_VERSION"]
     html_schema_version = version_match.group(1)
 
+    if html_schema_version != SCHEMA_VERSION:
+        errors.append(
+            f"HTML SCHEMA_VERSION '{html_schema_version}' != "
+            f"Python SCHEMA_VERSION '{SCHEMA_VERSION}' — "
+            "solver output will be rejected by HTML importResults()"
+        )
+
     accepted_match = re.search(
         r"const\s+ACCEPTED_OUTPUT_SCHEMAS\s*=\s*new\s+Set\(\s*\[([^\]]*)\]\s*\)",
         text,
         flags=re.S,
     )
     if not accepted_match:
-        return ["html/PowerSim_v4.html missing ACCEPTED_OUTPUT_SCHEMAS"]
+        errors.append("html/PowerSim_v4.html missing ACCEPTED_OUTPUT_SCHEMAS")
+        return errors
 
     html_accepted = set(re.findall(r"['\"]([^'\"]+)['\"]", accepted_match.group(1)))
+
+    # Python SCHEMA_VERSION must be accepted (either as the primary or in the set).
+    if SCHEMA_VERSION not in html_accepted and SCHEMA_VERSION != html_schema_version:
+        errors.append(
+            f"HTML ACCEPTED_OUTPUT_SCHEMAS does not include Python "
+            f"SCHEMA_VERSION '{SCHEMA_VERSION}'"
+        )
+
+    # All committed sample result versions must be accepted too.
     sample_versions = {
         sv
         for path in (ROOT / "samples").glob("sample_results*.json")
@@ -97,7 +117,7 @@ def main() -> int:
     errors = []
     errors.extend(check_sample_inputs())
     errors.extend(check_sample_outputs())
-    errors.extend(check_html_sample_result_versions())
+    errors.extend(check_html_schema_sync())
 
     if errors:
         print("JSON contract checks FAILED:")

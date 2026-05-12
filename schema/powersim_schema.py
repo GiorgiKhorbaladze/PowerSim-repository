@@ -1,7 +1,7 @@
 """
 PowerSim v4.0 — Input/Output JSON Schema
 =========================================
-Schema version: 1.2
+Schema version: 1.4
 Timezone:       Asia/Tbilisi
 Resolution:     hourly, 8760h (non-leap year)
 
@@ -237,14 +237,14 @@ def _nfc(s: Any) -> Any:
 # ──────────────────────────────────────────────────────────────────────
 def validate_input(inp: dict) -> tuple[bool, list[str], list[str]]:
     """
-    Validate a PowerSim input dict against schema v1.1.
+    Validate a PowerSim input dict against schema v1.4.
 
     Returns:
         (ok, errors, warnings).  ok == (len(errors) == 0).
         Warnings never fail the gate.
 
-    Accepts schema_version "1.0" with a warning (Stage 1 transition only);
-    rejects any other value that is not "1.1".
+    Accepts prior schema versions (1.0–1.3) with a warning; rejects unknown
+    versions with an error.
     """
     errors:   list[str] = []
     warnings: list[str] = []
@@ -255,8 +255,8 @@ def validate_input(inp: dict) -> tuple[bool, list[str], list[str]]:
     if sv == SCHEMA_VERSION:
         pass
     elif sv in ACCEPTED_SCHEMA_PRIOR:
-        warnings.append(f"schema_version '{sv}' accepted in Stage 1 "
-                        "(will be rejected in Stage 2)")
+        warnings.append(f"schema_version '{sv}' is a prior release; "
+                        f"upgrade to '{SCHEMA_VERSION}' recommended")
     else:
         errors.append(f"schema_version '{sv}' unsupported "
                       f"(expected '{SCHEMA_VERSION}')")
