@@ -1,9 +1,14 @@
 """
 PowerSim v4.0 — Input/Output JSON Schema
 =========================================
-Schema version: 1.2
+Schema version: 1.4
 Timezone:       Asia/Tbilisi
 Resolution:     hourly, 8760h (non-leap year)
+
+Changes vs 1.3 (Stage 4):
+  + Optional sub-hourly resolution metadata and solver backend selection
+  + Optional stochastic, expansion, KPI, BESS degradation, demand-response,
+    pumped-storage, reserve, gas, and diagnostics contract fields
 
 Changes vs 1.1 (Stage 2):
   + hydro.cascade_upstream          — upstream asset id feeding downstream inflow
@@ -22,7 +27,7 @@ Changes vs 1.0 (Stage 1):
   + OUTPUT_SCHEMA.metadata.data_source_fingerprint
   + New `validate_output()` function
   + `validate_input()` now returns (ok, errors, warnings) — 3-tuple
-  + schema_version "1.0" accepted with warning during Stage 1 transition
+  + schema_version "1.0" accepted with warning as a legacy schema
 
 Usage:
     from powersim_schema import (
@@ -49,7 +54,7 @@ TIMEZONE                = "Asia/Tbilisi"
 HOURS_PER_YEAR          = 8760
 
 # Allowed sub-hourly resolutions (minutes per period).
-# The default remains 60 for full backward-compatibility with v1.0..v1.2.
+# The default remains 60 for full backward-compatibility with v1.0..v1.4.
 ALLOWED_RESOLUTIONS_MIN: tuple[int, ...] = (60, 30, 15, 5)
 
 # Back-ends the solver can drive. 'auto' → HiGHS if Gurobi isn't importable.
@@ -237,14 +242,14 @@ def _nfc(s: Any) -> Any:
 # ──────────────────────────────────────────────────────────────────────
 def validate_input(inp: dict) -> tuple[bool, list[str], list[str]]:
     """
-    Validate a PowerSim input dict against schema v1.1.
+    Validate a PowerSim input dict against schema v1.4.
 
     Returns:
         (ok, errors, warnings).  ok == (len(errors) == 0).
         Warnings never fail the gate.
 
-    Accepts schema_version "1.0" with a warning (Stage 1 transition only);
-    rejects any other value that is not "1.1".
+    Accepts schema_version values listed in ACCEPTED_SCHEMA_PRIOR with a
+    warning; rejects any other value that is not SCHEMA_VERSION.
     """
     errors:   list[str] = []
     warnings: list[str] = []
@@ -255,8 +260,8 @@ def validate_input(inp: dict) -> tuple[bool, list[str], list[str]]:
     if sv == SCHEMA_VERSION:
         pass
     elif sv in ACCEPTED_SCHEMA_PRIOR:
-        warnings.append(f"schema_version '{sv}' accepted in Stage 1 "
-                        "(will be rejected in Stage 2)")
+        warnings.append(f"schema_version '{sv}' accepted as legacy "
+                        f"(active schema is '{SCHEMA_VERSION}')")
     else:
         errors.append(f"schema_version '{sv}' unsupported "
                       f"(expected '{SCHEMA_VERSION}')")
@@ -661,7 +666,7 @@ _REQUIRED_OUTPUT_KEYS = (
 
 def validate_output(out: dict) -> tuple[bool, list[str], list[str]]:
     """
-    Structural validator for solver output JSON against schema v1.1.
+    Structural validator for solver output JSON against schema v1.4.
     Does NOT re-check cost arithmetic — only shape and internal consistency.
 
     Returns:
@@ -682,8 +687,8 @@ def validate_output(out: dict) -> tuple[bool, list[str], list[str]]:
     if sv == SCHEMA_VERSION:
         pass
     elif sv in ACCEPTED_SCHEMA_PRIOR:
-        warnings.append(f"output schema_version '{sv}' accepted "
-                        "(v1.0 transition)")
+        warnings.append(f"output schema_version '{sv}' accepted as legacy "
+                        f"(active schema is '{SCHEMA_VERSION}')")
     else:
         errors.append(f"output schema_version '{sv}' unsupported")
 
