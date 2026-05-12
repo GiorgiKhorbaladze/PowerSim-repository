@@ -66,7 +66,7 @@ MAPPER_VERSION = "powersim_asset_mapper 1.0.0"
 # Edit this mapping to re-classify — it is the only authoritative table.
 _CATEGORY_TO_TYPE: dict[str, tuple[str, dict]] = {
     "Hydro - Reservoir": ("hydro_reg", {"_subclass": "reservoir"}),
-    "Hydro - Seasonal":  ("hydro_reg", {"_subclass": "seasonal"}),
+    "Hydro - Seasonal":  ("hydro_ror", {"_subclass": "seasonal_assumed_ror"}),
     "Hydro - Small":     ("hydro_ror", {"_subclass": "small_assumed_ror"}),
     "Solar":             ("solar",     {}),
     "Thermal":           ("thermal",   {"fuel_type": "gas"}),
@@ -612,8 +612,7 @@ def _row_to_asset(
         pmin = _HYDRO_RESERVOIR_DEFAULTS["pmin_fraction"] * pmax
         ramp = _HYDRO_RESERVOIR_DEFAULTS["ramp_fraction"] * pmax
         # `inflow_driven` classification:
-        #   Section I  (subclass='reservoir') → False  (handle separately later)
-        #   Section II (subclass='seasonal')  → True   (treat as inflow-driven for now)
+        #   Section I (subclass='reservoir') → False (handle separately later)
         # This is the single source of truth consumed by _build_hydro_zone_map
         # to decide whether an asset participates in zone mapping.
         subclass = extras.get("_subclass", "reservoir")
@@ -1321,7 +1320,7 @@ def build_assets_from_capacity_excel(
         "hydro_reg.efficiency    — placeholder 350 MWh/Mm³",
         "hydro_reg.water_value   — placeholder 15 $/MWh (reservoir) / 10 (ror)",
         "hydro cascade topology  — all cascade_upstream set to null; travel_delay_h=0",
-        "hydro_ror vs hydro_reg  — 'Hydro - Small' assumed RoR; some may actually regulate",
+        "hydro_ror vs hydro_reg  — 'Hydro - Seasonal' and 'Hydro - Small' mapped to RoR by default; review plant-level regulation",
         "wind/solar vom, curtailment_cost — all zero by default",
     ])
 

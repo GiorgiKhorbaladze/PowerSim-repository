@@ -71,6 +71,10 @@ Notes:
 * The demand workbook is required for the demand-shape workflow.
 * The installed-capacity workbook used by the asset mapper is private and should
   be referenced from a local path, not copied into the repository.
+* `tests/gse_2026_installed_capacity_registry_summary.json` is a sanitized
+  aggregate-only fixture for category totals and mapper regression tests; do not
+  replace it with the private workbook or row-level registry unless sharing has
+  been explicitly approved.
 
 Optional full-fleet config build from a private installed-capacity workbook:
 
