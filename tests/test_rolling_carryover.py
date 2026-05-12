@@ -11,6 +11,11 @@ that the cross-window invariants hold:
   4. **UC min_up / min_down** — periods_on / periods_off propagate; a
      unit started near the end of window 1 stays on for the remainder
      of its min_up time in window 2 (and symmetric for shutdown).
+  5. **BESS SOC** — committed end-of-window SOC becomes the next
+     window's initial SOC instead of resetting to soc_init.
+  6. **Reservoir storage** — committed end-of-window hydro storage
+     becomes the next window's initial storage instead of resetting to
+     reservoir_init.
 
 The tests invoke `solver.powersim_solver.solve_all` directly with
 synthetic, schema-light inputs.  No CSV/XLSX project_data is needed.
@@ -66,6 +71,14 @@ def _drive(inp: dict) -> tuple[list, dict]:
     gas_lim = build_gas_limits(inp, sh.get("start_hour",0), _H)
     hourly, _swall, _obj = solve_all(inp, assets, profiles, gas_lim)
     return hourly, assets
+
+
+def _thermal_bridge() -> dict:
+    """Cheap firm supply below demand, leaving a fixed 50 MW residual need."""
+    return {"id":"thermal_bridge", "type":"thermal", "committable":False,
+            "pmin":0, "pmax":100, "heat_rate":7.0, "fuel_type":"gas",
+            "fuel_price":4.0, "vom":0, "ramp_up":1000, "ramp_down":1000,
+            "for_rate":0.0}
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -265,6 +278,96 @@ def test_min_down_boundary():
 
 
 # ──────────────────────────────────────────────────────────────────────
+# 5. BESS SOC — committed end-state propagates to the next window
+# ──────────────────────────────────────────────────────────────────────
+def test_bess_soc_carry_over_two_windows():
+    inp = _base_input(horizon_h=48, window_h=24, step_h=24)
+    inp["profiles"]["demand"] = [150.0] * HOURS_PER_YEAR
+    inp["assets"] = [
+        _thermal_bridge(),
+        # Full 100 MWh battery can cover the 50 MW residual for only 2h.
+        # If window 2 reset to soc_init, total discharge would be 200 MWh.
+        {"id":"bess_limited", "type":"bess", "committable":False,
+         "power_mw":50, "energy_mwh":100, "soc_init":1.0,
+         "soc_min":0.0, "soc_max":1.0,
+         "eta_charge":1.0, "eta_discharge":1.0,
+         "vom_charge":0.0, "vom_discharge":1.0,
+         "reserve_capable":False},
+    ]
+
+    hourly, _ = _drive(inp)
+    total_discharge_mwh = sum(
+        (h.get("bess") or {}).get("bess_limited", {}).get("discharge_mw", 0.0)
+        * (h.get("period_minutes", 60) / 60.0)
+        for h in hourly
+    )
+    total_charge_mwh = sum(
+        (h.get("bess") or {}).get("bess_limited", {}).get("charge_mw", 0.0)
+        * (h.get("period_minutes", 60) / 60.0)
+        for h in hourly
+    )
+    first_soc = hourly[23]["bess"]["bess_limited"]["soc_mwh"]
+    second_first_soc = hourly[24]["bess"]["bess_limited"]["soc_mwh"]
+    print("  test_bess_soc_carry_over_two_windows: "
+          f"Σ discharge={total_discharge_mwh:.3f} MWh, "
+          f"Σ charge={total_charge_mwh:.3f} MWh, "
+          f"h24 SOC={first_soc:.3f}, h25 SOC={second_first_soc:.3f}")
+
+    assert total_charge_mwh <= 1e-6, (
+        f"sanity: no charging should be needed in this scarce-SOC case; got {total_charge_mwh:.3f}")
+    assert total_discharge_mwh <= 100.0 + 1e-6, (
+        "FAIL: BESS discharged more than its initial 100 MWh across two "
+        f"windows ({total_discharge_mwh:.3f}); SOC carry-over leaked")
+    assert total_discharge_mwh >= 99.0, (
+        f"sanity: BESS should use the scarce initial SOC, got {total_discharge_mwh:.3f}")
+    assert second_first_soc <= first_soc + 1e-6, (
+        f"FAIL: second window appears to reset/increase SOC ({first_soc} → {second_first_soc})")
+    print("    ✓ BESS SOC respected across two windows")
+
+
+# ──────────────────────────────────────────────────────────────────────
+# 6. Reservoir hydro — committed end-state propagates to the next window
+# ──────────────────────────────────────────────────────────────────────
+def test_reservoir_hydro_storage_carry_over_two_windows():
+    inp = _base_input(horizon_h=48, window_h=24, step_h=24)
+    inp["profiles"]["demand"] = [150.0] * HOURS_PER_YEAR
+    inp["assets"] = [
+        _thermal_bridge(),
+        # 100 Mm³ reservoir with efficiency 1 MWh/Mm³ can cover the 50 MW
+        # residual for only 2h.  If window 2 reset to reservoir_init, total
+        # release would be 200 Mm³.
+        {"id":"hydro_limited", "type":"hydro_reg", "committable":False,
+         "pmin":0, "pmax":50, "vom":0,
+         "hydro":{"reservoir_init":100.0, "reservoir_min":0.0,
+                  "reservoir_max":100.0, "reservoir_end_min":0.0,
+                  "efficiency":1.0, "inflow":0.0, "spill_cost":0.0,
+                  "water_value":0.0}},
+    ]
+
+    hourly, _ = _drive(inp)
+    total_release_mm3 = sum(
+        (h.get("hydro") or {}).get("hydro_limited", {}).get("release_mm3h", 0.0)
+        * (h.get("period_minutes", 60) / 60.0)
+        for h in hourly
+    )
+    first_storage = hourly[23]["hydro"]["hydro_limited"]["storage_mm3"]
+    second_first_storage = hourly[24]["hydro"]["hydro_limited"]["storage_mm3"]
+    print("  test_reservoir_hydro_storage_carry_over_two_windows: "
+          f"Σ release={total_release_mm3:.3f} Mm³, "
+          f"h24 storage={first_storage:.3f}, h25 storage={second_first_storage:.3f}")
+
+    assert total_release_mm3 <= 100.0 + 1e-6, (
+        "FAIL: hydro released more than its initial 100 Mm³ across two "
+        f"windows ({total_release_mm3:.3f}); reservoir carry-over leaked")
+    assert total_release_mm3 >= 99.0, (
+        f"sanity: hydro should use the scarce initial storage, got {total_release_mm3:.3f}")
+    assert second_first_storage <= first_storage + 1e-6, (
+        "FAIL: second window appears to reset/increase reservoir storage "
+        f"({first_storage} → {second_first_storage})")
+    print("    ✓ reservoir storage respected across two windows")
+
+
+# ──────────────────────────────────────────────────────────────────────
 # CLI / pytest entry
 # ──────────────────────────────────────────────────────────────────────
 TESTS = [
@@ -273,6 +376,8 @@ TESTS = [
     test_dr_annual_hours_carry_over,
     test_min_up_boundary,
     test_min_down_boundary,
+    test_bess_soc_carry_over_two_windows,
+    test_reservoir_hydro_storage_carry_over_two_windows,
 ]
 
 
