@@ -716,7 +716,7 @@ def solve_window(
         if t == 1: return pyo.Constraint.Skip
         rd = float(assets[g].get("ramp_down", 9999))
         if rd >= 9999: return pyo.Constraint.Skip
-        return m.p[g,t-1] - m.p[g,t] <= rd
+        return m.p[g,t-1] - m.p[g,t] <= rd * dt
     m.RampUp = pyo.Constraint(m.G, m.T, rule=ramp_up_c)
     m.RampDn = pyo.Constraint(m.G, m.T, rule=ramp_dn_c)
 
