@@ -71,6 +71,10 @@ Notes:
 * The demand workbook is required for the demand-shape workflow.
 * The installed-capacity workbook used by the asset mapper is private and should
   be referenced from a local path, not copied into the repository.
+* `samples/demo_asset_registry_2026.json` is the approved demo registry
+  representation reconciled to Giorgi's 2026 installed-capacity display total;
+  do not replace it with the private workbook/source image unless sharing has
+  been explicitly approved.
 
 Optional full-fleet config build from a private installed-capacity workbook:
 
