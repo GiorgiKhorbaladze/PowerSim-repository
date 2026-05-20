@@ -744,6 +744,89 @@ def validate_input(inp: dict) -> tuple[bool, list[str], list[str]]:
             if kind == "line_outage" and line_ids and el not in line_ids:
                 errors.append(f"contingency '{c.get('id')}': line '{el}' not in lines")
 
+    # ── v1.5: maintenance calendar ──────────────────────────────────
+    # Additive + backward compatible: absence is accepted. Events derate
+    # an asset's available capacity over a global-hour window. Accepts
+    # either availability_factor∈[0,1] OR available_capacity_mw≥0.
+    _MAINT_KINDS = ("planned_maintenance", "forced_outage", "partial_derating")
+    pmax_by_asset = {}
+    for a in inp.get("assets") or []:
+        pmax_by_asset[a.get("id")] = float(
+            a.get("pmax", a.get("pmax_installed", a.get("power_mw", 0))) or 0)
+
+    def _check_maint_event(ev, ctx, owner_id=None):
+        if not isinstance(ev, dict):
+            errors.append(f"{ctx} must be a dict"); return
+        aid = owner_id if owner_id is not None else ev.get("asset_id")
+        if aid is None:
+            errors.append(f"{ctx}: missing asset_id")
+        elif aid not in asset_ids:
+            errors.append(f"{ctx}: asset_id '{aid}' not in assets")
+        s = ev.get("start_h", ev.get("start"))
+        e = ev.get("end_h", ev.get("end"))
+        if not (isinstance(s, (int, float)) and isinstance(e, (int, float))):
+            errors.append(f"{ctx}: start/end must be numeric hours")
+        else:
+            if s < 0 or e > HOURS_PER_YEAR:
+                errors.append(f"{ctx}: window [{s}, {e}) outside [0, {HOURS_PER_YEAR}]")
+            if s >= e:
+                errors.append(f"{ctx}: start ({s}) must be < end ({e})")
+        et = ev.get("event_type")
+        if et is not None and et not in _MAINT_KINDS:
+            warnings.append(f"{ctx}: event_type '{et}' not in {_MAINT_KINDS}")
+        af = ev.get("availability_factor")
+        cap = ev.get("available_capacity_mw")
+        if af is not None:
+            if not (isinstance(af, (int, float)) and 0 <= af <= 1):
+                errors.append(f"{ctx}: availability_factor must be in [0, 1]")
+        elif cap is not None:
+            if not (isinstance(cap, (int, float)) and cap >= 0):
+                errors.append(f"{ctx}: available_capacity_mw must be >= 0")
+            else:
+                pmx = pmax_by_asset.get(aid, 0)
+                if pmx and cap > pmx + 1e-6:
+                    errors.append(
+                        f"{ctx}: available_capacity_mw {cap} exceeds pmax {pmx}")
+        # neither factor nor capacity → full outage (allowed)
+
+    maint = inp.get("maintenance")
+    if maint is not None:
+        if not isinstance(maint, list):
+            errors.append("maintenance must be a list of events")
+        else:
+            for i, ev in enumerate(maint):
+                _check_maint_event(ev, f"maintenance[{i}]")
+    # per-asset maint_windows (legacy / inline form)
+    for a in inp.get("assets") or []:
+        mw = a.get("maint_windows")
+        if mw is None:
+            continue
+        if not isinstance(mw, list):
+            errors.append(f"asset '{a.get('id')}': maint_windows must be a list")
+            continue
+        for i, ev in enumerate(mw):
+            _check_maint_event(ev, f"asset '{a.get('id')}'.maint_windows[{i}]",
+                               owner_id=a.get("id"))
+    # Overlap warning per asset (informational; overlaps compose min-factor).
+    _by_owner = {}
+    for ev in (maint or []):
+        if isinstance(ev, dict):
+            _by_owner.setdefault(ev.get("asset_id"), []).append(ev)
+    for aid, evs in _by_owner.items():
+        spans = []
+        for ev in evs:
+            s = ev.get("start_h", ev.get("start"))
+            e = ev.get("end_h", ev.get("end"))
+            if isinstance(s, (int, float)) and isinstance(e, (int, float)):
+                spans.append((s, e))
+        spans.sort()
+        for j in range(1, len(spans)):
+            if spans[j][0] < spans[j-1][1]:
+                warnings.append(
+                    f"maintenance: overlapping windows for asset '{aid}' "
+                    f"(most restrictive factor applies)")
+                break
+
     ok = len(errors) == 0
     return ok, errors, warnings
 

@@ -307,6 +307,14 @@ def slice_profiles(inp: dict) -> dict:
 
 def build_asset_map(inp: dict) -> dict:
     """Return {asset_id: asset_dict} with derived fields."""
+    # Top-level maintenance events → per-asset maintenance windows.
+    maint_by_asset = {}
+    for ev in inp.get("maintenance", []) or []:
+        aid = ev.get("asset_id")
+        if aid is None:
+            continue
+        maint_by_asset.setdefault(aid, []).append(ev)
+
     amap = {}
     for a in inp.get("assets", []):
         a2 = dict(a)
@@ -335,40 +343,79 @@ def build_asset_map(inp: dict) -> dict:
             and a.get("type") not in ("dr", "pumped_hydro")
         # Gas usage rate [Mm³/MWh]
         a2["_gas_rate"] = hr / 35_000.0 if hr > 0 and a.get("fuel_type","gas")=="gas" else 0.0
+        # Maintenance windows: per-asset field + top-level maintenance events.
+        mw = list(a.get("maint_windows", []) or [])
+        mw.extend(maint_by_asset.get(a2["id"], []))
+        if mw:
+            a2["maint_windows"] = mw
         amap[a2["id"]] = a2
     return amap
 
 
-def get_pmax_t(asset: dict, t_local: int, profiles: dict) -> float:
-    """Effective Pmax at hour t (0-indexed within horizon)."""
+def get_pmax_t(asset: dict, t_local: int, profiles: dict,
+               offset_h: int = 0, dt: float = 1.0) -> float:
+    """Effective Pmax at period t_local (0-indexed within the window).
+
+    `offset_h` + `dt` map the window-local period to the global hour-of-study
+    so maintenance windows (defined in global hours) can be enforced for every
+    asset type — not only thermal/hydro_reg.
+    """
     atype = asset.get("type")
     if atype in ("wind", "solar"):
         prof_key = asset.get("availability_profile")
         cf = profiles.get(prof_key, [1.0] * (t_local + 1))[t_local] if prof_key else 1.0
-        return float(asset.get("pmax_installed", asset.get("pmax", 0))) * max(0.0, min(1.0, cf))
+        base = float(asset.get("pmax_installed", asset.get("pmax", 0))) * max(0.0, min(1.0, cf))
     elif atype == "hydro_ror":
         prof_key = asset.get("availability_profile")
         cf = profiles.get(prof_key, [asset.get("cf", 0.65)] * (t_local + 1))[t_local] if prof_key else asset.get("cf", 0.65)
-        return float(asset.get("pmax", 0)) * max(0.0, min(1.0, cf))
+        base = float(asset.get("pmax", 0)) * max(0.0, min(1.0, cf))
     elif atype == "import":
         prof_key = asset.get("pmax_profile")
         if prof_key and isinstance(profiles.get(prof_key), list):
-            return float(profiles[prof_key][t_local])
-        return float(asset.get("pmax_profile", asset.get("pmax", 0)))
-    # Maintenance factor
-    pmax = float(asset.get("pmax", 0))
-    mf = _maint_factor(asset, t_local)
-    return pmax * mf
+            base = float(profiles[prof_key][t_local])
+        else:
+            base = float(asset.get("pmax_profile", asset.get("pmax", 0)))
+    else:
+        base = float(asset.get("pmax", 0))
+    # Maintenance derating applies uniformly to all asset types.
+    global_h = int(offset_h + round(t_local * dt))
+    return base * _maint_factor(asset, global_h)
 
 
-def _maint_factor(asset: dict, t_local: int) -> float:
-    """Return availability factor [0,1] based on maintenance windows."""
+def _maint_factor(asset: dict, global_h: int) -> float:
+    """Availability factor in [0,1] at global hour `global_h`.
+
+    Reads per-asset ``maint_windows`` (populated from the top-level
+    ``maintenance`` list by :func:`build_asset_map`). Each window:
+      {start_h|start, end_h|end, availability_factor? , available_capacity_mw?}
+    A window with neither factor nor capacity is treated as a full outage.
+    Overlapping windows compose multiplicatively-min (the most restrictive
+    factor wins).
+    """
     windows = asset.get("maint_windows", [])
     if not windows:
         return 1.0
-    # t_local → calendar date requires knowing start date
-    # For now return 1.0 if no window data; full implementation in Phase 2
-    return 1.0
+    pmax = float(asset.get("pmax",
+                 asset.get("pmax_installed",
+                 asset.get("power_mw", 0))) or 0)
+    factor = 1.0
+    for w in windows:
+        s = w.get("start_h", w.get("start"))
+        e = w.get("end_h", w.get("end"))
+        try:
+            s = float(s); e = float(e)
+        except (TypeError, ValueError):
+            continue
+        if not (s <= global_h < e):
+            continue
+        if w.get("availability_factor") is not None:
+            wf = float(w["availability_factor"])
+        elif w.get("available_capacity_mw") is not None and pmax > 0:
+            wf = float(w["available_capacity_mw"]) / pmax
+        else:
+            wf = 0.0
+        factor = min(factor, max(0.0, min(1.0, wf)))
+    return factor
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -719,7 +766,7 @@ def solve_window(
             return m.p[g,t] >= float(assets[g].get("pmin",0)) * m.u[g,t]
         return m.p[g,t] >= 0
     def gen_ub(m, g, t):
-        pmx = get_pmax_t(assets[g], t-1, profiles_w)
+        pmx = get_pmax_t(assets[g], t-1, profiles_w, offset_h, dt)
         if g in committable:
             return m.p[g,t] <= pmx * m.u[g,t]
         return m.p[g,t] <= pmx
@@ -1020,7 +1067,7 @@ def solve_window(
         for g in elig:
             if dirn in ("up","symmetric"):
                 def res_head(m, t, _g=g, _rid=rid):
-                    pmx = get_pmax_t(assets[_g], t-1, profiles_w)
+                    pmx = get_pmax_t(assets[_g], t-1, profiles_w, offset_h, dt)
                     u_t = m.u[_g,t] if _g in committable else 1
                     return m.p[_g,t] + m.res_up[_rid,_g,t] <= pmx * u_t
                 m.add_component(f"ResHead_{rid}_{g}", pyo.Constraint(m.T, rule=res_head))
@@ -1223,7 +1270,7 @@ def solve_window(
         # Curtailment — MWh per period (pot - actual is MW, × dt).
         curt = 0.0
         for g in wind_solar:
-            pot = get_pmax_t(assets[g], t-1, profiles_w)
+            pot = get_pmax_t(assets[g], t-1, profiles_w, offset_h, dt)
             curt += max(0.0, pot - disp[g]) * dt
 
         # Lambda (VOLL-aware) — copperplate single λ vs nodal LMP per bus
