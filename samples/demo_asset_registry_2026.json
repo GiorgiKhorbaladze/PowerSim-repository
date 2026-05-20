@@ -1,0 +1,1360 @@
+{
+  "metadata": {
+    "registry_id": "demo_asset_registry_2026",
+    "description": "Demo installed-capacity asset registry for PowerSim. Contains registry/config data only and does not encode solver assumptions.",
+    "source_note": "Created from provided installed-capacity list; original real GSE Excel workbook is intentionally not committed.",
+    "created_for": "PowerSim demo registry",
+    "asset_id_policy": "asset_id is the stable internal identifier; name_ge is the Georgian display name.",
+    "seasonal_hydro_warning": "Hydro - Seasonal units are mapped to hydro_ror by default in this demo registry; review for hydro_reg if reservoir/seasonal regulation is modeled.",
+    "known_warnings": [
+      "მტკვარიჰესი had a missing category in the source workbook; Hydro - Seasonal is inferred for this demo registry.",
+      "გამარჯვების მზის საგდური likely has a source spelling typo; source spelling is retained unless an approved correction is provided."
+    ],
+    "expected_asset_count": 131,
+    "expected_total_installed_capacity_mw": 4770.1935,
+    "expected_category_summary": {
+      "Hydro - Reservoir": {
+        "count": 7,
+        "installed_capacity_mw": 1993.12,
+        "powersim_type": "hydro_reg"
+      },
+      "Hydro - Seasonal": {
+        "count": 24,
+        "installed_capacity_mw": 1214.21,
+        "powersim_type": "hydro_ror"
+      },
+      "Hydro - Small": {
+        "count": 85,
+        "installed_capacity_mw": 331.2635,
+        "powersim_type": "hydro_ror"
+      },
+      "Solar": {
+        "count": 6,
+        "installed_capacity_mw": 10.75,
+        "powersim_type": "solar"
+      },
+      "Thermal": {
+        "count": 7,
+        "installed_capacity_mw": 1181.4,
+        "powersim_type": "thermal"
+      },
+      "Wind": {
+        "count": 2,
+        "installed_capacity_mw": 39.45,
+        "powersim_type": "wind"
+      }
+    }
+  },
+  "assets": [
+    {
+      "asset_id": "hydro_res_001",
+      "name_ge": "ხრამჰესი 1",
+      "installed_capacity_mw": 112.8,
+      "units_text": "3x37,6;",
+      "commissioning_year": 1947,
+      "source_category": "Hydro - Reservoir",
+      "powersim_type": "hydro_reg",
+      "demo_registry_note": ""
+    },
+    {
+      "asset_id": "hydro_res_002",
+      "name_ge": "შაორჰესი",
+      "installed_capacity_mw": 40.32,
+      "units_text": "2x10.6+2x9.6",
+      "commissioning_year": 1955,
+      "source_category": "Hydro - Reservoir",
+      "powersim_type": "hydro_reg",
+      "demo_registry_note": ""
+    },
+    {
+      "asset_id": "hydro_res_003",
+      "name_ge": "ძევრულაჰესი",
+      "installed_capacity_mw": 80.0,
+      "units_text": "4x20",
+      "commissioning_year": 1956,
+      "source_category": "Hydro - Reservoir",
+      "powersim_type": "hydro_reg",
+      "demo_registry_note": ""
+    },
+    {
+      "asset_id": "hydro_res_004",
+      "name_ge": "ხრამჰესი 2",
+      "installed_capacity_mw": 110.0,
+      "units_text": "2x55",
+      "commissioning_year": 1963,
+      "source_category": "Hydro - Reservoir",
+      "powersim_type": "hydro_reg",
+      "demo_registry_note": ""
+    },
+    {
+      "asset_id": "hydro_res_005",
+      "name_ge": "ვარდნილჰესი",
+      "installed_capacity_mw": 220.0,
+      "units_text": "3x73,33",
+      "commissioning_year": 1971,
+      "source_category": "Hydro - Reservoir",
+      "powersim_type": "hydro_reg",
+      "demo_registry_note": ""
+    },
+    {
+      "asset_id": "hydro_res_006",
+      "name_ge": "ენგურჰესი",
+      "installed_capacity_mw": 1300.0,
+      "units_text": "5x260",
+      "commissioning_year": 1978,
+      "source_category": "Hydro - Reservoir",
+      "powersim_type": "hydro_reg",
+      "demo_registry_note": ""
+    },
+    {
+      "asset_id": "hydro_res_007",
+      "name_ge": "ჟინვალჰესი",
+      "installed_capacity_mw": 130.0,
+      "units_text": "4x32,5",
+      "commissioning_year": 1984,
+      "source_category": "Hydro - Reservoir",
+      "powersim_type": "hydro_reg",
+      "demo_registry_note": ""
+    },
+    {
+      "asset_id": "hydro_seasonal_001",
+      "name_ge": "ზაჰესი",
+      "installed_capacity_mw": 42.0,
+      "units_text": "4x3.2+2x15",
+      "commissioning_year": 1927,
+      "source_category": "Hydro - Seasonal",
+      "powersim_type": "hydro_ror",
+      "demo_registry_note": "Hydro - Seasonal mapped to hydro_ror by default; review if reservoir/seasonal regulation is modeled and hydro_reg is needed."
+    },
+    {
+      "asset_id": "hydro_seasonal_002",
+      "name_ge": "რიონჰესი",
+      "installed_capacity_mw": 54.0,
+      "units_text": "12X3+18",
+      "commissioning_year": 1933,
+      "source_category": "Hydro - Seasonal",
+      "powersim_type": "hydro_ror",
+      "demo_registry_note": "Hydro - Seasonal mapped to hydro_ror by default; review if reservoir/seasonal regulation is modeled and hydro_reg is needed."
+    },
+    {
+      "asset_id": "hydro_seasonal_003",
+      "name_ge": "აწჰესი",
+      "installed_capacity_mw": 18.4,
+      "units_text": "10.4+8",
+      "commissioning_year": 1937,
+      "source_category": "Hydro - Seasonal",
+      "powersim_type": "hydro_ror",
+      "demo_registry_note": "Hydro - Seasonal mapped to hydro_ror by default; review if reservoir/seasonal regulation is modeled and hydro_reg is needed."
+    },
+    {
+      "asset_id": "hydro_seasonal_004",
+      "name_ge": "ჩითახევჰესი",
+      "installed_capacity_mw": 21.0,
+      "units_text": "3x7",
+      "commissioning_year": 1949,
+      "source_category": "Hydro - Seasonal",
+      "powersim_type": "hydro_ror",
+      "demo_registry_note": "Hydro - Seasonal mapped to hydro_ror by default; review if reservoir/seasonal regulation is modeled and hydro_reg is needed."
+    },
+    {
+      "asset_id": "hydro_seasonal_005",
+      "name_ge": "ორთაჭალჰესი",
+      "installed_capacity_mw": 18.0,
+      "units_text": "3x6",
+      "commissioning_year": 1954,
+      "source_category": "Hydro - Seasonal",
+      "powersim_type": "hydro_ror",
+      "demo_registry_note": "Hydro - Seasonal mapped to hydro_ror by default; review if reservoir/seasonal regulation is modeled and hydro_reg is needed."
+    },
+    {
+      "asset_id": "hydro_seasonal_006",
+      "name_ge": "გუმათჰესი 1",
+      "installed_capacity_mw": 46.7,
+      "units_text": "12.7+11+12+11",
+      "commissioning_year": 1956,
+      "source_category": "Hydro - Seasonal",
+      "powersim_type": "hydro_ror",
+      "demo_registry_note": "Hydro - Seasonal mapped to hydro_ror by default; review if reservoir/seasonal regulation is modeled and hydro_reg is needed."
+    },
+    {
+      "asset_id": "hydro_seasonal_007",
+      "name_ge": "გუმათჰესი 2",
+      "installed_capacity_mw": 22.8,
+      "units_text": "3x7.6",
+      "commissioning_year": 1958,
+      "source_category": "Hydro - Seasonal",
+      "powersim_type": "hydro_ror",
+      "demo_registry_note": "Hydro - Seasonal mapped to hydro_ror by default; review if reservoir/seasonal regulation is modeled and hydro_reg is needed."
+    },
+    {
+      "asset_id": "hydro_seasonal_008",
+      "name_ge": "ლაჯანურჰესი",
+      "installed_capacity_mw": 115.6,
+      "units_text": "2x39.144+37.28",
+      "commissioning_year": 1960,
+      "source_category": "Hydro - Seasonal",
+      "powersim_type": "hydro_ror",
+      "demo_registry_note": "Hydro - Seasonal mapped to hydro_ror by default; review if reservoir/seasonal regulation is modeled and hydro_reg is needed."
+    },
+    {
+      "asset_id": "hydro_seasonal_009",
+      "name_ge": "ვარციხეჰესი 1",
+      "installed_capacity_mw": 46.0,
+      "units_text": "2x23",
+      "commissioning_year": 1976,
+      "source_category": "Hydro - Seasonal",
+      "powersim_type": "hydro_ror",
+      "demo_registry_note": "Hydro - Seasonal mapped to hydro_ror by default; review if reservoir/seasonal regulation is modeled and hydro_reg is needed."
+    },
+    {
+      "asset_id": "hydro_seasonal_010",
+      "name_ge": "ვარციხეჰესი 2",
+      "installed_capacity_mw": 46.0,
+      "units_text": "2x23",
+      "commissioning_year": 1976,
+      "source_category": "Hydro - Seasonal",
+      "powersim_type": "hydro_ror",
+      "demo_registry_note": "Hydro - Seasonal mapped to hydro_ror by default; review if reservoir/seasonal regulation is modeled and hydro_reg is needed."
+    },
+    {
+      "asset_id": "hydro_seasonal_011",
+      "name_ge": "ვარციხეჰესი 3",
+      "installed_capacity_mw": 46.0,
+      "units_text": "2x23",
+      "commissioning_year": 1977,
+      "source_category": "Hydro - Seasonal",
+      "powersim_type": "hydro_ror",
+      "demo_registry_note": "Hydro - Seasonal mapped to hydro_ror by default; review if reservoir/seasonal regulation is modeled and hydro_reg is needed."
+    },
+    {
+      "asset_id": "hydro_seasonal_012",
+      "name_ge": "ვარციხეჰესი 4",
+      "installed_capacity_mw": 46.0,
+      "units_text": "2X23",
+      "commissioning_year": 1977,
+      "source_category": "Hydro - Seasonal",
+      "powersim_type": "hydro_ror",
+      "demo_registry_note": "Hydro - Seasonal mapped to hydro_ror by default; review if reservoir/seasonal regulation is modeled and hydro_reg is needed."
+    },
+    {
+      "asset_id": "hydro_seasonal_013",
+      "name_ge": "ხადორჰესი",
+      "installed_capacity_mw": 24.0,
+      "units_text": "2x12",
+      "commissioning_year": 2004,
+      "source_category": "Hydro - Seasonal",
+      "powersim_type": "hydro_ror",
+      "demo_registry_note": "Hydro - Seasonal mapped to hydro_ror by default; review if reservoir/seasonal regulation is modeled and hydro_reg is needed."
+    },
+    {
+      "asset_id": "hydro_seasonal_014",
+      "name_ge": "ლარსიჰესი",
+      "installed_capacity_mw": 19.0,
+      "units_text": "3x6,5",
+      "commissioning_year": 2014,
+      "source_category": "Hydro - Seasonal",
+      "powersim_type": "hydro_ror",
+      "demo_registry_note": "Hydro - Seasonal mapped to hydro_ror by default; review if reservoir/seasonal regulation is modeled and hydro_reg is needed."
+    },
+    {
+      "asset_id": "hydro_seasonal_015",
+      "name_ge": "ფარავანჰესი",
+      "installed_capacity_mw": 86.54,
+      "units_text": "2x43.27",
+      "commissioning_year": 2014,
+      "source_category": "Hydro - Seasonal",
+      "powersim_type": "hydro_ror",
+      "demo_registry_note": "Hydro - Seasonal mapped to hydro_ror by default; review if reservoir/seasonal regulation is modeled and hydro_reg is needed."
+    },
+    {
+      "asset_id": "hydro_seasonal_016",
+      "name_ge": "დარიალჰესი",
+      "installed_capacity_mw": 108.0,
+      "units_text": "3x36",
+      "commissioning_year": 2016,
+      "source_category": "Hydro - Seasonal",
+      "powersim_type": "hydro_ror",
+      "demo_registry_note": "Hydro - Seasonal mapped to hydro_ror by default; review if reservoir/seasonal regulation is modeled and hydro_reg is needed."
+    },
+    {
+      "asset_id": "hydro_seasonal_017",
+      "name_ge": "ხელვაჩაური 1",
+      "installed_capacity_mw": 47.48,
+      "units_text": "5×9.1+1,98",
+      "commissioning_year": 2016,
+      "source_category": "Hydro - Seasonal",
+      "powersim_type": "hydro_ror",
+      "demo_registry_note": "Hydro - Seasonal mapped to hydro_ror by default; review if reservoir/seasonal regulation is modeled and hydro_reg is needed."
+    },
+    {
+      "asset_id": "hydro_seasonal_018",
+      "name_ge": "შუახევიჰესი",
+      "installed_capacity_mw": 178.716,
+      "units_text": "2x89.358",
+      "commissioning_year": 2017,
+      "source_category": "Hydro - Seasonal",
+      "powersim_type": "hydro_ror",
+      "demo_registry_note": "Hydro - Seasonal mapped to hydro_ror by default; review if reservoir/seasonal regulation is modeled and hydro_reg is needed."
+    },
+    {
+      "asset_id": "hydro_seasonal_019",
+      "name_ge": "ოლდ ენერჯიჰესი (სოხუმჰესი)",
+      "installed_capacity_mw": 21.39,
+      "units_text": "3x7.13",
+      "commissioning_year": 2018,
+      "source_category": "Hydro - Seasonal",
+      "powersim_type": "hydro_ror",
+      "demo_registry_note": "Hydro - Seasonal mapped to hydro_ror by default; review if reservoir/seasonal regulation is modeled and hydro_reg is needed."
+    },
+    {
+      "asset_id": "hydro_seasonal_020",
+      "name_ge": "კირნათიჰესი",
+      "installed_capacity_mw": 52.62,
+      "units_text": "4x12,68+1x1,9",
+      "commissioning_year": 2018,
+      "source_category": "Hydro - Seasonal",
+      "powersim_type": "hydro_ror",
+      "demo_registry_note": "Hydro - Seasonal mapped to hydro_ror by default; review if reservoir/seasonal regulation is modeled and hydro_reg is needed."
+    },
+    {
+      "asset_id": "hydro_seasonal_021",
+      "name_ge": "მესტიაჭალა 2 ჰესი",
+      "installed_capacity_mw": 31.9,
+      "units_text": "3X10",
+      "commissioning_year": 2019,
+      "source_category": "Hydro - Seasonal",
+      "powersim_type": "hydro_ror",
+      "demo_registry_note": "Hydro - Seasonal mapped to hydro_ror by default; review if reservoir/seasonal regulation is modeled and hydro_reg is needed."
+    },
+    {
+      "asset_id": "hydro_seasonal_022",
+      "name_ge": "მესტიაჭალა 1 ჰესი",
+      "installed_capacity_mw": 21.264,
+      "units_text": "2X10,632",
+      "commissioning_year": 2019,
+      "source_category": "Hydro - Seasonal",
+      "powersim_type": "hydro_ror",
+      "demo_registry_note": "Hydro - Seasonal mapped to hydro_ror by default; review if reservoir/seasonal regulation is modeled and hydro_reg is needed."
+    },
+    {
+      "asset_id": "hydro_seasonal_023",
+      "name_ge": "ხობიჰესი 2",
+      "installed_capacity_mw": 46.7,
+      "units_text": "2x23,35",
+      "commissioning_year": 2024,
+      "source_category": "Hydro - Seasonal",
+      "powersim_type": "hydro_ror",
+      "demo_registry_note": "Hydro - Seasonal mapped to hydro_ror by default; review if reservoir/seasonal regulation is modeled and hydro_reg is needed."
+    },
+    {
+      "asset_id": "hydro_seasonal_024",
+      "name_ge": "მტკვარიჰესი",
+      "installed_capacity_mw": 54.1,
+      "units_text": "2x27,05",
+      "commissioning_year": 2025,
+      "source_category": "Hydro - Seasonal",
+      "powersim_type": "hydro_ror",
+      "demo_registry_note": "Hydro - Seasonal mapped to hydro_ror by default; review if reservoir/seasonal regulation is modeled and hydro_reg is needed. Source workbook category was missing; inferred Hydro - Seasonal for demo registry."
+    },
+    {
+      "asset_id": "hydro_small_001",
+      "name_ge": "აბჰესი",
+      "installed_capacity_mw": 2.008,
+      "units_text": "1x0,888;2x0,56",
+      "commissioning_year": 1928,
+      "source_category": "Hydro - Small",
+      "powersim_type": "hydro_ror",
+      "demo_registry_note": ""
+    },
+    {
+      "asset_id": "hydro_small_002",
+      "name_ge": "დაშბაშჰესი (ქცია)",
+      "installed_capacity_mw": 1.26,
+      "units_text": "3x0,42",
+      "commissioning_year": 1935,
+      "source_category": "Hydro - Small",
+      "powersim_type": "hydro_ror",
+      "demo_registry_note": ""
+    },
+    {
+      "asset_id": "hydro_small_003",
+      "name_ge": "ჩალაჰესი (ქინძმარაული)",
+      "installed_capacity_mw": 1.5,
+      "units_text": "3x0.5",
+      "commissioning_year": 1941,
+      "source_category": "Hydro - Small",
+      "powersim_type": "hydro_ror",
+      "demo_registry_note": ""
+    },
+    {
+      "asset_id": "hydro_small_004",
+      "name_ge": "ალაზანჰესი",
+      "installed_capacity_mw": 6.064,
+      "units_text": "2x3.032",
+      "commissioning_year": 1942,
+      "source_category": "Hydro - Small",
+      "powersim_type": "hydro_ror",
+      "demo_registry_note": ""
+    },
+    {
+      "asset_id": "hydro_small_005",
+      "name_ge": "მაშავერაჰესი (დემი)",
+      "installed_capacity_mw": 1.0,
+      "units_text": "2x0.5",
+      "commissioning_year": 1949,
+      "source_category": "Hydro - Small",
+      "powersim_type": "hydro_ror",
+      "demo_registry_note": ""
+    },
+    {
+      "asset_id": "hydro_small_006",
+      "name_ge": "ტირიფონჰესი",
+      "installed_capacity_mw": 3.2,
+      "units_text": "2x1,6",
+      "commissioning_year": 1951,
+      "source_category": "Hydro - Small",
+      "powersim_type": "hydro_ror",
+      "demo_registry_note": ""
+    },
+    {
+      "asset_id": "hydro_small_007",
+      "name_ge": "საცხენჰესი",
+      "installed_capacity_mw": 14.0,
+      "units_text": "2x7",
+      "commissioning_year": 1952,
+      "source_category": "Hydro - Small",
+      "powersim_type": "hydro_ror",
+      "demo_registry_note": ""
+    },
+    {
+      "asset_id": "hydro_small_008",
+      "name_ge": "თეთრიხევჰესი",
+      "installed_capacity_mw": 12.4,
+      "units_text": "2x6,2",
+      "commissioning_year": 1952,
+      "source_category": "Hydro - Small",
+      "powersim_type": "hydro_ror",
+      "demo_registry_note": ""
+    },
+    {
+      "asset_id": "hydro_small_009",
+      "name_ge": "მარტყოფიჰესი",
+      "installed_capacity_mw": 3.87,
+      "units_text": "1x3,87",
+      "commissioning_year": 1952,
+      "source_category": "Hydro - Small",
+      "powersim_type": "hydro_ror",
+      "demo_registry_note": ""
+    },
+    {
+      "asset_id": "hydro_small_010",
+      "name_ge": "იგოეთი ჰესი",
+      "installed_capacity_mw": 1.775,
+      "units_text": "1.25+0.525",
+      "commissioning_year": 1953,
+      "source_category": "Hydro - Small",
+      "powersim_type": "hydro_ror",
+      "demo_registry_note": ""
+    },
+    {
+      "asset_id": "hydro_small_011",
+      "name_ge": "კაბალჰესი",
+      "installed_capacity_mw": 1.5,
+      "units_text": "3x0,5",
+      "commissioning_year": 1953,
+      "source_category": "Hydro - Small",
+      "powersim_type": "hydro_ror",
+      "demo_registry_note": ""
+    },
+    {
+      "asset_id": "hydro_small_012",
+      "name_ge": "კინკიშაჰესი",
+      "installed_capacity_mw": 0.864,
+      "units_text": "2x0,432",
+      "commissioning_year": 1954,
+      "source_category": "Hydro - Small",
+      "powersim_type": "hydro_ror",
+      "demo_registry_note": ""
+    },
+    {
+      "asset_id": "hydro_small_013",
+      "name_ge": "ბჟუჟაჰესი",
+      "installed_capacity_mw": 12.24,
+      "units_text": "3x4,08",
+      "commissioning_year": 1956,
+      "source_category": "Hydro - Small",
+      "powersim_type": "hydro_ror",
+      "demo_registry_note": ""
+    },
+    {
+      "asset_id": "hydro_small_014",
+      "name_ge": "კახარეთიჰესი",
+      "installed_capacity_mw": 2.08,
+      "units_text": "2x1,04",
+      "commissioning_year": 1957,
+      "source_category": "Hydro - Small",
+      "powersim_type": "hydro_ror",
+      "demo_registry_note": ""
+    },
+    {
+      "asset_id": "hydro_small_015",
+      "name_ge": "მაჭახელაჰესი (ბაკური)",
+      "installed_capacity_mw": 2.175,
+      "units_text": "1x2.175",
+      "commissioning_year": 1957,
+      "source_category": "Hydro - Small",
+      "powersim_type": "hydro_ror",
+      "demo_registry_note": ""
+    },
+    {
+      "asset_id": "hydro_small_016",
+      "name_ge": "სქურიჰესი",
+      "installed_capacity_mw": 1.028,
+      "units_text": "2x0.514",
+      "commissioning_year": 1958,
+      "source_category": "Hydro - Small",
+      "powersim_type": "hydro_ror",
+      "demo_registry_note": ""
+    },
+    {
+      "asset_id": "hydro_small_017",
+      "name_ge": "აჭიჰესი",
+      "installed_capacity_mw": 1.028,
+      "units_text": "1x0,74; 1x0,288",
+      "commissioning_year": 1958,
+      "source_category": "Hydro - Small",
+      "powersim_type": "hydro_ror",
+      "demo_registry_note": ""
+    },
+    {
+      "asset_id": "hydro_small_018",
+      "name_ge": "სიონჰესი",
+      "installed_capacity_mw": 9.14,
+      "units_text": "2x4,57",
+      "commissioning_year": 1964,
+      "source_category": "Hydro - Small",
+      "powersim_type": "hydro_ror",
+      "demo_registry_note": ""
+    },
+    {
+      "asset_id": "hydro_small_019",
+      "name_ge": "მისაქციელი  (ენტო)",
+      "installed_capacity_mw": 2.75,
+      "units_text": "1.75+1.0",
+      "commissioning_year": 1964,
+      "source_category": "Hydro - Small",
+      "powersim_type": "hydro_ror",
+      "demo_registry_note": ""
+    },
+    {
+      "asset_id": "hydro_small_020",
+      "name_ge": "რიცეულაჰესი",
+      "installed_capacity_mw": 6.32,
+      "units_text": "1x4,08;2x1,12",
+      "commissioning_year": 1967,
+      "source_category": "Hydro - Small",
+      "powersim_type": "hydro_ror",
+      "demo_registry_note": ""
+    },
+    {
+      "asset_id": "hydro_small_021",
+      "name_ge": "ჩხორჰესი",
+      "installed_capacity_mw": 6.0,
+      "units_text": "2x3",
+      "commissioning_year": 1967,
+      "source_category": "Hydro - Small",
+      "powersim_type": "hydro_ror",
+      "demo_registry_note": ""
+    },
+    {
+      "asset_id": "hydro_small_022",
+      "name_ge": "ინწობაჰესი",
+      "installed_capacity_mw": 1.5,
+      "units_text": "3x0,5",
+      "commissioning_year": 1998,
+      "source_category": "Hydro - Small",
+      "powersim_type": "hydro_ror",
+      "demo_registry_note": ""
+    },
+    {
+      "asset_id": "hydro_small_023",
+      "name_ge": "ენერგეტიკიჰესი (ახალქალაქი)",
+      "installed_capacity_mw": 0.492,
+      "units_text": "1",
+      "commissioning_year": 2006,
+      "source_category": "Hydro - Small",
+      "powersim_type": "hydro_ror",
+      "demo_registry_note": ""
+    },
+    {
+      "asset_id": "hydro_small_024",
+      "name_ge": "სანალიაჰესი",
+      "installed_capacity_mw": 4.2,
+      "units_text": "2x2,1",
+      "commissioning_year": 2007,
+      "source_category": "Hydro - Small",
+      "powersim_type": "hydro_ror",
+      "demo_registry_note": ""
+    },
+    {
+      "asset_id": "hydro_small_025",
+      "name_ge": "სულორჰესი",
+      "installed_capacity_mw": 0.8,
+      "units_text": "1",
+      "commissioning_year": 2009,
+      "source_category": "Hydro - Small",
+      "powersim_type": "hydro_ror",
+      "demo_registry_note": ""
+    },
+    {
+      "asset_id": "hydro_small_026",
+      "name_ge": "ოკამი 2007",
+      "installed_capacity_mw": 1.6,
+      "units_text": "1",
+      "commissioning_year": 2009,
+      "source_category": "Hydro - Small",
+      "powersim_type": "hydro_ror",
+      "demo_registry_note": ""
+    },
+    {
+      "asset_id": "hydro_small_027",
+      "name_ge": "ბოლდოდაჰესი (ლოპოტა)",
+      "installed_capacity_mw": 2.5,
+      "units_text": "1",
+      "commissioning_year": 2009,
+      "source_category": "Hydro - Small",
+      "powersim_type": "hydro_ror",
+      "demo_registry_note": ""
+    },
+    {
+      "asset_id": "hydro_small_028",
+      "name_ge": "ფშაველაჰესი",
+      "installed_capacity_mw": 2.9,
+      "units_text": "1",
+      "commissioning_year": 2010,
+      "source_category": "Hydro - Small",
+      "powersim_type": "hydro_ror",
+      "demo_registry_note": ""
+    },
+    {
+      "asset_id": "hydro_small_029",
+      "name_ge": "ხადორჰესი 2",
+      "installed_capacity_mw": 5.4,
+      "units_text": "2x2.7",
+      "commissioning_year": 2012,
+      "source_category": "Hydro - Small",
+      "powersim_type": "hydro_ror",
+      "demo_registry_note": ""
+    },
+    {
+      "asset_id": "hydro_small_030",
+      "name_ge": "რაჭაჰესი",
+      "installed_capacity_mw": 11.0,
+      "units_text": "2x5.5",
+      "commissioning_year": 2013,
+      "source_category": "Hydro - Small",
+      "powersim_type": "hydro_ror",
+      "demo_registry_note": ""
+    },
+    {
+      "asset_id": "hydro_small_031",
+      "name_ge": "ალაზანჰესი 2",
+      "installed_capacity_mw": 6.064,
+      "units_text": "2x3.032",
+      "commissioning_year": 2013,
+      "source_category": "Hydro - Small",
+      "powersim_type": "hydro_ror",
+      "demo_registry_note": ""
+    },
+    {
+      "asset_id": "hydro_small_032",
+      "name_ge": "შილდაჰესი",
+      "installed_capacity_mw": 5.0,
+      "units_text": "2x2.5",
+      "commissioning_year": 2013,
+      "source_category": "Hydro - Small",
+      "powersim_type": "hydro_ror",
+      "demo_registry_note": ""
+    },
+    {
+      "asset_id": "hydro_small_033",
+      "name_ge": "ბახვიჰესი 3",
+      "installed_capacity_mw": 9.8,
+      "units_text": "2x4+1x1.8",
+      "commissioning_year": 2013,
+      "source_category": "Hydro - Small",
+      "powersim_type": "hydro_ror",
+      "demo_registry_note": ""
+    },
+    {
+      "asset_id": "hydro_small_034",
+      "name_ge": "ყაზბეგიჰესი",
+      "installed_capacity_mw": 6.4,
+      "units_text": "2x3.2",
+      "commissioning_year": 2014,
+      "source_category": "Hydro - Small",
+      "powersim_type": "hydro_ror",
+      "demo_registry_note": ""
+    },
+    {
+      "asset_id": "hydro_small_035",
+      "name_ge": "არაგვიჰესი",
+      "installed_capacity_mw": 8.0,
+      "units_text": "2x4",
+      "commissioning_year": 2014,
+      "source_category": "Hydro - Small",
+      "powersim_type": "hydro_ror",
+      "demo_registry_note": ""
+    },
+    {
+      "asset_id": "hydro_small_036",
+      "name_ge": "ახმეტაჰესი",
+      "installed_capacity_mw": 9.2,
+      "units_text": "2x4.7",
+      "commissioning_year": 2014,
+      "source_category": "Hydro - Small",
+      "powersim_type": "hydro_ror",
+      "demo_registry_note": ""
+    },
+    {
+      "asset_id": "hydro_small_037",
+      "name_ge": "ფშაველა (სთორი-ფაუერი)",
+      "installed_capacity_mw": 1.935,
+      "units_text": "1x1.935",
+      "commissioning_year": 2014,
+      "source_category": "Hydro - Small",
+      "powersim_type": "hydro_ror",
+      "demo_registry_note": ""
+    },
+    {
+      "asset_id": "hydro_small_038",
+      "name_ge": "კაზრეთიჰესი",
+      "installed_capacity_mw": 3.3,
+      "units_text": "2x1.6+0.1",
+      "commissioning_year": 2015,
+      "source_category": "Hydro - Small",
+      "powersim_type": "hydro_ror",
+      "demo_registry_note": ""
+    },
+    {
+      "asset_id": "hydro_small_039",
+      "name_ge": "დებედაჰესი",
+      "installed_capacity_mw": 3.2,
+      "units_text": "2x1.6",
+      "commissioning_year": 2016,
+      "source_category": "Hydro - Small",
+      "powersim_type": "hydro_ror",
+      "demo_registry_note": ""
+    },
+    {
+      "asset_id": "hydro_small_040",
+      "name_ge": "შაქშაქეთიჰესი",
+      "installed_capacity_mw": 1.875,
+      "units_text": "1",
+      "commissioning_year": 2016,
+      "source_category": "Hydro - Small",
+      "powersim_type": "hydro_ror",
+      "demo_registry_note": ""
+    },
+    {
+      "asset_id": "hydro_small_041",
+      "name_ge": "საგურამოჰესი",
+      "installed_capacity_mw": 4.5,
+      "units_text": "2x2.25",
+      "commissioning_year": 2016,
+      "source_category": "Hydro - Small",
+      "powersim_type": "hydro_ror",
+      "demo_registry_note": ""
+    },
+    {
+      "asset_id": "hydro_small_042",
+      "name_ge": "მარნეულიჰესი",
+      "installed_capacity_mw": 0.25,
+      "units_text": "1",
+      "commissioning_year": 2016,
+      "source_category": "Hydro - Small",
+      "powersim_type": "hydro_ror",
+      "demo_registry_note": ""
+    },
+    {
+      "asset_id": "hydro_small_043",
+      "name_ge": "ნაბეღლავიჰესი",
+      "installed_capacity_mw": 2.0,
+      "units_text": "2x1,0",
+      "commissioning_year": 2017,
+      "source_category": "Hydro - Small",
+      "powersim_type": "hydro_ror",
+      "demo_registry_note": ""
+    },
+    {
+      "asset_id": "hydro_small_044",
+      "name_ge": "კინტრიშაჰესი",
+      "installed_capacity_mw": 5.5,
+      "units_text": "2x2.75",
+      "commissioning_year": 2017,
+      "source_category": "Hydro - Small",
+      "powersim_type": "hydro_ror",
+      "demo_registry_note": ""
+    },
+    {
+      "asset_id": "hydro_small_045",
+      "name_ge": "შილდაჰესი 1",
+      "installed_capacity_mw": 1.2,
+      "units_text": "1",
+      "commissioning_year": 2018,
+      "source_category": "Hydro - Small",
+      "powersim_type": "hydro_ror",
+      "demo_registry_note": ""
+    },
+    {
+      "asset_id": "hydro_small_046",
+      "name_ge": "ხეორიჰესი",
+      "installed_capacity_mw": 1.48,
+      "units_text": "1 x 1,48",
+      "commissioning_year": 2018,
+      "source_category": "Hydro - Small",
+      "powersim_type": "hydro_ror",
+      "demo_registry_note": ""
+    },
+    {
+      "asset_id": "hydro_small_047",
+      "name_ge": "კასლეთიჰესი 2",
+      "installed_capacity_mw": 9.1,
+      "units_text": "2 x 4,5",
+      "commissioning_year": 2018,
+      "source_category": "Hydro - Small",
+      "powersim_type": "hydro_ror",
+      "demo_registry_note": ""
+    },
+    {
+      "asset_id": "hydro_small_048",
+      "name_ge": "ბოდორნაჰესი",
+      "installed_capacity_mw": 2.5,
+      "units_text": "1",
+      "commissioning_year": 2018,
+      "source_category": "Hydro - Small",
+      "powersim_type": "hydro_ror",
+      "demo_registry_note": ""
+    },
+    {
+      "asset_id": "hydro_small_049",
+      "name_ge": "სკურდიდიჰესი",
+      "installed_capacity_mw": 1.28,
+      "units_text": "2x0,63",
+      "commissioning_year": 2018,
+      "source_category": "Hydro - Small",
+      "powersim_type": "hydro_ror",
+      "demo_registry_note": ""
+    },
+    {
+      "asset_id": "hydro_small_050",
+      "name_ge": "ჯონოულიჰესი 1",
+      "installed_capacity_mw": 1.85,
+      "units_text": "1x 1,85",
+      "commissioning_year": 2018,
+      "source_category": "Hydro - Small",
+      "powersim_type": "hydro_ror",
+      "demo_registry_note": ""
+    },
+    {
+      "asset_id": "hydro_small_051",
+      "name_ge": "არაგვი 2 ჰესი",
+      "installed_capacity_mw": 1.95,
+      "units_text": "1",
+      "commissioning_year": 2018,
+      "source_category": "Hydro - Small",
+      "powersim_type": "hydro_ror",
+      "demo_registry_note": ""
+    },
+    {
+      "asset_id": "hydro_small_052",
+      "name_ge": "ავანიჰესი",
+      "installed_capacity_mw": 4.6,
+      "units_text": "1",
+      "commissioning_year": 2019,
+      "source_category": "Hydro - Small",
+      "powersim_type": "hydro_ror",
+      "demo_registry_note": ""
+    },
+    {
+      "asset_id": "hydro_small_053",
+      "name_ge": "ოროჰესი",
+      "installed_capacity_mw": 1.2,
+      "units_text": "1",
+      "commissioning_year": 2019,
+      "source_category": "Hydro - Small",
+      "powersim_type": "hydro_ror",
+      "demo_registry_note": ""
+    },
+    {
+      "asset_id": "hydro_small_054",
+      "name_ge": "საშუალაჰესი 2",
+      "installed_capacity_mw": 5.0,
+      "units_text": "2x2.53",
+      "commissioning_year": 2019,
+      "source_category": "Hydro - Small",
+      "powersim_type": "hydro_ror",
+      "demo_registry_note": ""
+    },
+    {
+      "asset_id": "hydro_small_055",
+      "name_ge": "ჭაპალაჰესი",
+      "installed_capacity_mw": 0.43,
+      "units_text": "1",
+      "commissioning_year": 2020,
+      "source_category": "Hydro - Small",
+      "powersim_type": "hydro_ror",
+      "demo_registry_note": ""
+    },
+    {
+      "asset_id": "hydro_small_056",
+      "name_ge": "ხელრაჰესი",
+      "installed_capacity_mw": 3.7,
+      "units_text": "1",
+      "commissioning_year": 2020,
+      "source_category": "Hydro - Small",
+      "powersim_type": "hydro_ror",
+      "demo_registry_note": ""
+    },
+    {
+      "asset_id": "hydro_small_057",
+      "name_ge": "იფარიჰესი",
+      "installed_capacity_mw": 3.3,
+      "units_text": "1",
+      "commissioning_year": 2020,
+      "source_category": "Hydro - Small",
+      "powersim_type": "hydro_ror",
+      "demo_registry_note": ""
+    },
+    {
+      "asset_id": "hydro_small_058",
+      "name_ge": "ძამაჰესი",
+      "installed_capacity_mw": 0.81,
+      "units_text": "0.540+0.256",
+      "commissioning_year": 2020,
+      "source_category": "Hydro - Small",
+      "powersim_type": "hydro_ror",
+      "demo_registry_note": ""
+    },
+    {
+      "asset_id": "hydro_small_059",
+      "name_ge": "ლახამი 1 ჰესი",
+      "installed_capacity_mw": 7.14,
+      "units_text": "2x3.56",
+      "commissioning_year": 2020,
+      "source_category": "Hydro - Small",
+      "powersim_type": "hydro_ror",
+      "demo_registry_note": ""
+    },
+    {
+      "asset_id": "hydro_small_060",
+      "name_ge": "ლახამი 2 ჰესი",
+      "installed_capacity_mw": 10.71,
+      "units_text": "3x3.57",
+      "commissioning_year": 2020,
+      "source_category": "Hydro - Small",
+      "powersim_type": "hydro_ror",
+      "demo_registry_note": ""
+    },
+    {
+      "asset_id": "hydro_small_061",
+      "name_ge": "საშუალა ჰესი 1",
+      "installed_capacity_mw": 7.86,
+      "units_text": "2x3.93",
+      "commissioning_year": 2021,
+      "source_category": "Hydro - Small",
+      "powersim_type": "hydro_ror",
+      "demo_registry_note": ""
+    },
+    {
+      "asset_id": "hydro_small_062",
+      "name_ge": "სხალთა ჰესი",
+      "installed_capacity_mw": 9.0,
+      "units_text": "3x3",
+      "commissioning_year": 2021,
+      "source_category": "Hydro - Small",
+      "powersim_type": "hydro_ror",
+      "demo_registry_note": ""
+    },
+    {
+      "asset_id": "hydro_small_063",
+      "name_ge": "დვირულა ჰესი",
+      "installed_capacity_mw": 1.955,
+      "units_text": "1",
+      "commissioning_year": 2021,
+      "source_category": "Hydro - Small",
+      "powersim_type": "hydro_ror",
+      "demo_registry_note": ""
+    },
+    {
+      "asset_id": "hydro_small_064",
+      "name_ge": "ხრამი ჰესი",
+      "installed_capacity_mw": 1.13,
+      "units_text": "1",
+      "commissioning_year": 2021,
+      "source_category": "Hydro - Small",
+      "powersim_type": "hydro_ror",
+      "demo_registry_note": ""
+    },
+    {
+      "asset_id": "hydro_small_065",
+      "name_ge": "როშკა 2 ჰესი",
+      "installed_capacity_mw": 1.99,
+      "units_text": "1",
+      "commissioning_year": 2021,
+      "source_category": "Hydro - Small",
+      "powersim_type": "hydro_ror",
+      "demo_registry_note": ""
+    },
+    {
+      "asset_id": "hydro_small_066",
+      "name_ge": "როშკა 3 ჰესი",
+      "installed_capacity_mw": 1.058,
+      "units_text": "1",
+      "commissioning_year": 2021,
+      "source_category": "Hydro - Small",
+      "powersim_type": "hydro_ror",
+      "demo_registry_note": ""
+    },
+    {
+      "asset_id": "hydro_small_067",
+      "name_ge": "ახატანი ჰესი",
+      "installed_capacity_mw": 0.315,
+      "units_text": "1",
+      "commissioning_year": 2021,
+      "source_category": "Hydro - Small",
+      "powersim_type": "hydro_ror",
+      "demo_registry_note": ""
+    },
+    {
+      "asset_id": "hydro_small_068",
+      "name_ge": "ბერალიჰესი",
+      "installed_capacity_mw": 0.85,
+      "units_text": "1",
+      "commissioning_year": 2022,
+      "source_category": "Hydro - Small",
+      "powersim_type": "hydro_ror",
+      "demo_registry_note": ""
+    },
+    {
+      "asset_id": "hydro_small_069",
+      "name_ge": "ნაკრაჰესი",
+      "installed_capacity_mw": 9.95,
+      "units_text": "2x4.97",
+      "commissioning_year": 2022,
+      "source_category": "Hydro - Small",
+      "powersim_type": "hydro_ror",
+      "demo_registry_note": ""
+    },
+    {
+      "asset_id": "hydro_small_070",
+      "name_ge": "ჩორდულაჰესი",
+      "installed_capacity_mw": 2.691,
+      "units_text": "1",
+      "commissioning_year": 2022,
+      "source_category": "Hydro - Small",
+      "powersim_type": "hydro_ror",
+      "demo_registry_note": ""
+    },
+    {
+      "asset_id": "hydro_small_071",
+      "name_ge": "ნაცეშარიჰესი",
+      "installed_capacity_mw": 1.8785,
+      "units_text": "1",
+      "commissioning_year": 2022,
+      "source_category": "Hydro - Small",
+      "powersim_type": "hydro_ror",
+      "demo_registry_note": ""
+    },
+    {
+      "asset_id": "hydro_small_072",
+      "name_ge": "ახალქალაქი 1 ჰესი",
+      "installed_capacity_mw": 7.65,
+      "units_text": "3x2.55",
+      "commissioning_year": 2022,
+      "source_category": "Hydro - Small",
+      "powersim_type": "hydro_ror",
+      "demo_registry_note": ""
+    },
+    {
+      "asset_id": "hydro_small_073",
+      "name_ge": "ახალქალაქი 2 ჰესი",
+      "installed_capacity_mw": 1.7,
+      "units_text": "1",
+      "commissioning_year": 2022,
+      "source_category": "Hydro - Small",
+      "powersim_type": "hydro_ror",
+      "demo_registry_note": ""
+    },
+    {
+      "asset_id": "hydro_small_074",
+      "name_ge": "საშუალა ჰესი",
+      "installed_capacity_mw": 2.203,
+      "units_text": "1",
+      "commissioning_year": 2022,
+      "source_category": "Hydro - Small",
+      "powersim_type": "hydro_ror",
+      "demo_registry_note": ""
+    },
+    {
+      "asset_id": "hydro_small_075",
+      "name_ge": "კორშა ჰესი",
+      "installed_capacity_mw": 1.505,
+      "units_text": "1",
+      "commissioning_year": 2023,
+      "source_category": "Hydro - Small",
+      "powersim_type": "hydro_ror",
+      "demo_registry_note": ""
+    },
+    {
+      "asset_id": "hydro_small_076",
+      "name_ge": "როშკა 1 ჰესი",
+      "installed_capacity_mw": 1.041,
+      "units_text": "1",
+      "commissioning_year": 2023,
+      "source_category": "Hydro - Small",
+      "powersim_type": "hydro_ror",
+      "demo_registry_note": ""
+    },
+    {
+      "asset_id": "hydro_small_077",
+      "name_ge": "დმანისი ჰესი",
+      "installed_capacity_mw": 1.98,
+      "units_text": "1",
+      "commissioning_year": 2023,
+      "source_category": "Hydro - Small",
+      "powersim_type": "hydro_ror",
+      "demo_registry_note": ""
+    },
+    {
+      "asset_id": "hydro_small_078",
+      "name_ge": "როშკა",
+      "installed_capacity_mw": 1.505,
+      "units_text": "1",
+      "commissioning_year": 2023,
+      "source_category": "Hydro - Small",
+      "powersim_type": "hydro_ror",
+      "demo_registry_note": ""
+    },
+    {
+      "asset_id": "hydro_small_079",
+      "name_ge": "კორშა 1",
+      "installed_capacity_mw": 1.02,
+      "units_text": "1",
+      "commissioning_year": 2023,
+      "source_category": "Hydro - Small",
+      "powersim_type": "hydro_ror",
+      "demo_registry_note": ""
+    },
+    {
+      "asset_id": "hydro_small_080",
+      "name_ge": "ტოლოში ჰესი",
+      "installed_capacity_mw": 1.69,
+      "units_text": "1",
+      "commissioning_year": 2023,
+      "source_category": "Hydro - Small",
+      "powersim_type": "hydro_ror",
+      "demo_registry_note": ""
+    },
+    {
+      "asset_id": "hydro_small_081",
+      "name_ge": "შევაბურიჰესი",
+      "installed_capacity_mw": 1.96,
+      "units_text": "1",
+      "commissioning_year": 2024,
+      "source_category": "Hydro - Small",
+      "powersim_type": "hydro_ror",
+      "demo_registry_note": ""
+    },
+    {
+      "asset_id": "hydro_small_082",
+      "name_ge": "დაღეთიჰესი",
+      "installed_capacity_mw": 0.81,
+      "units_text": "2x0,405",
+      "commissioning_year": 2025,
+      "source_category": "Hydro - Small",
+      "powersim_type": "hydro_ror",
+      "demo_registry_note": ""
+    },
+    {
+      "asset_id": "hydro_small_083",
+      "name_ge": "ბასრა 1",
+      "installed_capacity_mw": 12.53,
+      "units_text": "2x6,265",
+      "commissioning_year": 2025,
+      "source_category": "Hydro - Small",
+      "powersim_type": "hydro_ror",
+      "demo_registry_note": ""
+    },
+    {
+      "asset_id": "hydro_small_084",
+      "name_ge": "ბასრა 3",
+      "installed_capacity_mw": 3.924,
+      "units_text": "1",
+      "commissioning_year": 2025,
+      "source_category": "Hydro - Small",
+      "powersim_type": "hydro_ror",
+      "demo_registry_note": ""
+    },
+    {
+      "asset_id": "hydro_small_085",
+      "name_ge": "კასლეთიჰესი 1",
+      "installed_capacity_mw": 7.2,
+      "units_text": "2x3,6",
+      "commissioning_year": 2025,
+      "source_category": "Hydro - Small",
+      "powersim_type": "hydro_ror",
+      "demo_registry_note": ""
+    },
+    {
+      "asset_id": "solar_001",
+      "name_ge": "გამარჯვების მზის საგდური",
+      "installed_capacity_mw": 1.75,
+      "units_text": "x",
+      "commissioning_year": 2025,
+      "source_category": "Solar",
+      "powersim_type": "solar",
+      "demo_registry_note": "Source spelling retained for demo registry; likely typo requires approved correction before changing."
+    },
+    {
+      "asset_id": "solar_002",
+      "name_ge": "ჯუგაანის მზის სადგური",
+      "installed_capacity_mw": 1.75,
+      "units_text": "x",
+      "commissioning_year": 2025,
+      "source_category": "Solar",
+      "powersim_type": "solar",
+      "demo_registry_note": ""
+    },
+    {
+      "asset_id": "solar_003",
+      "name_ge": "კასპის მზის სადგური",
+      "installed_capacity_mw": 2.0,
+      "units_text": "x",
+      "commissioning_year": 2025,
+      "source_category": "Solar",
+      "powersim_type": "solar",
+      "demo_registry_note": ""
+    },
+    {
+      "asset_id": "solar_004",
+      "name_ge": "ხირსის მზის სადგური",
+      "installed_capacity_mw": 1.75,
+      "units_text": "x",
+      "commissioning_year": 2025,
+      "source_category": "Solar",
+      "powersim_type": "solar",
+      "demo_registry_note": ""
+    },
+    {
+      "asset_id": "solar_005",
+      "name_ge": "ქედის მზის ელექტროსადგური",
+      "installed_capacity_mw": 1.75,
+      "units_text": "x",
+      "commissioning_year": 2025,
+      "source_category": "Solar",
+      "powersim_type": "solar",
+      "demo_registry_note": ""
+    },
+    {
+      "asset_id": "solar_006",
+      "name_ge": "ქისტაურის მზის ელექტროსადგური",
+      "installed_capacity_mw": 1.75,
+      "units_text": "x",
+      "commissioning_year": 2025,
+      "source_category": "Solar",
+      "powersim_type": "solar",
+      "demo_registry_note": ""
+    },
+    {
+      "asset_id": "thermal_001",
+      "name_ge": "თბილსრესი (IV ბლოკი)",
+      "installed_capacity_mw": 142.0,
+      "units_text": "1x142",
+      "commissioning_year": 1963,
+      "source_category": "Thermal",
+      "powersim_type": "thermal",
+      "demo_registry_note": ""
+    },
+    {
+      "asset_id": "thermal_002",
+      "name_ge": "თბილსრესი (III ბლოკი)",
+      "installed_capacity_mw": 130.0,
+      "units_text": "1x130",
+      "commissioning_year": 1963,
+      "source_category": "Thermal",
+      "powersim_type": "thermal",
+      "demo_registry_note": ""
+    },
+    {
+      "asset_id": "thermal_003",
+      "name_ge": "მტკვარი ენერგეტიკა (IX ბლოკი)",
+      "installed_capacity_mw": 300.0,
+      "units_text": "1x300",
+      "commissioning_year": 1991,
+      "source_category": "Thermal",
+      "powersim_type": "thermal",
+      "demo_registry_note": ""
+    },
+    {
+      "asset_id": "thermal_004",
+      "name_ge": "ჯიფაუერი (აირტურბინა)",
+      "installed_capacity_mw": 110.0,
+      "units_text": "2x55",
+      "commissioning_year": 2006,
+      "source_category": "Thermal",
+      "powersim_type": "thermal",
+      "demo_registry_note": ""
+    },
+    {
+      "asset_id": "thermal_005",
+      "name_ge": "ტყიბულის ნახშირის სადგ.",
+      "installed_capacity_mw": 13.2,
+      "units_text": "2x6,6",
+      "commissioning_year": 2011,
+      "source_category": "Thermal",
+      "powersim_type": "thermal",
+      "demo_registry_note": ""
+    },
+    {
+      "asset_id": "thermal_006",
+      "name_ge": "გარდაბნის თბოსადგური 1 (კცთეს 1)",
+      "installed_capacity_mw": 231.2,
+      "units_text": "2x73.6+84",
+      "commissioning_year": 2015,
+      "source_category": "Thermal",
+      "powersim_type": "thermal",
+      "demo_registry_note": ""
+    },
+    {
+      "asset_id": "thermal_007",
+      "name_ge": "გარდაბნის თბოსადგური 2 (კცთეს 2)",
+      "installed_capacity_mw": 255.0,
+      "units_text": "2x84+87",
+      "commissioning_year": 2020,
+      "source_category": "Thermal",
+      "powersim_type": "thermal",
+      "demo_registry_note": ""
+    },
+    {
+      "asset_id": "wind_001",
+      "name_ge": "ქართლის ქარის ელ.სადგური",
+      "installed_capacity_mw": 20.7,
+      "units_text": "6x3.45",
+      "commissioning_year": 2016,
+      "source_category": "Wind",
+      "powersim_type": "wind",
+      "demo_registry_note": ""
+    },
+    {
+      "asset_id": "wind_002",
+      "name_ge": "ზემო ვინდი",
+      "installed_capacity_mw": 18.75,
+      "units_text": "6x3.125",
+      "commissioning_year": 2026,
+      "source_category": "Wind",
+      "powersim_type": "wind",
+      "demo_registry_note": ""
+    }
+  ]
+}

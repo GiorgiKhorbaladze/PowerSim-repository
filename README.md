@@ -50,6 +50,9 @@ files. See [`docs/JSON_HANDOFF.md`](docs/JSON_HANDOFF.md) for the contract.
 │   ├── sample_mc_summary_720h.json
 │   └── sample_mc_summary_gse_720h.json         ← GSE 4-scenario MC summary
 ├── docs/
+│   ├── WHAT_IS_POWERSIM.md       ← v1.0 RC product overview
+│   ├── RELEASE_CANDIDATE_CHECKLIST.md ← RC checklist, inputs, blockers
+│   ├── DEMO_SCRIPT.md            ← Giorgi demo runbook
 │   ├── HAPPY_PATH.md             ← clone → result in 5 minutes
 │   ├── JSON_HANDOFF.md           ← input/output schema reference
 │   ├── COLAB.md                  ← run on Google Colab
@@ -93,6 +96,12 @@ xdg-open html/PowerSim_v4.html      # or just double-click
 
 Full walkthrough: [`docs/HAPPY_PATH.md`](docs/HAPPY_PATH.md).
 Colab walkthrough: [`docs/COLAB.md`](docs/COLAB.md).
+
+For v1.0 Release Candidate preparation, see:
+
+* [`docs/WHAT_IS_POWERSIM.md`](docs/WHAT_IS_POWERSIM.md) — product overview and boundaries.
+* [`docs/RELEASE_CANDIDATE_CHECKLIST.md`](docs/RELEASE_CANDIDATE_CHECKLIST.md) — checklist, required input files, known limitations, and blockers.
+* [`docs/DEMO_SCRIPT.md`](docs/DEMO_SCRIPT.md) — suggested final demo flow for Giorgi.
 
 ---
 

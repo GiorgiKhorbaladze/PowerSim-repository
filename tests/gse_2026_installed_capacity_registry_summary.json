@@ -1,0 +1,53 @@
+{
+  "source": "დადგმული სიმძლავრე - 2026.xlsx",
+  "source_sheet": "2026",
+  "fixture_kind": "sanitized_summary",
+  "note": "Private/local GSE installed-capacity registry draft. The real workbook and row-level registry are intentionally not committed; this fixture keeps only aggregate category totals and the public category-to-PowerSim mapping used for regression tests.",
+  "mapping": {
+    "Hydro - Reservoir": "hydro_reg",
+    "Hydro - Seasonal": "hydro_ror",
+    "Hydro - Small": "hydro_ror",
+    "Solar": "solar",
+    "Thermal": "thermal",
+    "Wind": "wind"
+  },
+  "warnings": [
+    "Row 40: missing category for მტკვარიჰესი; inferred Hydro - Seasonal."
+  ],
+  "summary": {
+    "Hydro - Reservoir": {
+      "count": 7,
+      "installed_capacity_mw": 1993.12,
+      "powersim_type": "hydro_reg"
+    },
+    "Hydro - Seasonal": {
+      "count": 24,
+      "installed_capacity_mw": 1214.21,
+      "powersim_type": "hydro_ror"
+    },
+    "Hydro - Small": {
+      "count": 85,
+      "installed_capacity_mw": 331.2635,
+      "powersim_type": "hydro_ror"
+    },
+    "Solar": {
+      "count": 6,
+      "installed_capacity_mw": 10.75,
+      "powersim_type": "solar"
+    },
+    "Thermal": {
+      "count": 7,
+      "installed_capacity_mw": 1181.4,
+      "powersim_type": "thermal"
+    },
+    "Wind": {
+      "count": 2,
+      "installed_capacity_mw": 39.45,
+      "powersim_type": "wind"
+    }
+  },
+  "totals": {
+    "count": 131,
+    "installed_capacity_mw": 4770.1935
+  }
+}

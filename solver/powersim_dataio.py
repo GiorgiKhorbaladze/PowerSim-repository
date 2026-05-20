@@ -1,7 +1,7 @@
 """
 PowerSim v4.0 — Project Data Loader
 ====================================
-Sole responsibility: assemble a schema-v1.1-compliant input dict from the
+Sole responsibility: assemble a schema-v1.4-compliant input dict from the
 raw GSE project files (hydro CSVs, renewables CSVs, CharYear/PLEXOS xlsx).
 
 No Pyomo. No optimization. No HTML coupling.
@@ -647,7 +647,7 @@ def build_input_from_project(
     kpi_templates: list | None = None,
 ) -> dict:
     """
-    Assemble a schema v1.1 input dict from the raw project files.
+    Assemble a schema v1.4 input dict from the raw project files.
 
     Steps:
       1. Load hydro CSV for `scenario`.
@@ -657,7 +657,7 @@ def build_input_from_project(
       5. Rewrite each asset's inflow_profile / availability_profile to point
          at the derived keys (only for assets present in the maps).
       6. Assemble profile_bundle with SHA-256 file fingerprints.
-      7. Validate against schema v1.1.  Raise on any error.
+      7. Validate against schema v1.4.  Raise on any error.
 
     Returns:
         dict serializable to ``powersim_input.json``.
@@ -778,7 +778,7 @@ def build_input_from_project(
     ok, errs, warns = validate_input(inp)
     if not ok:
         raise DataIOError(
-            "Generated input failed schema v1.1 validation:\n  - "
+            "Generated input failed schema v1.4 validation:\n  - "
             + "\n  - ".join(errs))
     if warns:
         # Keep warnings visible but do not bake them into the schema output.
