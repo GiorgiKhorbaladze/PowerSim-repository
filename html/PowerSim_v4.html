@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>PowerSim v4.0 — GSE ER&A Decision Support System</title>
 <script src="https://cdn.jsdelivr.net/npm/apexcharts@3.49.0/dist/apexcharts.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Georgian:wght@300;400;500;600;700;900&family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
 <script>
@@ -239,10 +241,12 @@ tr:hover td{background:var(--row-hover)}
     <button class="tab"     data-tab="profiles">📊 Profiles</button>
     <button class="tab"     data-tab="reserves">🛡 Reserves</button>
     <button class="tab"     data-tab="gas">⛽ Gas</button>
+    <button class="tab"     data-tab="network">🔌 Network</button>
     <button class="tab"     data-tab="horizon">📅 Horizon</button>
     <button class="tab"     data-tab="validate">✅ Validate</button>
     <button class="tab"     data-tab="results">📈 Results</button>
     <button class="tab"     data-tab="compare">🔀 Compare</button>
+    <button class="tab"     data-tab="reports">📊 Reports</button>
   </div>
   <select id="lang-select" class="lang-select" onchange="setLanguage(this.value)" title="Language / ენა" aria-label="Language selector">
     <option value="ka">ქართული</option>
@@ -408,6 +412,7 @@ tr:hover td{background:var(--row-hover)}
                 <th>MUT h</th><th>MDT h</th>
                 <th>SC $</th><th>NL $/h</th>
                 <th>VOM</th><th>FOR</th>
+                <th>პროფილი / Profile</th>
                 <th>ჩართ.</th><th>✕</th>
               </tr>
             </thead>
@@ -419,6 +424,54 @@ tr:hover td{background:var(--row-hover)}
       <div class="card" id="asset-extra-panel" style="display:none">
         <div class="sh" id="asset-extra-title">⚙️ დეტალები</div>
         <div id="asset-extra-content"></div>
+      </div>
+      <!-- Maintenance calendar editor (Task B) -->
+      <div class="card" id="maint-card">
+        <div class="sh">📅 მოვლა / Maintenance Calendar</div>
+        <div class="frow" style="gap:4px;flex-wrap:wrap;align-items:flex-end">
+          <div class="field" style="min-width:120px">
+            <label>სადგური / Asset</label>
+            <select id="maint-asset" style="font-size:8px"></select>
+          </div>
+          <div class="field" style="width:70px">
+            <label>Start h</label>
+            <input type="number" id="maint-start" value="0" min="0" max="8760" step="1" style="font-size:8px">
+          </div>
+          <div class="field" style="width:70px">
+            <label>End h</label>
+            <input type="number" id="maint-end" value="168" min="0" max="8760" step="1" style="font-size:8px">
+          </div>
+          <div class="field" style="min-width:120px">
+            <label>ტიპი / Event</label>
+            <select id="maint-type" style="font-size:8px">
+              <option value="planned_maintenance">გეგმიური / Planned</option>
+              <option value="forced_outage">იძულ. / Forced outage</option>
+              <option value="partial_derating">ნაწილ. / Partial derating</option>
+            </select>
+          </div>
+          <div class="field" style="width:80px">
+            <label>Avail. factor</label>
+            <input type="number" id="maint-factor" placeholder="0–1" min="0" max="1" step="0.05" style="font-size:8px">
+          </div>
+          <div class="field" style="width:90px">
+            <label>Cap MW (alt)</label>
+            <input type="number" id="maint-cap" placeholder="MW" min="0" step="1" style="font-size:8px">
+          </div>
+          <div class="field" style="min-width:120px;flex:1">
+            <label>შენიშვნა / Note</label>
+            <input type="text" id="maint-note" placeholder="optional" style="font-size:8px">
+          </div>
+          <button class="btn btn-p btn-s" onclick="addMaintEvent()" style="height:24px">➕ დამატება</button>
+        </div>
+        <div style="font-size:7px;color:var(--t3);margin:3px 0">
+          ცარიელი factor + cap = სრული გაჩერება / empty factor + cap ⇒ full outage. factor უპირატესია cap-ზე.
+        </div>
+        <div class="tbl-wrap" style="max-height:220px;overflow:auto">
+          <table><thead><tr>
+            <th>Asset</th><th>Start</th><th>End</th><th>Type</th>
+            <th>Factor</th><th>Cap MW</th><th>Note</th><th>✕</th>
+          </tr></thead><tbody id="maint-tbody"></tbody></table>
+        </div>
       </div>
     </div>
   </div>
@@ -566,6 +619,72 @@ tr:hover td{background:var(--row-hover)}
 </div>
 
 <!-- ════════════════════════════════════════════════════════════════ -->
+<!-- TAB 5b: NETWORK — buses + lines + DC-OPF (v1.5)                    -->
+<!-- ════════════════════════════════════════════════════════════════ -->
+<div class="pane" id="pane-network">
+  <div class="layout-lr">
+    <div class="lpanel">
+      <div class="card">
+        <div class="sh">🔌 ქსელის რეჟიმი</div>
+        <div class="field" style="display:flex;align-items:center;gap:6px">
+          <label style="margin:0">
+            <input type="checkbox" id="net-enable" onchange="toggleNetwork()"> ქსელის მოდელის ჩართვა (DC-OPF)
+          </label>
+        </div>
+        <div style="font-size:7.5px;color:var(--t3);margin-top:4px">
+          ქსელის გათიშვისას — copperplate (ერთი balance).
+          ჩართვისას — per-bus balance, line capacity, nodal LMP.
+        </div>
+      </div>
+      <div class="card" id="net-bus-add" style="display:none">
+        <div class="sh">➕ Bus დამატება</div>
+        <div class="field"><label>ID</label><input type="text" id="bus-id" placeholder="WEST"></div>
+        <div class="field"><label>სახელი</label><input type="text" id="bus-name" placeholder="დასავლეთი"></div>
+        <div class="field"><label>kV</label><input type="number" id="bus-kv" value="500"></div>
+        <div class="field" style="display:flex;align-items:center;gap:6px">
+          <label><input type="checkbox" id="bus-slack"> Slack bus (DC reference)</label>
+        </div>
+        <button class="btn btn-p btn-s" onclick="addBus()">➕ Bus დამატება</button>
+      </div>
+      <div class="card" id="net-line-add" style="display:none">
+        <div class="sh">➕ Line დამატება</div>
+        <div class="field"><label>ID</label><input type="text" id="line-id" placeholder="WEST_TBL_500"></div>
+        <div class="frow f2">
+          <div class="field"><label>From</label><select id="line-from"></select></div>
+          <div class="field"><label>To</label><select id="line-to"></select></div>
+        </div>
+        <div class="frow f2">
+          <div class="field"><label>Cap MW</label><input type="number" id="line-cap" value="500"></div>
+          <div class="field"><label>X p.u.</label><input type="number" id="line-x" value="0.012" step="0.001"></div>
+        </div>
+        <button class="btn btn-p btn-s" onclick="addLine()">➕ Line დამატება</button>
+      </div>
+      <div class="card" id="net-templates">
+        <div class="sh">⚡ ქსელის Demo</div>
+        <button class="btn btn-b btn-s" onclick="loadGeorgiaNetwork3Bus()">🇬🇪 Georgia 3-Bus (WEST/TBL/KTL)</button>
+        <div style="font-size:7.5px;color:var(--t3);margin-top:4px">
+          ენგური/ვარდნილი → WEST · გარდაბანი/თბ-სრესი → KTL · ჟინვალი + იმპორტი → TBL
+        </div>
+      </div>
+    </div>
+    <div class="rpanel">
+      <div class="card">
+        <div class="sh">📊 Buses (<span id="bus-count">0</span>)</div>
+        <div id="bus-tbl-wrap"></div>
+      </div>
+      <div class="card">
+        <div class="sh">🔗 Lines (<span id="line-count">0</span>)</div>
+        <div id="line-tbl-wrap"></div>
+      </div>
+      <div class="card">
+        <div class="sh">📍 Asset → Bus assignment</div>
+        <div id="asset-bus-wrap" style="font-size:8px"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════════ -->
 <!-- TAB 6: HORIZON                                                   -->
 <!-- ════════════════════════════════════════════════════════════════ -->
 <div class="pane" id="pane-horizon">
@@ -588,12 +707,27 @@ tr:hover td{background:var(--row-hover)}
         </div>
         <div class="field">
           <label>Resolution (v1.3 #3)</label>
-          <select id="hor-resolution">
-            <option value="60" selected>60 min (hourly)</option>
-            <option value="30">30 min</option>
-            <option value="15">15 min</option>
-            <option value="5">5 min</option>
+          <select id="hor-resolution" onchange="onResolutionChange()">
+            <option value="60" selected>60 min (1 საათი — hourly)</option>
+            <option value="30">30 min (ნახევარ-საათიანი)</option>
+            <option value="15">15 min (15-წუთიანი — VRE balancing)</option>
+            <option value="5">5 min (5-წუთიანი — RE ramp studies)</option>
+            <option value="1">1 min (1-წუთიანი — VRE high-res, 24h max)</option>
           </select>
+        </div>
+        <div class="field" style="background:rgba(0,176,240,.06);border:1px solid rgba(0,176,240,.2);
+                                  border-radius:5px;padding:6px;margin-top:5px">
+          <div style="font-size:8px;color:var(--blue);font-weight:700;margin-bottom:3px">
+            ⚡ VRE high-res presets (ქარი/მზე)
+          </div>
+          <div class="bgrp" style="margin:0">
+            <button class="btn btn-b btn-s" onclick="presetVRE(1, 24)" title="1-min × 24h">1m × 24h</button>
+            <button class="btn btn-b btn-s" onclick="presetVRE(5, 168)" title="5-min × 7d">5m × 7d</button>
+            <button class="btn btn-b btn-s" onclick="presetVRE(15, 720)" title="15-min × 30d">15m × 30d</button>
+          </div>
+          <div style="font-size:7px;color:var(--t3);margin-top:3px">
+            მცირე resolution ⇒ ცოტა საათი (problem size = horizon × 60/min).
+          </div>
         </div>
         <div class="field">
           <label>Solver backend (v1.3 #5)</label>
@@ -851,6 +985,291 @@ tr:hover td{background:var(--row-hover)}
 </div>
 
 <!-- ════════════════════════════════════════════════════════════════ -->
+<!-- TAB 10: REPORTS — PLEXOS-style analysis dashboard                  -->
+<!-- ════════════════════════════════════════════════════════════════ -->
+<div class="pane" id="pane-reports">
+  <div id="rep-empty" style="display:flex;align-items:center;justify-content:center;
+       height:60vh;flex-direction:column;gap:12px;color:var(--t3)">
+    <div style="font-size:48px">📊</div>
+    <div style="font-size:11px;font-weight:700">Reports tab — ჯერ შედეგები არ ჩაიტვ.</div>
+    <div style="font-size:9px">გადადი Results tab-ზე და დააიმპორტე results JSON, შემდეგ დაბრუნდი.</div>
+  </div>
+
+  <div id="rep-body" style="display:none">
+    <!-- Sub-nav for the 20-card report dashboard -->
+    <div class="card" style="margin-bottom:6px;display:flex;flex-wrap:wrap;gap:4px">
+      <button class="btn btn-t btn-s" onclick="repScrollTo('sec-mix')">⚡ გენერაცია</button>
+      <button class="btn btn-t btn-s" onclick="repScrollTo('sec-ldc')">📈 ხანგრძლივობა</button>
+      <button class="btn btn-t btn-s" onclick="repScrollTo('sec-hydro')">💧 ჰიდრო</button>
+      <button class="btn btn-t btn-s" onclick="repScrollTo('sec-cf')">🔥 CF</button>
+      <button class="btn btn-t btn-s" onclick="repScrollTo('sec-cost')">💲 ხარჯი</button>
+      <button class="btn btn-t btn-s" onclick="repScrollTo('sec-heat')">🗓 Heatmap</button>
+      <button class="btn btn-t btn-s" onclick="repScrollTo('sec-reserve')">🛡 რეზერვი</button>
+      <button class="btn btn-t btn-s" onclick="repScrollTo('sec-curt')">✂ Curtailment</button>
+      <button class="btn btn-t btn-s" onclick="repScrollTo('sec-co2')">🌫 CO₂</button>
+      <button class="btn btn-t btn-s" onclick="repScrollTo('sec-pl')">💼 P&amp;L</button>
+      <button class="btn btn-t btn-s" onclick="repScrollTo('sec-spill')">🌊 დანაკარგი</button>
+      <button class="btn btn-t btn-s" onclick="repScrollTo('sec-mclam')">⚖ MC vs λ</button>
+      <button class="btn btn-t btn-s" onclick="repScrollTo('sec-day')">🌓 დღის ტიპი</button>
+      <button class="btn btn-t btn-s" onclick="repScrollTo('sec-radar')">🎯 KPI ცხრილი</button>
+      <button class="btn btn-t btn-s" onclick="repScrollTo('sec-bess')">🔋 BESS arb.</button>
+      <button class="btn btn-t btn-s" onclick="repScrollTo('sec-target')">🎚 End-level</button>
+      <button class="btn btn-t btn-s" onclick="repScrollTo('sec-ramp')">📐 Ramp</button>
+      <button class="btn btn-t btn-s" onclick="repScrollTo('sec-snap')">📸 Snapshots</button>
+      <button class="btn btn-t btn-s" onclick="repScrollTo('sec-delta')">Δ შედარება</button>
+      <button class="btn btn-t btn-s" onclick="repScrollTo('sec-net')">🔌 ქსელი (DC-OPF)</button>
+      <button class="btn btn-b btn-s" onclick="repScrollTo('sec-vre')">💨☀️ VRE</button>
+      <button class="btn btn-b btn-s" onclick="repScrollTo('sec-rel')">📊 Reliability</button>
+      <button class="btn btn-b btn-s" onclick="repScrollTo('sec-xborder')">⚡ Cross-border</button>
+      <button class="btn btn-b btn-s" onclick="repScrollTo('sec-water')">🌊 Water-Energy</button>
+      <button class="btn btn-b btn-s" onclick="repScrollTo('sec-marginal')">📈 Marginal+Sankey</button>
+      <button class="btn btn-b btn-s" onclick="repScrollTo('sec-maint')">📅 Maintenance</button>
+      <button class="btn btn-g btn-s" style="margin-left:auto" onclick="exportReportsXls()">⬇ Excel</button>
+      <button class="btn btn-b btn-s" onclick="exportReportsPNG()">🖼 PNG</button>
+      <button class="btn btn-p btn-s" onclick="exportReportsPDF()">📄 PDF</button>
+    </div>
+
+    <!-- ─────────────── Tier 1 ─────────────── -->
+    <!-- 1. Technology mix dispatch -->
+    <div class="card" id="sec-mix">
+      <div class="sh">⚡ გენერაციის მიქსი ტექნოლოგიის მიხედვით (stacked, MW)</div>
+      <div id="c-rep-mix" style="height:320px"></div>
+      <div id="c-rep-mix-share" style="height:240px;margin-top:6px"></div>
+    </div>
+
+    <!-- 2. Load + Net Load Duration Curves -->
+    <div class="card" id="sec-ldc">
+      <div class="sh">📈 დატვირთვისა და ნეტო-დატვირთვის ხანგრძლივობის მრუდი</div>
+      <div id="c-rep-ldc" style="height:300px"></div>
+      <div id="rep-ldc-stats" style="font-size:8px;color:var(--t3);margin-top:5px"></div>
+    </div>
+
+    <!-- 3. Reservoir trajectory (Section-I storage) -->
+    <div class="card" id="sec-hydro">
+      <div class="sh">💧 წყალსაცავის ტრაექტორია (Mm³, Section-I ჰესები)</div>
+      <div id="c-rep-reservoir" style="height:300px"></div>
+    </div>
+
+    <!-- 4. Capacity factor heatmap (asset × month) -->
+    <div class="card" id="sec-cf">
+      <div class="sh">🔥 დატვირთვის კოეფიციენტი (CF, სადგ. × თვე)</div>
+      <div id="c-rep-cf-heat" style="overflow:auto;max-height:520px"></div>
+    </div>
+
+    <!-- 5. Cost waterfall -->
+    <div class="card" id="sec-cost">
+      <div class="sh">💲 ხარჯის წყაროები — საწვავი + startup + no-load + VOM + ჯარიმები</div>
+      <div id="c-rep-cost" style="height:300px"></div>
+      <div id="rep-cost-tbl" style="margin-top:6px"></div>
+    </div>
+
+    <!-- 6. 24h × 365d hourly heatmap -->
+    <div class="card" id="sec-heat">
+      <div class="sh" style="display:flex;justify-content:space-between;align-items:center">
+        <span>🗓 საათობრივი Heatmap (24h × დღეები)</span>
+        <select id="rep-heat-metric" onchange="renderReports()" style="font-size:8px;width:160px">
+          <option value="load_mw" selected>დატვირთვა (MW)</option>
+          <option value="lambda_usd_mwh">Lambda ($/MWh)</option>
+          <option value="generation_mw">გენერაცია (MW)</option>
+          <option value="curtailed_mwh">Curtailment (MWh)</option>
+          <option value="unserved_mwh">მიუწოდ. (MWh)</option>
+          <option value="gas_mm3h">გაზი (Mm³/სთ)</option>
+        </select>
+      </div>
+      <div id="c-rep-heat" style="overflow:auto;max-height:520px"></div>
+    </div>
+
+    <!-- ─────────────── Tier 2 ─────────────── -->
+    <!-- 7. Reserve allocation breakdown -->
+    <div class="card" id="sec-reserve">
+      <div class="sh">🛡 რეზერვის გადანაწილება (FCR / aFRR სადგ.-ის მიხედვით, MW-სთ)</div>
+      <div id="rep-reserve-tbl"></div>
+      <div id="c-rep-reserve" style="height:280px"></div>
+    </div>
+
+    <!-- 8. Curtailment by site -->
+    <div class="card" id="sec-curt">
+      <div class="sh">✂ Curtailment ასეტის მიხედვით (MWh + % ხელმისაწვ.)</div>
+      <div id="rep-curt-tbl"></div>
+      <div id="c-rep-curt" style="height:240px"></div>
+    </div>
+
+    <!-- 9. CO₂ emissions -->
+    <div class="card" id="sec-co2">
+      <div class="sh">🌫 CO₂ ემისიის შეფასება (tCO₂ საწვავის მიხედვით, თვიური)</div>
+      <div id="c-rep-co2" style="height:260px"></div>
+      <div id="rep-co2-stats" style="font-size:8px;color:var(--t3);margin-top:5px"></div>
+    </div>
+
+    <!-- 10. Generator P&L table -->
+    <div class="card" id="sec-pl">
+      <div class="sh">💼 ფინანსური შედეგი ($, შემოსავალი − ხარჯი)</div>
+      <div id="rep-pl-tbl"></div>
+    </div>
+
+    <!-- 11. Hydro spillage -->
+    <div class="card" id="sec-spill">
+      <div class="sh">🌊 ჰიდროს დანაკარგი (Mm³ + დაკარგ. ენ. MWh, ჰესის მიხედვით)</div>
+      <div id="c-rep-spill" style="height:240px"></div>
+      <div id="rep-spill-tbl" style="margin-top:6px"></div>
+    </div>
+
+    <!-- 12. Marginal cost vs λ scatter -->
+    <div class="card" id="sec-mclam">
+      <div class="sh">⚖ ზღვრული ღირებულება vs სისტემური λ</div>
+      <div id="c-rep-mclam" style="height:280px"></div>
+    </div>
+
+    <!-- ─────────────── Tier 3 ─────────────── -->
+    <!-- 13. Day-types analysis -->
+    <div class="card" id="sec-day">
+      <div class="sh">🌓 დღის ტიპი — peak / shoulder / off-peak საშ. dispatch</div>
+      <div id="c-rep-day" style="height:280px"></div>
+    </div>
+
+    <!-- 14. KPI radar chart -->
+    <div class="card" id="sec-radar">
+      <div class="sh">🎯 KPI Radar — სისტემის ერთი შეხედვის შეფასება</div>
+      <div id="c-rep-radar" style="height:320px"></div>
+    </div>
+
+    <!-- 15. BESS / Pumped-hydro arbitrage -->
+    <div class="card" id="sec-bess">
+      <div class="sh">🔋 Storage Arbitrage (charge vs discharge ფასები)</div>
+      <div id="rep-bess-tbl"></div>
+    </div>
+
+    <!-- 16. Reservoir target deviation -->
+    <div class="card" id="sec-target">
+      <div class="sh">🎚 წყალსაცავის საბოლოო დონე vs სამიზნე (Mm³, Section-I)</div>
+      <div id="c-rep-target" style="height:240px"></div>
+    </div>
+
+    <!-- 17. Hourly ramp requirement -->
+    <div class="card" id="sec-ramp">
+      <div class="sh">📐 ნეტო-დატვირთვის რემპის მოთხოვნები (Δ MW/სთ)</div>
+      <div id="c-rep-ramp" style="height:260px"></div>
+      <div id="rep-ramp-stats" style="font-size:8px;color:var(--t3);margin-top:5px"></div>
+    </div>
+
+    <!-- 18. Snapshot days -->
+    <div class="card" id="sec-snap">
+      <div class="sh">📸 Snapshot დღე-ები — peak / curt / unserved</div>
+      <div id="rep-snap-cards" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px"></div>
+    </div>
+
+    <!-- 19. Scenario delta waterfall (only when ≥2 scenarios loaded in Compare) -->
+    <div class="card" id="sec-delta">
+      <div class="sh">Δ სცენარული Δ Waterfall (ხარჯის სხვაობის დეკომპოზიცია)</div>
+      <div id="c-rep-delta" style="height:300px"></div>
+      <div id="rep-delta-note" style="font-size:8px;color:var(--t3);margin-top:5px"></div>
+    </div>
+
+    <!-- 20. DC-OPF nodal LMP + line congestion (v1.5 only) -->
+    <div class="card" id="sec-net">
+      <div class="sh">🔌 DC-OPF — Nodal LMP & Line Congestion</div>
+      <div id="rep-net-lmp" style="height:240px"></div>
+      <div id="rep-net-cong" style="margin-top:6px"></div>
+      <div id="rep-net-note" style="font-size:7.5px;color:var(--t3);margin-top:5px"></div>
+    </div>
+
+    <!-- 21. VRE deep analytics (Phase 7a #2) -->
+    <div class="card" id="sec-vre">
+      <div class="sh">💨☀️ VRE Deep Analytics — ქარი/მზე</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+        <div>
+          <div class="sh" style="font-size:8px;margin-top:4px">Ramp events distribution per asset</div>
+          <div id="c-vre-ramps" style="height:240px"></div>
+        </div>
+        <div>
+          <div class="sh" style="font-size:8px;margin-top:4px">Monthly capacity factor</div>
+          <div id="c-vre-cf-monthly" style="height:240px"></div>
+        </div>
+      </div>
+      <div class="sh" style="font-size:8px;margin-top:6px">Inter-site correlation matrix (smoothing)</div>
+      <div id="c-vre-corr" style="overflow:auto;max-height:280px"></div>
+      <div class="sh" style="font-size:8px;margin-top:6px">Diurnal pattern (avg by hour-of-day)</div>
+      <div id="c-vre-diurnal" style="height:240px"></div>
+    </div>
+
+    <!-- 22. Reliability metrics (Phase 7a #3) -->
+    <div class="card" id="sec-rel">
+      <div class="sh">📊 Reliability Metrics — LOLE / EUE / Reserve Margin</div>
+      <div id="rep-rel-kpis" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+        <div>
+          <div class="sh" style="font-size:8px">LOLP duration curve (probability of loss vs hours)</div>
+          <div id="c-rel-lolp" style="height:240px"></div>
+        </div>
+        <div>
+          <div class="sh" style="font-size:8px">Reserve margin time series</div>
+          <div id="c-rel-rm" style="height:240px"></div>
+        </div>
+      </div>
+      <div id="rep-rel-note" style="font-size:7.5px;color:var(--t3);margin-top:5px"></div>
+    </div>
+
+    <!-- 23. Cross-border balance (Phase 7b #4) -->
+    <div class="card" id="sec-xborder">
+      <div class="sh">⚡ Cross-Border Balance — TR / AZ / AM</div>
+      <div id="rep-xborder-kpis" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+        <div>
+          <div class="sh" style="font-size:8px">საათობრივი schedule per border (MW)</div>
+          <div id="c-xborder-hourly" style="height:240px"></div>
+        </div>
+        <div>
+          <div class="sh" style="font-size:8px">Monthly net import/export (MWh)</div>
+          <div id="c-xborder-monthly" style="height:240px"></div>
+        </div>
+      </div>
+      <div id="rep-xborder-tbl" style="margin-top:6px"></div>
+    </div>
+
+    <!-- 24. Hydro water-energy efficiency (Phase 7b #7) -->
+    <div class="card" id="sec-water">
+      <div class="sh">🌊 Hydro Water-Energy Efficiency</div>
+      <div id="rep-water-tbl"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px">
+        <div>
+          <div class="sh" style="font-size:8px">Realized MWh/Mm³ vs nominal efficiency</div>
+          <div id="c-water-eff" style="height:240px"></div>
+        </div>
+        <div>
+          <div class="sh" style="font-size:8px">Water balance (inflow / release / spill, Σ Mm³)</div>
+          <div id="c-water-balance" style="height:240px"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 25. Marginal unit timeline + Sankey (Phase 7c #9) -->
+    <div class="card" id="sec-marginal">
+      <div class="sh">📈 Marginal-Unit Timeline + Energy-Flow Sankey</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+        <div>
+          <div class="sh" style="font-size:8px">% hours marginal per asset</div>
+          <div id="c-marg-pie" style="height:280px"></div>
+        </div>
+        <div>
+          <div class="sh" style="font-size:8px">Marginal-asset over time (top 6)</div>
+          <div id="c-marg-timeline" style="height:280px"></div>
+        </div>
+      </div>
+      <div class="sh" style="font-size:8px;margin-top:6px">Energy-flow Sankey (fuel → tech → load)</div>
+      <div id="c-sankey" style="height:380px;overflow:auto"></div>
+    </div>
+
+    <!-- 26. Maintenance schedule + outage calendar (Phase 7c #10) -->
+    <div class="card" id="sec-maint">
+      <div class="sh">📅 Maintenance / Outage Calendar (Gantt)</div>
+      <div id="rep-maint-tbl" style="margin-bottom:6px"></div>
+      <div id="c-maint-gantt" style="overflow:auto;max-height:480px"></div>
+      <div id="rep-maint-note" style="font-size:7.5px;color:var(--t3);margin-top:5px"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════════ -->
 <!-- JAVASCRIPT                                                        -->
 <!-- ════════════════════════════════════════════════════════════════ -->
 <script>
@@ -863,6 +1282,7 @@ const STATE = {
   assets:         [],
   profiles:       {},   // {key: [float×8760]}
   reserveProducts: [],
+  maintenance:    [],   // [{asset_id,start_h,end_h,event_type,availability_factor?,available_capacity_mw?,note?}]
   gasConfig:      {mode:'annual', annual_cap:1200, monthly:{}, applies_to:[]},
   horizon:        {year:2026, start_date:'2026-01-01', start_hour:0, horizon_h:8760,
                    mode:'auto', window_h:168, step_h:24},
@@ -878,8 +1298,8 @@ const STATE = {
   lastCompareRows:[]
 };
 
-const SCHEMA_VERSION = '1.4';
-const ACCEPTED_OUTPUT_SCHEMAS = new Set(['1.4','1.3','1.2','1.1','1.0']);
+const SCHEMA_VERSION = '1.5';
+const ACCEPTED_OUTPUT_SCHEMAS = new Set(['1.5','1.4','1.3','1.2','1.1','1.0']);
 const MODEL_VERSION  = 'PowerSim v4.0';
 let   assetIdCtr     = 1;
 
@@ -1177,6 +1597,13 @@ function goTab(id){
   if(id==='reserves') renderReservesList();
   if(id==='validate') renderKpiTemplateList();
   if(id==='compare')  renderCompareList();
+  if(id==='reports' && STATE.results) renderReports();
+  if(id==='network')  renderNetwork();
+}
+
+function repScrollTo(id){
+  const el=document.getElementById(id);
+  if(el) el.scrollIntoView({behavior:'smooth', block:'start'});
 }
 document.querySelectorAll('.tab').forEach(t=>{
   t.addEventListener('click',()=>goTab(t.dataset.tab));
@@ -1303,9 +1730,22 @@ function renderAssetTable(){
     const isRE=a.type==='wind'||a.type==='solar';
     const isBESS=a.type==='bess';
     const isImport=a.type==='import';
-    return`<tr>
+    // Profile binding — active only for wind / solar / hydro_ror (availability_profile).
+    const profileBindable=a.type==='wind'||a.type==='solar'||a.type==='hydro_ror';
+    const profKeys=Object.keys(STATE.profiles).filter(k=>k!=='demand'&&!/inflow/i.test(k));
+    const cur=a.availability_profile;
+    const staleOpt=(cur&&!STATE.profiles[cur])?`<option value="${cur}" selected>⚠️ ${cur} (?)</option>`:'';
+    const profileCell=profileBindable
+      ? `<select onchange="STATE.assets[${ci}].availability_profile=this.value||null;updateDashKpis()"
+                 style="width:96px;font-size:7.5px" title="availability profile binding (wind/solar/RoR)">
+           <option value="">— არჩევა / select —</option>${staleOpt}
+           ${profKeys.map(k=>`<option value="${k}" ${cur===k?'selected':''}>${k}</option>`).join('')}
+         </select>`
+      : `<span style="font-size:7px;color:var(--t3)" title="profile binding not applicable for this asset type">არ გამოიყენება / Not used</span>`;
+    return`<tr ondblclick="showAssetDetail('${a.id}')" title="ორჯერ დააჭირე — დეტალები">
       <td><span style="color:${ti.color}">${ti.ico}</span> ${ti.label}</td>
-      <td class="mono" style="font-size:7.5px">${a.id}</td>
+      <td class="mono" style="font-size:7.5px;cursor:pointer;color:var(--teal)"
+          onclick="showAssetDetail('${a.id}')">${a.id}</td>
       <td><input type="text" value="${a.name}" style="width:110px;font-size:7.5px"
            onchange="STATE.assets[${ci}].name=this.value;renderWorkflowSteps()"></td>
       <td>${isRE||isBESS||isImport?'—':f('pmin')}</td>
@@ -1320,6 +1760,7 @@ function renderAssetTable(){
       <td>${a.type==='thermal'?f('no_load_cost','number',300):'—'}</td>
       <td>${isBESS?f('vom_discharge'):f('vom')}</td>
       <td>${a.type==='bess'||isImport?'—':f('for_rate','number',0.08,0.01)}</td>
+      <td>${profileCell}</td>
       <td><select onchange="STATE.assets[${ci}].committable=this.value==='true'" style="font-size:7.5px;width:45px">
         <option value="true" ${a.committable?'selected':''}>✅</option>
         <option value="false" ${!a.committable?'selected':''}>⬜</option>
@@ -1335,12 +1776,303 @@ function renderAssetTable(){
     `<div>სულ სადგ: <b>${STATE.assets.length}</b></div>`+
     `<div>Pmax: <b>${total.toFixed(0)} MW</b></div>`+
     Object.entries(byType).map(([t,c])=>`<div>${ASSET_TYPES[t]?.ico||'?'} ${t}: ${c}</div>`).join('');
+  renderMaintTable();
+}
+
+// ── Maintenance calendar editor (Task B) ────────────────────────────
+// Per-asset planned maintenance / forced outage / partial derating
+// windows. Exported as a top-level `maintenance` list; the solver derates
+// available capacity over [start_h, end_h) via _maint_factor().
+function renderMaintTable(){
+  const sel=document.getElementById('maint-asset');
+  if(sel){
+    const cur=sel.value;
+    sel.innerHTML=STATE.assets.map(a=>`<option value="${a.id}">${(ASSET_TYPES[a.type]||{}).ico||''} ${a.name} (${a.id})</option>`).join('')
+      || '<option value="">— ჯერ დაამატე სადგური —</option>';
+    if(cur&&STATE.assets.some(a=>a.id===cur)) sel.value=cur;
+  }
+  const tb=document.getElementById('maint-tbody'); if(!tb) return;
+  tb.innerHTML=(STATE.maintenance||[]).map((ev,i)=>{
+    const a=STATE.assets.find(x=>x.id===ev.asset_id);
+    const nm=a?a.name:`<span style="color:var(--red)">${ev.asset_id} (?)</span>`;
+    const f=ev.availability_factor;
+    const c=ev.available_capacity_mw;
+    return `<tr>
+      <td>${nm}</td><td class="mono">${ev.start_h}</td><td class="mono">${ev.end_h}</td>
+      <td style="font-size:7px">${ev.event_type||''}</td>
+      <td class="mono">${f!=null?f:'—'}</td><td class="mono">${c!=null?c:'—'}</td>
+      <td style="font-size:7px;color:var(--t3)">${ev.note||''}</td>
+      <td><button onclick="removeMaintEvent(${i})" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:10px">✕</button></td>
+    </tr>`;
+  }).join('')||'<tr><td colspan="8" style="font-size:7.5px;color:var(--t3)">მოვლის ჩანაწერი არ არის / no maintenance events</td></tr>';
+}
+
+function addMaintEvent(){
+  const aid=(document.getElementById('maint-asset')||{}).value;
+  if(!aid){ showBanner('⚠ ჯერ დაამატე სადგური / add an asset first','o'); return; }
+  const s=+(document.getElementById('maint-start')||{}).value;
+  const e=+(document.getElementById('maint-end')||{}).value;
+  if(!(s>=0)||!(e>s)){ showBanner('❌ Start < End და ≥0 / invalid window','r'); return; }
+  const fRaw=(document.getElementById('maint-factor')||{}).value;
+  const cRaw=(document.getElementById('maint-cap')||{}).value;
+  const ev={asset_id:aid, start_h:s, end_h:e,
+            event_type:(document.getElementById('maint-type')||{}).value||'planned_maintenance'};
+  if(fRaw!==''&&fRaw!=null){
+    const f=+fRaw;
+    if(!(f>=0&&f<=1)){ showBanner('❌ factor must be 0–1','r'); return; }
+    ev.availability_factor=f;
+  } else if(cRaw!==''&&cRaw!=null){
+    const c=+cRaw;
+    const a=STATE.assets.find(x=>x.id===aid);
+    const pmax=+(a&&(a.pmax||a.pmax_installed||a.power_mw)||0);
+    if(!(c>=0)){ showBanner('❌ cap MW must be ≥0','r'); return; }
+    if(pmax&&c>pmax){ showBanner(`❌ cap ${c} > pmax ${pmax}`,'r'); return; }
+    ev.available_capacity_mw=c;
+  }
+  const note=(document.getElementById('maint-note')||{}).value;
+  if(note) ev.note=note;
+  STATE.maintenance.push(ev);
+  renderMaintTable();
+  showBanner('✅ მოვლის ჩანაწერი დაემატა / maintenance event added','g');
+}
+
+function removeMaintEvent(i){
+  STATE.maintenance.splice(i,1);
+  renderMaintTable();
+}
+
+// ── Asset detail panel (#10) ─────────────────────────────────────────
+// Click an asset's id (or double-click the row) → expands a detail card
+// with full field listing, results-aware metrics if a results JSON is
+// loaded, and a small dispatch sparkline.
+function showAssetDetail(id){
+  const a = STATE.assets.find(x=>x.id===id);
+  const panel = document.getElementById('asset-extra-panel');
+  const title = document.getElementById('asset-extra-title');
+  const body  = document.getElementById('asset-extra-content');
+  if(!panel || !a){ return; }
+  const ti = ASSET_TYPES[a.type] || {ico:'?',color:'#888',label:a.type};
+  title.innerHTML = `${ti.ico} ${a.name} <span style="color:var(--t3);font-weight:400">— ${a.id} (${ti.label})</span>`;
+
+  // ── Field table ──
+  const skipKeys = new Set(['id','name','type','hydro','_commiss_year','maint_windows']);
+  const lines = Object.keys(a).filter(k=>!skipKeys.has(k)).map(k=>{
+    let v = a[k];
+    if(typeof v === 'number') v = v.toFixed(3).replace(/\.?0+$/,'');
+    if(v === null) v = '<span style="color:var(--t3)">null</span>';
+    if(typeof v === 'boolean') v = v?'✅':'⬜';
+    return `<tr><td style="color:var(--t3)">${k}</td><td class="mono">${v}</td></tr>`;
+  });
+  let hydroRows = '';
+  if(a.hydro){
+    hydroRows = `<tr><td colspan="2" style="padding-top:6px;color:var(--teal);font-weight:700">hydro</td></tr>`
+      + Object.entries(a.hydro).map(([k,v])=>{
+          let vv = (typeof v==='number') ? v.toFixed(3).replace(/\.?0+$/,'') : (v??'<span style="color:var(--t3)">null</span>');
+          return `<tr><td style="padding-left:14px;color:var(--t3)">${k}</td><td class="mono">${vv}</td></tr>`;
+        }).join('');
+  }
+  const yearStr = a._commiss_year ? `<div style="color:var(--gold)">📅 ექსპლუატაციაში: ${a._commiss_year}</div>` : '';
+
+  // ── Results-aware section (when results loaded) ──
+  let resultsCard = '';
+  if(STATE.results){
+    const bu = (STATE.results.by_unit_summary||{})[id];
+    const hbu = (STATE.results.hourly_by_unit||{})[id] || [];
+    if(bu){
+      const peak = hbu.length ? Math.max(...hbu.map(r=>+r.dispatch_mw||0)).toFixed(1) : '—';
+      // Sparkline of dispatch (first 168h)
+      const dis = hbu.slice(0, Math.min(hbu.length, 168)).map(r=>+r.dispatch_mw||0);
+      const mx = Math.max(...dis,1), mn = Math.min(...dis,0);
+      const w = 320, h = 60;
+      const pts = dis.map((v,i)=>`${(i*w/Math.max(dis.length-1,1)).toFixed(2)},${(h - (h-2)*(v-mn)/Math.max(mx-mn,1e-9)).toFixed(2)}`).join(' ');
+      const spark = dis.length ? `<svg viewBox="0 0 ${w} ${h}" style="width:100%;height:80px">
+        <polyline points="${pts}" fill="none" stroke="var(--teal)" stroke-width="1.4"/>
+      </svg>` : '<div style="font-size:8px;color:var(--t3)">no hourly data</div>';
+      resultsCard = `<div style="margin-top:6px;padding:6px;background:var(--bg2);border-radius:5px">
+        <div style="font-size:8px;color:var(--gold);font-weight:700;margin-bottom:4px">📊 Results-aware metrics</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;font-size:8px">
+          <div><div style="color:var(--t3)">ენერგია</div><b>${(+bu.energy_mwh||0).toLocaleString('en-US',{maximumFractionDigits:0})} MWh</b></div>
+          <div><div style="color:var(--t3)">CF</div><b>${(+bu.capacity_factor||0).toFixed(1)}%</b></div>
+          <div><div style="color:var(--t3)">Peak dispatch</div><b>${peak} MW</b></div>
+          <div><div style="color:var(--t3)">Gross cost</div><b>$${(+bu.gross_cost||0).toLocaleString('en-US',{maximumFractionDigits:0})}</b></div>
+          <div><div style="color:var(--t3)">Avg $/MWh</div><b>$${(+bu.avg_cost_mwh||0).toFixed(2)}</b></div>
+          <div><div style="color:var(--t3)">Starts</div><b>${+bu.starts||0}</b></div>
+        </div>
+        <div style="margin-top:5px">${spark}</div>
+        <div style="font-size:7.5px;color:var(--t3);margin-top:2px">↑ pirveli 168h dispatch (MW)</div>
+      </div>`;
+    }
+  }
+
+  body.innerHTML = `
+    ${yearStr}
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      <div>
+        <div class="sh">⚙️ Schema fields</div>
+        <table style="font-size:8px"><tbody>${lines.join('')}${hydroRows}</tbody></table>
+      </div>
+      <div>${resultsCard || '<div style="color:var(--t3);font-size:8px;padding:10px">📥 Import Results JSON to see operational metrics here.</div>'}</div>
+    </div>`;
+  panel.style.display = 'block';
+  panel.scrollIntoView({behavior:'smooth', block:'nearest'});
+}
+
+// ── PDF / PNG snapshot export (#11) ──────────────────────────────────
+async function exportReportsPNG(){
+  if(!STATE.results){ showBanner('შედეგები არ ჩაიტვ.','r'); return; }
+  if(!window.html2canvas){ showBanner('html2canvas დაუკავშირებელია','r'); return; }
+  const target = document.getElementById('rep-body');
+  if(!target || target.style.display==='none'){ showBanner('Reports tab-ი ცარიელია','o'); return; }
+  showBanner('📸 PNG generating…','b',2000);
+  try {
+    const canvas = await html2canvas(target, {backgroundColor:'#050d1a', scale:1, useCORS:true});
+    const url = canvas.toDataURL('image/png');
+    const a = document.createElement('a');
+    a.href = url; a.download = 'PowerSim_Reports_'+new Date().toISOString().slice(0,10)+'.png';
+    a.click();
+    showBanner('✅ PNG ჩამოიტვირთა','g');
+  } catch(e){ showBanner('❌ PNG: '+e.message,'r'); }
+}
+
+async function exportReportsPDF(){
+  if(!STATE.results){ showBanner('შედეგები არ ჩაიტვ.','r'); return; }
+  if(!window.html2canvas || !window.jspdf){ showBanner('html2canvas/jspdf დაუკავშირებელია','r'); return; }
+  const target = document.getElementById('rep-body');
+  if(!target || target.style.display==='none'){ showBanner('Reports tab-ი ცარიელია','o'); return; }
+  showBanner('📄 PDF generating…','b',3000);
+  try {
+    // Find each .card in Reports body and add as PDF page.
+    const { jsPDF } = window.jspdf;
+    const cards = target.querySelectorAll('.card');
+    const pdf = new jsPDF({orientation:'landscape', unit:'mm', format:'a4'});
+    const pageW = pdf.internal.pageSize.getWidth();
+    const pageH = pdf.internal.pageSize.getHeight();
+    let first = true;
+    for(const card of cards){
+      const c = await html2canvas(card, {backgroundColor:'#0f2240', scale:1.5, useCORS:true});
+      const ratio = c.height / c.width;
+      const w = pageW - 10, h = w * ratio;
+      const finalH = Math.min(h, pageH - 14);
+      if(!first) pdf.addPage();
+      pdf.setFontSize(9); pdf.setTextColor(180,196,224);
+      pdf.text(`PowerSim Reports — ${new Date().toISOString().slice(0,16).replace('T',' ')}`, 5, 7);
+      pdf.addImage(c.toDataURL('image/png'), 'PNG', 5, 10, w, finalH);
+      first = false;
+    }
+    pdf.save('PowerSim_Reports_'+new Date().toISOString().slice(0,10)+'.pdf');
+    showBanner('✅ PDF ჩამოიტვირთა ('+cards.length+' გვერდი)','g');
+  } catch(e){ showBanner('❌ PDF: '+e.message,'r'); }
 }
 
 function removeAsset(id){
   STATE.assets=STATE.assets.filter(a=>a.id!==id);
   renderAssetTable(); updateDashKpis(); updateGasEligibleUnits();
 }
+// ── Asset CSV/XLSX template download + upload (bug-fix: previously
+//   referenced from HTML but not defined → console error on click). ──
+function downloadAssetTemplate(){
+  // Generate a CSV with the most common columns + 1 example row per type.
+  const cols = ['id','name','type','committable','pmin','pmax','pmax_installed','power_mw','energy_mwh',
+                'mc','heat_rate','fuel_type','fuel_price','vom','startup_cost','no_load_cost',
+                'ramp_up','ramp_down','min_up','min_down','for_rate',
+                'soc_init','soc_min','soc_max','eta_charge','eta_discharge','vom_discharge',
+                'pmax_curtail','price_per_mwh','hours_per_year_max',
+                'pump_mw','efficiency_pump','efficiency_gen','soc_deep_threshold',
+                'pmax_profile','availability_profile','inflow_profile','bus','_commiss_year'];
+  const sample = [
+    {id:'thermal_demo',     name:'CCGT (sample)',     type:'thermal',  committable:true,  pmin:50,  pmax:200, mc:0, heat_rate:6.8, fuel_type:'gas',fuel_price:5.5,vom:2,startup_cost:1000,no_load_cost:50,ramp_up:60,ramp_down:60,min_up:3,min_down:2,for_rate:0.08},
+    {id:'hydro_reg_demo',   name:'Reservoir HPP',     type:'hydro_reg',committable:true,  pmin:0,   pmax:100, vom:0, ramp_up:30, ramp_down:30, for_rate:0.04},
+    {id:'hydro_ror_demo',   name:'RoR HPP (×0.65)',   type:'hydro_ror',committable:false, pmin:0,   pmax:30,  vom:0, ramp_up:9999, ramp_down:9999, for_rate:0.06},
+    {id:'wind_demo',        name:'Wind site',         type:'wind',     committable:false, pmax_installed:50, vom:0},
+    {id:'solar_demo',       name:'Solar site',        type:'solar',    committable:false, pmax_installed:20, vom:0},
+    {id:'bess_demo',        name:'BESS 50/200',       type:'bess',     committable:false, power_mw:50, energy_mwh:200, soc_init:0.5, soc_min:0.05, soc_max:0.95, eta_charge:0.92, eta_discharge:0.92, vom_discharge:1},
+    {id:'dr_demo',          name:'DR — Industrial',   type:'dr',       committable:false, pmax_curtail:50, price_per_mwh:200, hours_per_year_max:200},
+    {id:'pumped_hydro_demo',name:'Pumped Hydro',      type:'pumped_hydro', committable:false, pmax:100, pump_mw:95, energy_mwh:600, soc_init:0.5, soc_min:0.05, soc_max:0.95},
+    {id:'import_demo',      name:'Neighbour import',  type:'import',   committable:false, pmax_profile:500, vom:50},
+  ];
+  const rows = [cols.join(','),
+                ...sample.map(s => cols.map(c => {
+                  const v = s[c]; if(v===undefined||v===null) return '';
+                  if(typeof v==='string' && v.includes(',')) return '"'+v.replace(/"/g,'""')+'"';
+                  return String(v);
+                }).join(','))];
+  const blob = new Blob([rows.join('\n')], {type:'text/csv;charset=utf-8'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'PowerSim_asset_template.csv';
+  a.click(); URL.revokeObjectURL(a.href);
+  showBanner('✅ Template CSV ჩამოიტვირთა (9 example rows)','g');
+}
+
+function uploadAssets(input){
+  const file = input.files && input.files[0]; if(!file) return;
+  const reader = new FileReader();
+  const ext = (file.name.split('.').pop()||'').toLowerCase();
+  reader.onload = e => {
+    try{
+      let rows;
+      if(ext === 'csv' || ext === 'txt'){
+        // Robust CSV parse: handle quoted fields, comma-decimal, BOM.
+        const text = String(e.target.result).replace(/^﻿/,'');
+        const lines = text.split(/\r?\n/).filter(l=>l.trim().length);
+        if(!lines.length) throw new Error('empty file');
+        const split = ln => {
+          // simple quote-aware split
+          const out = []; let cur=''; let q=false;
+          for(const c of ln){
+            if(c==='"'){ q=!q; continue; }
+            if(c===',' && !q){ out.push(cur); cur=''; continue; }
+            cur += c;
+          }
+          out.push(cur); return out.map(s=>s.trim());
+        };
+        const headers = split(lines[0]);
+        rows = lines.slice(1).map(ln => {
+          const cells = split(ln);
+          const o = {};
+          headers.forEach((h, i) => { o[h] = cells[i]; });
+          return o;
+        });
+      } else {
+        if(!window.XLSX) throw new Error('XLSX library not loaded');
+        const data = new Uint8Array(e.target.result);
+        const wb = XLSX.read(data, {type:'array'});
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        rows = XLSX.utils.sheet_to_json(ws, {defval:''});
+      }
+      if(!rows.length) throw new Error('no rows');
+      // Coerce types and load assets.
+      const coerce = (o) => {
+        const a = {...o};
+        for(const k of Object.keys(a)){
+          const v = a[k];
+          if(v === '' || v == null){ delete a[k]; continue; }
+          if(k === 'committable'){ a[k] = (String(v).toLowerCase() === 'true' || v === true || v === 1 || v === '1'); continue; }
+          if(typeof v === 'string'){
+            const num = +v.replace(',', '.');
+            if(!isNaN(num) && /^[-\d.,eE+]+$/.test(v.replace(',', '.'))) { a[k] = num; }
+          }
+        }
+        return a;
+      };
+      const valid = rows.filter(r => r.id && r.type).map(coerce);
+      if(!valid.length) throw new Error('no rows with id+type');
+      STATE.assets = valid;
+      assetIdCtr = STATE.assets.length + 1;
+      renderAssetTable();
+      updateGasEligibleUnits();
+      renderWorkflowSteps();
+      updateDashKpis();
+      showBanner(`✅ ${valid.length} ასეტი ჩაიტვ. (file: ${file.name})`, 'g');
+    } catch(err){
+      showBanner('❌ Asset import: ' + err.message, 'r');
+    }
+    input.value = '';
+  };
+  if(ext === 'csv' || ext === 'txt') reader.readAsText(file, 'utf-8');
+  else                                reader.readAsArrayBuffer(file);
+}
+
 function clearAssets(){
   if(!confirm('ყველა სადგ. წაიშლება?')) return;
   STATE.assets=[]; assetIdCtr=1;
@@ -1371,10 +2103,191 @@ function clearAssets(){
 //   The asset ids match the powersim_asset_mapper transliteration so the
 //   reservoir-override CSV (tests/reservoir_overrides_template.csv) and
 //   results JSON can be cross-referenced.
+// ══════════════════════════════════════════════════════════════════
+// NETWORK MODEL (#1 DC-OPF) — buses, lines, asset-bus assignment
+// ══════════════════════════════════════════════════════════════════
+STATE.network = {enabled:false, buses:[], lines:[],
+                 demand_by_bus:null, load_share_by_bus:null};
+
+function toggleNetwork(){
+  STATE.network.enabled = !!document.getElementById('net-enable').checked;
+  document.getElementById('net-bus-add').style.display  = STATE.network.enabled?'block':'none';
+  document.getElementById('net-line-add').style.display = STATE.network.enabled?'block':'none';
+  renderNetwork();
+}
+
+function addBus(){
+  const id = document.getElementById('bus-id').value.trim();
+  if(!id){ showBanner('bus id სავ.','r'); return; }
+  if(STATE.network.buses.find(b=>b.id===id)){ showBanner('bus id-ი დუბლირებული','r'); return; }
+  STATE.network.buses.push({
+    id, name: document.getElementById('bus-name').value.trim() || id,
+    voltage_kv: +document.getElementById('bus-kv').value || 500,
+    is_slack:   !!document.getElementById('bus-slack').checked,
+  });
+  renderNetwork();
+}
+
+function removeBus(id){
+  STATE.network.buses  = STATE.network.buses.filter(b=>b.id!==id);
+  STATE.network.lines  = STATE.network.lines.filter(ln=>ln.from_bus!==id && ln.to_bus!==id);
+  STATE.assets.forEach(a=>{ if(a.bus===id) delete a.bus; });
+  renderNetwork();
+}
+
+function addLine(){
+  const id = document.getElementById('line-id').value.trim();
+  if(!id){ showBanner('line id სავ.','r'); return; }
+  if(STATE.network.lines.find(l=>l.id===id)){ showBanner('line id-ი დუბლირებული','r'); return; }
+  const fb = document.getElementById('line-from').value;
+  const tb = document.getElementById('line-to').value;
+  if(fb===tb){ showBanner('from == to','r'); return; }
+  STATE.network.lines.push({
+    id, from_bus:fb, to_bus:tb,
+    capacity_mw: +document.getElementById('line-cap').value || 500,
+    x_pu:        +document.getElementById('line-x').value || 0.012,
+  });
+  renderNetwork();
+}
+
+function removeLine(id){
+  STATE.network.lines = STATE.network.lines.filter(l=>l.id!==id);
+  renderNetwork();
+}
+
+function setAssetBus(aid, bus){
+  const a = STATE.assets.find(x=>x.id===aid);
+  if(a){ a.bus = bus || undefined; if(!bus) delete a.bus; }
+}
+
+function loadGeorgiaNetwork3Bus(){
+  STATE.network.enabled = true;
+  document.getElementById('net-enable').checked = true;
+  STATE.network.buses = [
+    {id:'WEST', name:'დასავლეთი (ენგური/ვარდნილი)', voltage_kv:500, is_slack:false},
+    {id:'TBL',  name:'თბილისი (load center)',       voltage_kv:500, is_slack:true},
+    {id:'KTL',  name:'ქართლი (gen+load)',           voltage_kv:500, is_slack:false},
+  ];
+  STATE.network.lines = [
+    {id:'WEST_TBL_500', from_bus:'WEST', to_bus:'TBL', capacity_mw:1100, x_pu:0.012},
+    {id:'TBL_KTL_500',  from_bus:'TBL',  to_bus:'KTL', capacity_mw:850,  x_pu:0.010},
+    {id:'WEST_KTL_500', from_bus:'WEST', to_bus:'KTL', capacity_mw:400,  x_pu:0.018},
+  ];
+  STATE.network.load_share_by_bus = {WEST:0.18, TBL:0.55, KTL:0.27};
+  // Auto-assign assets by id pattern.
+  const W = ['engurhesi','vardnilhesi','lajanurhesi','vartsikhehesi_1','vartsikhehesi_2',
+             'vartsikhehesi_3','vartsikhehesi_4','shuakhevihesi','gumathesi_1','gumathesi_2',
+             'rionhesi','small_hpp_remainder','old_energy','kirnatihesi','khelvachauri_1',
+             'mestiachala_1','mestiachala_2','khobihesi_2','lakhami_2','nakrahesi'];
+  const K = ['gardabani_1','gardabani_2','tbilsresi_3','tbilsresi_4','mtkvari_energ','g_power',
+             'tkibuli_coal','khramhesi_1','khramhesi_2','dzevrulahesi','shaorhesi',
+             'wind_kartli','wind_dedoplistskaro','wind_telavi','solar_aggr',
+             'solar_kaspis','solar_jugaanis','solar_gamarjvebis','solar_khirsis','solar_kedis','solar_kistauris'];
+  const T = ['zhinvalhesi','chitakhevhesi','import_tr','import_az','import_am',
+             'mtkvarihesi','paravanhesi','darialhesi','larsihesi','khadorhesi','atshesi',
+             'ortachalhesi','zahesi','rachahesi','akhmetahesi','sionhesi','aragvihesi',
+             'sashuala_1','akhalkalaki_1','satskhenhesi','tetrikhevhesi','bzhuzhahesi',
+             'bakhvihesi_3','kasletihesi_2','skhaltahesi','basra_1','dzevrulahesi'];
+  STATE.assets.forEach(a=>{
+    if(W.includes(a.id))      a.bus='WEST';
+    else if(K.includes(a.id)) a.bus='KTL';
+    else if(T.includes(a.id)) a.bus='TBL';
+    else                       a.bus='TBL';
+  });
+  document.getElementById('net-bus-add').style.display='block';
+  document.getElementById('net-line-add').style.display='block';
+  renderNetwork();
+  showBanner('✅ Georgia 3-Bus network ჩაიტვირთა','g');
+}
+
+function renderNetwork(){
+  // Buses table
+  const buses = STATE.network.buses;
+  const lines = STATE.network.lines;
+  document.getElementById('bus-count').textContent  = buses.length;
+  document.getElementById('line-count').textContent = lines.length;
+
+  const bw = document.getElementById('bus-tbl-wrap');
+  if(bw){
+    bw.innerHTML = !buses.length
+      ? '<div style="font-size:8px;color:var(--t3);padding:8px">Bus არ არის — დაამატე ან გამოიყენე "🇬🇪 Georgia 3-Bus" ღილაკი</div>'
+      : `<table><thead><tr><th>id</th><th>სახელი</th><th>kV</th><th>Slack</th><th>✕</th></tr></thead>
+         <tbody>${buses.map(b=>`<tr>
+           <td class="mono"><b>${b.id}</b></td>
+           <td><input type="text" value="${b.name||''}" style="width:170px;font-size:8px"
+                onchange="STATE.network.buses.find(x=>x.id==='${b.id}').name=this.value"></td>
+           <td><input type="number" value="${b.voltage_kv||500}" style="width:55px;font-size:8px"
+                onchange="STATE.network.buses.find(x=>x.id==='${b.id}').voltage_kv=+this.value"></td>
+           <td><input type="checkbox" ${b.is_slack?'checked':''}
+                onchange="STATE.network.buses.forEach(x=>x.is_slack=false); STATE.network.buses.find(x=>x.id==='${b.id}').is_slack=this.checked; renderNetwork()"></td>
+           <td><button onclick="removeBus('${b.id}')" style="background:none;border:none;color:var(--red);cursor:pointer">✕</button></td>
+         </tr>`).join('')}</tbody></table>`;
+  }
+  // Update from/to selects
+  ['line-from','line-to'].forEach(sid=>{
+    const sel=document.getElementById(sid);
+    if(sel){ sel.innerHTML = buses.map(b=>`<option value="${b.id}">${b.id} — ${b.name||''}</option>`).join(''); }
+  });
+  // Lines table
+  const lw = document.getElementById('line-tbl-wrap');
+  if(lw){
+    lw.innerHTML = !lines.length
+      ? '<div style="font-size:8px;color:var(--t3);padding:8px">Line არ არის</div>'
+      : `<table><thead><tr><th>id</th><th>from</th><th>to</th><th>cap MW</th><th>x p.u.</th><th>✕</th></tr></thead>
+         <tbody>${lines.map(l=>`<tr>
+           <td class="mono"><b>${l.id}</b></td>
+           <td class="mono">${l.from_bus}</td>
+           <td class="mono">${l.to_bus}</td>
+           <td><input type="number" value="${l.capacity_mw}" style="width:65px;font-size:8px"
+                onchange="STATE.network.lines.find(x=>x.id==='${l.id}').capacity_mw=+this.value"></td>
+           <td><input type="number" value="${l.x_pu||0.012}" style="width:60px;font-size:8px" step="0.001"
+                onchange="STATE.network.lines.find(x=>x.id==='${l.id}').x_pu=+this.value"></td>
+           <td><button onclick="removeLine('${l.id}')" style="background:none;border:none;color:var(--red);cursor:pointer">✕</button></td>
+         </tr>`).join('')}</tbody></table>`;
+  }
+  // Asset → bus assignment
+  const aw = document.getElementById('asset-bus-wrap');
+  if(aw){
+    if(!buses.length){
+      aw.innerHTML='<div style="color:var(--t3);padding:6px">Bus-ი ჯერ არ შექმნილა.</div>';
+    } else {
+      // Group by bus
+      const byBus = {};
+      buses.forEach(b=>byBus[b.id]=[]);
+      const unassigned = [];
+      STATE.assets.forEach(a=>{
+        if(a.bus && byBus[a.bus]) byBus[a.bus].push(a); else unassigned.push(a);
+      });
+      const opts = '<option value="">— bus —</option>'+buses.map(b=>`<option value="${b.id}">${b.id}</option>`).join('');
+      const renderRow = a => `<tr><td>${a.name||a.id}</td>
+        <td><select style="font-size:8px" onchange="setAssetBus('${a.id}',this.value)">
+          ${opts.replace(`value="${a.bus||''}">`,`value="${a.bus||''}" selected>`)}
+        </select></td>
+        <td class="mono">${(+a.pmax||+a.pmax_installed||+a.pmax_profile||+a.power_mw||0).toFixed(1)} MW</td></tr>`;
+      let out = '';
+      buses.forEach(b=>{
+        out += `<div class="sh" style="margin-top:6px">${b.id} — ${b.name||''} (${byBus[b.id].length} ასეტი)</div>
+                <table><tbody>${byBus[b.id].map(renderRow).join('')||'<tr><td colspan="3" style="color:var(--t3)">—</td></tr>'}</tbody></table>`;
+      });
+      if(unassigned.length){
+        out += `<div class="sh" style="margin-top:6px;color:var(--orange)">⚠ Unassigned (${unassigned.length})</div>
+                <table><tbody>${unassigned.map(renderRow).join('')}</tbody></table>`;
+      }
+      aw.innerHTML = out;
+    }
+  }
+  updateDashKpis();
+}
+
 function loadGSE2026Demo(){
-  // Helpers — collapse repetition across the 26-asset list.
-  const t = (id, name, pmax) => ({                      // CCGT thermal
-    id, name, type:'thermal', committable:true,
+  // ── Helpers — compact constructors for the 77-asset GSE 2026 fleet.
+  // v10 LOCKED calibration: gas $5.50/MMBtu, startup $1000 / no-load $50,
+  // coal startup $4000 / no-load $100, thermal pmin = 25% pmax,
+  // hydro inflow-driven pmax × 0.65 derate, Section-I water values
+  // $35/$42/$37, target_end_level_frac 0.85, end_level_penalty 20 $/Mm³.
+  // Cascades: Vardnili ← Enguri (2h, 0.97); Khrami_2 ← Khrami_1 (1h, 0.95).
+  const tGas = (id, name, pmax, yr) => ({               // CCGT gas thermal
+    id, name, type:'thermal', committable:true, _commiss_year:yr,
     pmin:Math.round(pmax*0.25*10)/10, pmax,
     heat_rate:6.8, fuel_type:'gas', fuel_price:5.50, vom:2,
     startup_cost:1000, no_load_cost:50,
@@ -1383,8 +2296,9 @@ function loadGSE2026Demo(){
     initial_status:1, initial_power:Math.round(pmax*0.5*10)/10,
     for_rate:0.08, maint_windows:[]
   });
-  const tOCGT = (id, name, pmax) => ({                  // OCGT thermal
-    id, name, type:'thermal', committable:true,
+  const t = tGas;                                       // legacy alias
+  const tOCGT = (id, name, pmax, yr) => ({              // OCGT thermal
+    id, name, type:'thermal', committable:true, _commiss_year:yr,
     pmin:Math.round(pmax*0.25*10)/10, pmax,
     heat_rate:9.5, fuel_type:'gas', fuel_price:5.50, vom:2.5,
     startup_cost:1000, no_load_cost:50,
@@ -1393,8 +2307,8 @@ function loadGSE2026Demo(){
     initial_status:0, initial_power:0,
     for_rate:0.10, maint_windows:[]
   });
-  const tCoal = (id, name, pmax) => ({                  // Coal (Tkibuli)
-    id, name, type:'thermal', committable:true,
+  const tCoal = (id, name, pmax, yr) => ({              // Coal (Tkibuli)
+    id, name, type:'thermal', committable:true, _commiss_year:yr,
     pmin:Math.round(pmax*0.25*10)/10, pmax,
     heat_rate:10.5, fuel_type:'coal', fuel_price:4.0, vom:3.5,
     startup_cost:4000, no_load_cost:100,
@@ -1404,7 +2318,7 @@ function loadGSE2026Demo(){
     for_rate:0.12, maint_windows:[]
   });
   const hReg = (id, name, pmax, h) => ({                // Section I reservoir
-    id, name, type:'hydro_reg', committable:true,
+    id, name, type:'hydro_reg', committable:true, _commiss_year:h.yr||null,
     pmin:Math.round(pmax*0.15*10)/10, pmax,
     ramp_up:Math.round(pmax*0.30), ramp_down:Math.round(pmax*0.30),
     min_up:0, min_down:0, startup_cost:0, no_load_cost:0, vom:0,
@@ -1421,9 +2335,10 @@ function loadGSE2026Demo(){
       conversion_mode: 2
     }), inflow_profile:null, inflow_driven:false
   });
-  // Section II / aggregated small hydro: pmax is ALREADY derated × 0.65.
-  const hRoR = (id, name, pmax_derated) => ({
-    id, name, type:'hydro_ror', committable:false,
+  // Sections II & III — inflow-driven hydro. `pmax_derated` is already
+  // × 0.65 derated per v10 LOCKED.
+  const hRoR = (id, name, pmax_derated, yr) => ({
+    id, name, type:'hydro_ror', committable:false, _commiss_year:yr||null,
     pmin:0, pmax:pmax_derated,
     ramp_up:9999, ramp_down:9999,
     min_up:0, min_down:0, startup_cost:0, no_load_cost:0, vom:0,
@@ -1434,13 +2349,13 @@ function loadGSE2026Demo(){
            reservoir_init:0, reservoir_min:0, reservoir_max:0, reservoir_end_min:0},
     availability_profile:null, inflow_driven:true
   });
-  const w = (id, name, pmax) => ({                      // Wind
-    id, name, type:'wind', committable:false,
+  const w = (id, name, pmax, yr) => ({                  // Wind
+    id, name, type:'wind', committable:false, _commiss_year:yr||null,
     pmax_installed:pmax, vom:0, curtailment_cost:0,
     availability_profile:null
   });
-  const s = (id, name, pmax) => ({                      // Solar
-    id, name, type:'solar', committable:false,
+  const s = (id, name, pmax, yr) => ({                  // Solar
+    id, name, type:'solar', committable:false, _commiss_year:yr||null,
     pmax_installed:pmax, vom:0, curtailment_cost:0,
     availability_profile:null
   });
@@ -1450,73 +2365,137 @@ function loadGSE2026Demo(){
   });
 
   STATE.assets = [
-    // ── Section I reservoirs (cascade + strategic end-level) ──────
-    hReg('engurhesi',   'ენგური ჰესი',            1300, {init:700,min:100,max:1100, wv:35}),
-    hReg('vardnilhesi', 'ვარდნილი ჰესი',          220,  {init:40, min:10, max:80,
-        wv:35, casc_up:'engurhesi', casc_delay:2, casc_gain:0.97}),
-    hReg('zhinvalhesi', 'ჟინვალი ჰესი',           130,  {init:150,min:30, max:400, wv:42}),
-    hReg('khramhesi_1', 'ხრამი 1 ჰესი',           113,  {init:80, min:20, max:170, wv:42}),
-    hReg('khramhesi_2', 'ხრამი 2 ჰესი',           110,  {init:15, min:5,  max:30,
-        wv:42, casc_up:'khramhesi_1', casc_delay:1, casc_gain:0.95}),
-    hReg('shaorhesi',   'შაორი ჰესი',             38.4, {init:40, min:10, max:90,  wv:37}),
-    hReg('dzevrulahesi','ძევრულა ჰესი',           80,   {init:8,  min:2,  max:18,  wv:37}),
+    // ═══════════════════════════════════════════════════════════════
+    // I. მარეგულირებელი ჰესები — 7 plants, Σ 1,993.12 MW
+    // Strategic end-level 0.85, end_level_penalty $20/Mm³.
+    // ═══════════════════════════════════════════════════════════════
+    hReg('khramhesi_1',  'ხრამჰესი 1',       112.8, {init:80,  min:20, max:170, wv:42, yr:1947}),
+    hReg('shaorhesi',    'შაორჰესი',          40.32,{init:40,  min:10, max:90,  wv:37, yr:1955}),
+    hReg('dzevrulahesi', 'ძევრულაჰესი',       80.0, {init:8,   min:2,  max:18,  wv:37, yr:1956}),
+    hReg('khramhesi_2',  'ხრამჰესი 2',       110.0, {init:15,  min:5,  max:30,
+                                                      wv:42, casc_up:'khramhesi_1', casc_delay:1, casc_gain:0.95, yr:1963}),
+    hReg('vardnilhesi',  'ვარდნილჰესი',      220.0, {init:40,  min:10, max:80,
+                                                      wv:35, casc_up:'engurhesi',  casc_delay:2, casc_gain:0.97, yr:1971}),
+    hReg('engurhesi',    'ენგურჰესი',       1300.0, {init:700, min:100,max:1100, wv:35, yr:1978}),
+    hReg('zhinvalhesi',  'ჟინვალჰესი',      130.0, {init:150, min:30, max:400, wv:42, yr:1984}),
 
-    // ── Section II / aggregated inflow-driven hydro (× 0.65 derate) ──
-    hRoR('lajanurhesi',     'ლაჯანური ჰესი (×0.65)',           Math.round(112*0.65*10)/10),
-    hRoR('vartsikhehesi',   'ვარციხე ჰესების კასკადი (×0.65)', Math.round(184*0.65*10)/10),
-    hRoR('shuakhevihesi',   'შუახევი ჰესი (×0.65)',            Math.round(178*0.65*10)/10),
-    hRoR('gumathesi',       'გუმათი ჰესი (×0.65)',             Math.round(66.5*0.65*10)/10),
-    hRoR('rionhesi',        'რიონი ჰესი (×0.65)',              Math.round(48*0.65*10)/10),
-    hRoR('chitakhevhesi',   'ჩითახევი ჰესი (×0.65)',           Math.round(21*0.65*10)/10),
-    hRoR('small_hpp_aggr',  'მცირე ჰესების ჯამი (×0.65)',      Math.round(480*0.65)),
+    // ═══════════════════════════════════════════════════════════════
+    // II. სეზონური ჰესები — 24 plants, Σ 1,214.21 MW (× 0.65 derate)
+    // ═══════════════════════════════════════════════════════════════
+    hRoR('zahesi',        'ზაჰესი',                  Math.round(42.0 *0.65*100)/100, 1927),
+    hRoR('rionhesi',      'რიონჰესი',                Math.round(54.0 *0.65*100)/100, 1933),
+    hRoR('atshesi',       'აწჰესი',                  Math.round(18.4 *0.65*100)/100, 1937),
+    hRoR('chitakhevhesi', 'ჩითახევჰესი',             Math.round(21.0 *0.65*100)/100, 1949),
+    hRoR('ortachalhesi',  'ორთაჭალჰესი',             Math.round(18.0 *0.65*100)/100, 1954),
+    hRoR('gumathesi_1',   'გუმათჰესი 1',             Math.round(46.7 *0.65*100)/100, 1956),
+    hRoR('gumathesi_2',   'გუმათჰესი 2',             Math.round(22.8 *0.65*100)/100, 1958),
+    hRoR('lajanurhesi',   'ლაჯანურჰესი',             Math.round(115.6*0.65*100)/100, 1960),
+    hRoR('vartsikhehesi_1','ვარციხეჰესი 1',          Math.round(46.0 *0.65*100)/100, 1976),
+    hRoR('vartsikhehesi_2','ვარციხეჰესი 2',          Math.round(46.0 *0.65*100)/100, 1976),
+    hRoR('vartsikhehesi_3','ვარციხეჰესი 3',          Math.round(46.0 *0.65*100)/100, 1977),
+    hRoR('vartsikhehesi_4','ვარციხეჰესი 4',          Math.round(46.0 *0.65*100)/100, 1977),
+    hRoR('khadorhesi',    'ხადორჰესი',               Math.round(24.0 *0.65*100)/100, 2004),
+    hRoR('larsihesi',     'ლარსიჰესი',               Math.round(19.0 *0.65*100)/100, 2014),
+    hRoR('paravanhesi',   'ფარავანჰესი',             Math.round(86.54*0.65*100)/100, 2014),
+    hRoR('darialhesi',    'დარიალჰესი',              Math.round(108.0*0.65*100)/100, 2016),
+    hRoR('khelvachauri_1','ხელვაჩაური 1',            Math.round(47.48*0.65*100)/100, 2016),
+    hRoR('shuakhevihesi', 'შუახევიჰესი',             Math.round(178.72*0.65*100)/100,2017),
+    hRoR('old_energy',    'ოლდ ენერჯიჰესი (სოხუმჰესი)', Math.round(21.39*0.65*100)/100, 2018),
+    hRoR('kirnatihesi',   'კირნათიჰესი',             Math.round(52.62*0.65*100)/100, 2018),
+    hRoR('mestiachala_2', 'მესტიაჭალა 2',            Math.round(31.9 *0.65*100)/100, 2019),
+    hRoR('mestiachala_1', 'მესტიაჭალა 1',            Math.round(21.26*0.65*100)/100, 2019),
+    hRoR('khobihesi_2',   'ხობიჰესი 2',              Math.round(46.7 *0.65*100)/100, 2024),
+    hRoR('mtkvarihesi',   'მტკვარიჰესი',             Math.round(54.1 *0.65*100)/100, 2025),
 
-    // ── Thermal — v10 LOCKED ($5.50/MMBtu, startup 1000, no-load 50) ──
-    t   ('gardabani_1', 'გარდაბანი TPP-1 CCGT',  231.2),
-    t   ('gardabani_2', 'გარდაბანი TPP-2 CCGT',  230),
-    t   ('gardabani_3', 'გარდაბანი TPP-3 CCGT',  230),
-    t   ('tbilsresi',   'თბილსრესი CCGT',        332),
-    tOCGT('g_power',    'G-Power OCGT',          110),
-    tCoal('tkibuli',    'თბილსრესი ნახშირი',     13),
+    // ═══════════════════════════════════════════════════════════════
+    // III. მცირე ჰესები — top 15 by capacity (x 0.65 derate) + aggregate remainder
+    //       15 named + 1 aggregate (remaining 70 plants = 178.68 MW).
+    //       All 85 small HPPs total 331.26 MW.
+    // ═══════════════════════════════════════════════════════════════
+    hRoR('satskhenhesi',  'საცხენჰესი',              Math.round(14.0 *0.65*100)/100, 1952),
+    hRoR('basra_1',       'ბასრა 1',                 Math.round(12.53*0.65*100)/100, 2025),
+    hRoR('tetrikhevhesi', 'თეთრიხევჰესი',            Math.round(12.4 *0.65*100)/100, 1952),
+    hRoR('bzhuzhahesi',   'ბჟუჟაჰესი',               Math.round(12.24*0.65*100)/100, 1956),
+    hRoR('rachahesi',     'რაჭაჰესი',                Math.round(11.0 *0.65*100)/100, 2013),
+    hRoR('lakhami_2',     'ლახამი 2',                Math.round(10.71*0.65*100)/100, 2020),
+    hRoR('nakrahesi',     'ნაკრაჰესი',               Math.round(9.95 *0.65*100)/100, 2022),
+    hRoR('bakhvihesi_3',  'ბახვიჰესი 3',             Math.round(9.8  *0.65*100)/100, 2013),
+    hRoR('akhmetahesi',   'ახმეტაჰესი',              Math.round(9.2  *0.65*100)/100, 2014),
+    hRoR('sionhesi',      'სიონჰესი',                Math.round(9.14 *0.65*100)/100, 1964),
+    hRoR('kasletihesi_2', 'კასლეთიჰესი 2',           Math.round(9.1  *0.65*100)/100, 2018),
+    hRoR('skhaltahesi',   'სხალთა',                  Math.round(9.0  *0.65*100)/100, 2021),
+    hRoR('aragvihesi',    'არაგვიჰესი',              Math.round(8.0  *0.65*100)/100, 2014),
+    hRoR('sashuala_1',    'საშუალა 1',               Math.round(7.86 *0.65*100)/100, 2021),
+    hRoR('akhalkalaki_1', 'ახალქალაქი 1',            Math.round(7.65 *0.65*100)/100, 2022),
+    // Remaining 70 small HPPs (vintage 1928–2025) — aggregated (×0.65)
+    hRoR('small_hpp_remainder','მცირე ჰესების ჯამი — დანარჩენი 70', Math.round(178.68*0.65*100)/100, null),
 
-    // ── Renewables ──
-    w('wind_kartli',       'ქართლის ქარი',         20.7),
-    w('wind_dedoplistskaro','ზემო ვინდი (ქარი)',   18.75),
-    w('wind_kakheti',      'კახეთის ქარი',         34),
-    s('solar_aggr',        'მზის სადგურები (ჯამი)', 32),
+    // ═══════════════════════════════════════════════════════════════
+    // V. თბოსადგურები — 7 units, Σ 1,181.40 MW (all gas except Tkibuli)
+    // v10 LOCKED: gas $5.50/MMBtu, startup $1000, no-load $50, pmin=25%
+    // ═══════════════════════════════════════════════════════════════
+    tGas('tbilsresi_4',   'თბილსრესი IV ბლოკი',      142.0, 1963),
+    tGas('tbilsresi_3',   'თბილსრესი III ბლოკი',     130.0, 1963),
+    tGas('mtkvari_energ', 'მტკვარი ენერგეტიკა (IX)', 300.0, 1991),
+    tOCGT('g_power',      'ჯიფაუერი (აირტურბინა)',    110.0, 2006),
+    tCoal('tkibuli_coal', 'ტყიბულის ნახშირი',          13.2, 2011),
+    tGas('gardabani_1',   'გარდაბნის თბოსადგური 1 (კცთეს 1)', 231.2, 2015),
+    tGas('gardabani_2',   'გარდაბნის თბოსადგური 2 (კცთეს 2)', 255.0, 2020),
 
-    // ── Imports ──
+    // ═══════════════════════════════════════════════════════════════
+    // VI. ქარის სადგურები — 2 units, Σ 39.45 MW
+    // ═══════════════════════════════════════════════════════════════
+    w('wind_kartli',         'ქართლის ქარის ელ.სადგური', 20.7,  2016),
+    w('wind_zemo_vindi',     'ზემო ვინდი',               18.75, 2026),
+
+    // ═══════════════════════════════════════════════════════════════
+    // IV. მზის სადგურები — 6 units, Σ 10.75 MW (all commissioned 2025)
+    // ═══════════════════════════════════════════════════════════════
+    s('solar_gamarjvebis',   'გამარჯვების მზის სადგური',       1.75, 2025),
+    s('solar_jugaanis',      'ჯუგაანის მზის სადგური',          1.75, 2025),
+    s('solar_kaspis',        'კასპის მზის სადგური',            2.00, 2025),
+    s('solar_khirsis',       'ხირსის მზის სადგური',            1.75, 2025),
+    s('solar_kedis',         'ქედის მზის ელექტროსადგური',      1.75, 2025),
+    s('solar_kistauris',     'ქისტაურის მზის ელექტროსადგური',  1.75, 2025),
+
+    // ═══════════════════════════════════════════════════════════════
+    //  Import links (not in the installed-capacity spreadsheet)
+    // ═══════════════════════════════════════════════════════════════
     imp('import_tr', '🇹🇷 თურქეთი იმპორტი', 700, 55),
     imp('import_az', '🇦🇿 აზერბაიჯანი იმპ.',  500, 48),
     imp('import_am', '🇦🇲 სომხეთი იმპორტი',  200, 60),
   ];
   assetIdCtr = STATE.assets.length + 1;
 
-  // Reserves — system-wide FCR + aFRR (up + down)
+  // Reserves — system-wide FCR + aFRR (up + down).
+  // Eligible set now includes the six Section-I reservoirs + the five
+  // committable thermals (ccgt + ocgt).  Small HPPs/Section II are
+  // inflow-driven (not committable) and can't provide reserve here.
   STATE.reserveProducts = [
     {id:'FCR', name:'FCR (Frequency Containment)',
      direction:'symmetric', requirement:60, shortfall_penalty:1000,
-     eligible_units:['engurhesi','vardnilhesi','zhinvalhesi',
-                     'gardabani_1','gardabani_2','gardabani_3','tbilsresi'],
+     eligible_units:['engurhesi','vardnilhesi','zhinvalhesi','khramhesi_1','khramhesi_2',
+                     'gardabani_1','gardabani_2','mtkvari_energ','tbilsresi_3','tbilsresi_4'],
      response_time_label:'30s', derating_factors:{}},
     {id:'aFRR_up', name:'aFRR Up',
      direction:'up', requirement:120, shortfall_penalty:500,
-     eligible_units:['engurhesi','vardnilhesi','zhinvalhesi',
-                     'gardabani_1','gardabani_2','gardabani_3','tbilsresi','g_power'],
+     eligible_units:['engurhesi','vardnilhesi','zhinvalhesi','khramhesi_1','khramhesi_2',
+                     'gardabani_1','gardabani_2','mtkvari_energ','tbilsresi_3','tbilsresi_4','g_power'],
      response_time_label:'5min', derating_factors:{}},
     {id:'aFRR_dn', name:'aFRR Down',
      direction:'down', requirement:80, shortfall_penalty:300,
-     eligible_units:['engurhesi','vardnilhesi','zhinvalhesi',
-                     'gardabani_1','gardabani_2','gardabani_3','tbilsresi'],
+     eligible_units:['engurhesi','vardnilhesi','zhinvalhesi','khramhesi_1','khramhesi_2',
+                     'gardabani_1','gardabani_2','mtkvari_energ','tbilsresi_3','tbilsresi_4'],
      response_time_label:'5min', derating_factors:{}},
   ];
 
-  // Gas — annual + monthly per v10 LOCKED (winter 180, summer 40)
+  // Gas — annual + monthly per v10 LOCKED (winter 180, summer 40).
   const monthly = {jan:180,feb:160,mar:100,apr:60,may:40,jun:40,
                    jul:60,aug:60,sep:60,oct:90,nov:140,dec:180};
   STATE.gasConfig = {
     mode:'annual+monthly', annual_cap:1170,
     monthly: monthly,
-    applies_to:['gardabani_1','gardabani_2','gardabani_3','tbilsresi','g_power']
+    applies_to:['gardabani_1','gardabani_2','mtkvari_energ','tbilsresi_3','tbilsresi_4','g_power']
   };
   // Reflect monthly defaults into the live grid input fields
   Object.keys(monthly).forEach(m=>{
@@ -1939,6 +2918,48 @@ function applyHorizonPreset(){
   updateHorizonPreview();
 }
 
+// ── Resolution + VRE presets ──────────────────────────────────────
+// onResolutionChange() warns when sub-hourly × long horizon would
+// blow up the MIP size beyond practical limits.
+function onResolutionChange(){
+  const r = +((document.getElementById('hor-resolution')||{}).value || 60);
+  const hh = +((document.getElementById('hor-hours')||{}).value || STATE.horizon.horizon_h || 168);
+  const periods = hh * (60 / r);
+  if(periods > 50_000){
+    showBanner(`⚠ ${r}-min × ${hh}h = ${periods.toLocaleString()} period — solver might be slow / OOM.  Reduce horizon.`, 'o', 8000);
+  }
+  updateHorizonPreview();
+}
+
+// presetVRE(resolution_min, horizon_hours) — quick setup for wind/solar
+// high-resolution studies (e.g. 1-min × 24h to capture sub-minute
+// ramping events that an hourly run averages away).
+function presetVRE(res_min, hours){
+  const r = document.getElementById('hor-resolution');
+  const hp= document.getElementById('hor-preset');
+  const hh= document.getElementById('hor-hours');
+  if(r){ r.value = String(res_min); }
+  if(hh){ hh.value = String(hours); }
+  // Map to nearest preset value if applicable.
+  if(hp){
+    const opts = Array.from(hp.options).map(o=>+o.value);
+    if(opts.includes(hours)) hp.value = String(hours);
+  }
+  STATE.horizon.horizon_h = hours;
+  // Ensure rolling window matches horizon for fast first run.
+  STATE.horizon.window_h = hours;
+  STATE.horizon.step_h   = hours;
+  const wEl = document.getElementById('hor-window');
+  const sEl = document.getElementById('hor-step');
+  if(wEl) wEl.value = hours;
+  if(sEl) sEl.value = hours;
+  // Switch to "absolute" demand by default for short windows so the
+  // user can paste a real measured wind/solar trace without needing an
+  // 8760h shape — but only if no demand profile is loaded yet.
+  updateHorizonPreview();
+  showBanner(`⚡ VRE preset: ${res_min}-min × ${hours}h = ${(hours*60/res_min).toLocaleString()} period`, 'b', 6000);
+}
+
 function updateHorizonPreview(){
   const start=(document.getElementById('hor-start-date')||{}).value||'2026-01-01';
   const startH=+(document.getElementById('hor-start-hour')||{}).value||0;
@@ -1989,12 +3010,16 @@ function runValidation(){
     if(demandArr.some(v=>v<0)) errors.push('demand < 0 values');
     if(demandArr.some(v=>isNaN(v))) errors.push('demand NaN values');
   }
-  // Check RE profiles linked
-  STATE.assets.filter(a=>a.type==='wind'||a.type==='solar').forEach(a=>{
+  // Check availability profiles linked (wind / solar / hydro_ror)
+  const horizonNeed=(STATE.horizon.start_hour||0)+(STATE.horizon.horizon_h||0);
+  STATE.assets.filter(a=>a.type==='wind'||a.type==='solar'||a.type==='hydro_ror').forEach(a=>{
     const pk=a.availability_profile;
-    if(pk&&!STATE.profiles[pk]) warnings.push(`${a.name}: profile '${pk}' ვერ მოიძებნა`);
-    else if(!pk) warnings.push(`${a.name}: availability_profile არ მითითებულა`);
-    else if(STATE.profiles[pk].length!==8760) errors.push(`${pk}: length ≠ 8760`);
+    if(pk&&!STATE.profiles[pk]) warnings.push(`${a.name}: profile '${pk}' ვერ მოიძებნა / not found`);
+    else if(!pk) warnings.push(`${a.name}: availability_profile არ მითითებულა / not selected`);
+    else if(STATE.profiles[pk].length!==8760){
+      if(STATE.profiles[pk].length<horizonNeed) errors.push(`${pk}: length ${STATE.profiles[pk].length} < horizon ${horizonNeed}`);
+      else warnings.push(`${pk}: length ${STATE.profiles[pk].length} ≠ 8760`);
+    }
   });
   // Hydro inflow
   STATE.assets.filter(a=>a.type==='hydro_reg').forEach(a=>{
@@ -2011,6 +3036,22 @@ function runValidation(){
   // Horizon
   const sh=STATE.horizon;
   if(sh.start_hour+sh.horizon_h>8760) errors.push('ჰორიზ. 8760h-ს გადასცდება');
+
+  // Maintenance calendar (Task B)
+  (STATE.maintenance||[]).forEach((ev,i)=>{
+    const a=STATE.assets.find(x=>x.id===ev.asset_id);
+    if(!a){ errors.push(`Maint #${i+1}: asset '${ev.asset_id}' ვერ მოიძ. / not found`); return; }
+    if(!(ev.start_h>=0&&ev.end_h>ev.start_h)) errors.push(`Maint #${i+1} (${a.name}): start<end & ≥0 required`);
+    if(ev.end_h>8760) errors.push(`Maint #${i+1} (${a.name}): end ${ev.end_h} > 8760`);
+    if(ev.availability_factor!=null&&!(ev.availability_factor>=0&&ev.availability_factor<=1))
+      errors.push(`Maint #${i+1} (${a.name}): factor must be 0–1`);
+    if(ev.available_capacity_mw!=null){
+      const pmax=+(a.pmax||a.pmax_installed||a.power_mw||0);
+      if(pmax&&ev.available_capacity_mw>pmax) errors.push(`Maint #${i+1} (${a.name}): cap ${ev.available_capacity_mw} > pmax ${pmax}`);
+    }
+    const horizonEnd=sh.start_hour+sh.horizon_h;
+    if(ev.start_h>=horizonEnd) warnings.push(`Maint #${i+1} (${a.name}): window outside study horizon`);
+  });
 
   // Render report
   STATE.validated=errors.length===0;
@@ -2083,6 +3124,7 @@ function buildInputPayload(){
     profiles: STATE.profiles,
     gas_constraints: gasConf,
     reserve_products: STATE.reserveProducts,
+    maintenance: (STATE.maintenance||[]).length ? STATE.maintenance : undefined,
     solver_settings:{
       mip_gap:0.005, time_limit_s:300,
       rolling_window_h: sh.window_h,
@@ -2096,6 +3138,10 @@ function buildInputPayload(){
     },
     resolution_min: +((document.getElementById('hor-resolution')||{}).value || 60),
     kpi_templates: (STATE.kpiTemplates||[]).length ? STATE.kpiTemplates : undefined,
+    // v1.5 DC-OPF — only emitted when network is enabled.
+    buses: (STATE.network && STATE.network.enabled && STATE.network.buses.length) ? STATE.network.buses : undefined,
+    lines: (STATE.network && STATE.network.enabled && STATE.network.lines.length) ? STATE.network.lines : undefined,
+    load_share_by_bus: (STATE.network && STATE.network.enabled && STATE.network.load_share_by_bus) ? STATE.network.load_share_by_bus : undefined,
     scenario_metadata:(function(){
       const sel=document.getElementById('hor-scenario');
       const sid=(sel&&sel.value)||'A_mean';
@@ -2171,6 +3217,7 @@ function importResults(input){
       renderWorkflowSteps();
       goTab('results');
       renderResults();
+      try { renderReports(); } catch(e) { console.warn('Reports render skipped:', e); }
       showBanner('✅ შედეგები ჩაიტვ. | '+
         (data.metadata?.horizon_hours||'?')+'h | $'+
         fmtNum(data.system_summary?.total_cost_usd||0),'g',8000);
@@ -2436,6 +3483,1516 @@ function renderDiagnosticsPanels(diag){
       .map(([k,v])=>`<div><span style="color:var(--t3)">${k}:</span> ${JSON.stringify(v)}</div>`)
       .join('');
   }
+}
+
+// ══════════════════════════════════════════════════════════════════
+// REPORTS TAB — PLEXOS-style 20-card analytical dashboard
+// ══════════════════════════════════════════════════════════════════
+const TYPE_PALETTE = {
+  thermal:'#e03144', hydro_reg:'#002060', hydro_ror:'#00B0F0',
+  wind:'#00cfb4', solar:'#f0c040', import:'#a463f8',
+  bess:'#20d68a', dr:'#f07830', pumped_hydro:'#3d8ef0'
+};
+// Fuel-level palette (CCGT/OCGT/coal split out of "thermal").
+const FUEL_PALETTE = {
+  ccgt:'#e03144', ocgt:'#f07830', coal:'#7a4a2a',
+  ...TYPE_PALETTE
+};
+
+function renderReports(){
+  const R = STATE.results;
+  const empty = document.getElementById('rep-empty');
+  const body  = document.getElementById('rep-body');
+  if(!R){
+    if(empty) empty.style.display='flex';
+    if(body)  body.style.display='none';
+    return;
+  }
+  empty.style.display='none'; body.style.display='block';
+  // Pre-compute features used by multiple panels.
+  const ctx = _repBuildContext(R);
+  // ── Tier 1 ──
+  _repTechMix(ctx);            // 1
+  _repLDC(ctx);                // 2
+  _repReservoir(ctx);          // 3
+  _repCFHeatmap(ctx);          // 4
+  _repCostWaterfall(ctx);      // 5
+  _repHourlyHeatmap(ctx);      // 6
+  // ── Tier 2 ──
+  _repReserveAlloc(ctx);       // 7
+  _repCurtailment(ctx);        // 8
+  _repCO2(ctx);                // 9
+  _repPnL(ctx);                // 10
+  _repSpillage(ctx);           // 11
+  _repMCvsLambda(ctx);         // 12
+  // ── Tier 3 ──
+  _repDayTypes(ctx);           // 13
+  _repKPIRadar(ctx);           // 14
+  _repBessArb(ctx);            // 15
+  _repReservoirTarget(ctx);    // 16
+  _repRampReq(ctx);            // 17
+  _repSnapshots(ctx);          // 18
+  _repScenarioDelta(ctx);      // 19  (uses STATE.compareSlots)
+}
+
+// ── Helpers shared across reports ────────────────────────────────────
+function _repBuildContext(R){
+  const hs = R.hourly_system || [];
+  const hbu = R.hourly_by_unit || {};
+  const bu = R.by_unit_summary || {};
+  const monthly = R.monthly_summary || [];
+  const meta = R.metadata || {};
+  const dt_h = (meta.resolution_min || 60) / 60;
+  const H = hs.length;
+
+  // Resolve fuel category per asset.
+  const fuelOf = (gid) => {
+    const a = bu[gid] || {};
+    if(a.type !== 'thermal') return a.type;
+    const heat = (a.heat_rate || 0);
+    // Coal vs gas vs OCGT-vs-CCGT heuristic from asset name + heat rate.
+    const nm = (a.name || gid).toLowerCase();
+    if(nm.includes('ნახშ') || nm.includes('coal')) return 'coal';
+    if(heat >= 9.0)  return 'ocgt';
+    return 'ccgt';
+  };
+
+  // Group hourly dispatch by fuel category.
+  const cats = ['hydro_reg','hydro_ror','ccgt','ocgt','coal','wind','solar','import','bess','dr','pumped_hydro'];
+  const stack = {};
+  cats.forEach(c => stack[c] = new Array(H).fill(0));
+  for(let t=0; t<H; t++){
+    for(const gid of Object.keys(bu)){
+      const cat = fuelOf(gid);
+      const rows = hbu[gid] || [];
+      const v = rows[t] ? +(rows[t].dispatch_mw || 0) : 0;
+      if(v) stack[cat][t] += v;
+    }
+    // BESS net (discharge - charge) treated as supply.
+    for(const gid of Object.keys(bu)){
+      if(bu[gid].type !== 'bess') continue;
+      const r = (hbu[gid] || [])[t];
+      if(r && r.bess){
+        stack.bess[t] += (+r.bess.discharge_mw||0) - (+r.bess.charge_mw||0);
+      }
+    }
+  }
+
+  return { R, hs, hbu, bu, monthly, meta, dt_h, H, fuelOf, cats, stack };
+}
+
+// ── 1. Technology mix dispatch ───────────────────────────────────────
+function _repTechMix(ctx){
+  const { hs, cats, stack } = ctx;
+  const H = Math.min(hs.length, 720);    // cap to ~30d for chart legibility
+  const xs = hs.slice(0, H).map(h=>h.t);
+  const series = cats.filter(c => stack[c].some(v => Math.abs(v) > 0.01))
+                     .map(c => ({name:c, data: stack[c].slice(0, H).map(v=>+v.toFixed(1))}));
+  mkChart('c-rep-mix', {
+    chart:{type:'area', height:320, stacked:true, toolbar:{show:false}, animations:{enabled:false}},
+    series,
+    xaxis:{categories:xs, labels:{show:false}, title:{text:'საათი'}},
+    yaxis:{labels:{formatter:v=>v.toFixed(0)}, title:{text:'MW'}},
+    stroke:{width:0}, fill:{opacity:0.85},
+    colors: series.map(s=>FUEL_PALETTE[s.name]||'#888'),
+    legend:{position:'top', fontSize:'8px'},
+    tooltip:{y:{formatter:v=>v.toFixed(1)+' MW'}},
+  });
+  // Energy share pie/bar
+  const totals = cats.map(c => ({c, e: stack[c].reduce((s,v)=>s+v,0) * ctx.dt_h}))
+                     .filter(x => x.e > 0.1);
+  mkChart('c-rep-mix-share', {
+    chart:{type:'bar', height:240, toolbar:{show:false}},
+    series:[{name:'Energy MWh', data: totals.map(x=>+x.e.toFixed(0))}],
+    xaxis:{categories: totals.map(x=>x.c), labels:{style:{fontSize:'8px'}}},
+    yaxis:{labels:{formatter:v=>(v/1000).toFixed(1)+'k'}},
+    plotOptions:{bar:{distributed:true, columnWidth:'55%'}},
+    colors: totals.map(x=>FUEL_PALETTE[x.c]||'#888'),
+    legend:{show:false},
+    dataLabels:{enabled:true, style:{fontSize:'8px',colors:['#fff']},
+      formatter: (v,o)=> {
+        const sumE = totals.reduce((s,x)=>s+x.e,0);
+        return sumE? ((v/sumE)*100).toFixed(1)+'%' : '';
+      }
+    },
+  });
+}
+
+// ── 2. Load + Net-Load Duration Curve ───────────────────────────────
+function _repLDC(ctx){
+  const { hs, stack, dt_h } = ctx;
+  const load = hs.map(h => +h.load_mw || 0);
+  // Net load = load - VRE (wind+solar+hydro_ror only).
+  const netload = load.map((v, t) =>
+    v - (stack.wind[t]||0) - (stack.solar[t]||0) - (stack.hydro_ror[t]||0));
+  const sortedDesc = arr => [...arr].sort((a,b)=>b-a);
+  const ldc = sortedDesc(load);
+  const nldc = sortedDesc(netload);
+  const xs = ldc.map((_,i)=>+(100*i/(ldc.length-1)).toFixed(2));
+  mkChart('c-rep-ldc', {
+    chart:{type:'line', height:300, toolbar:{show:false}, animations:{enabled:false}},
+    series:[
+      {name:'Load',     data: ldc.map(v=>+v.toFixed(1))},
+      {name:'Net-Load', data: nldc.map(v=>+v.toFixed(1))},
+    ],
+    xaxis:{categories:xs, type:'numeric', title:{text:'duration  (% of horizon)'}, labels:{formatter:v=>v+'%'}},
+    yaxis:{labels:{formatter:v=>v.toFixed(0)}, title:{text:'MW'}},
+    stroke:{width:2}, colors:['#3d8ef0','#f0c040'],
+    fill:{type:'gradient', gradient:{shadeIntensity:0.2}},
+    legend:{position:'top', fontSize:'8px'},
+  });
+  const stat = (a)=>({peak:Math.max(...a), avg:a.reduce((s,v)=>s+v,0)/a.length, base:Math.min(...a)});
+  const sL = stat(load), sN = stat(netload);
+  document.getElementById('rep-ldc-stats').innerHTML =
+    `Load — peak ${sL.peak.toFixed(0)} MW · avg ${sL.avg.toFixed(0)} · min ${sL.base.toFixed(0)};  `+
+    `Net-Load — peak ${sN.peak.toFixed(0)} · avg ${sN.avg.toFixed(0)} · min ${sN.base.toFixed(0)} (negative = curtailment-prone)`;
+}
+
+// ── 3. Reservoir trajectory chart ────────────────────────────────────
+function _repReservoir(ctx){
+  const { hbu, bu, hs } = ctx;
+  const sec1 = Object.keys(bu).filter(g=>bu[g].type==='hydro_reg');
+  if(!sec1.length){
+    mkChart('c-rep-reservoir', {
+      chart:{type:'line', height:300}, series:[],
+      noData:{text:'No reservoir hydro in this run'},
+    });
+    return;
+  }
+  const xs = hs.map(h=>h.t);
+  const series = sec1.map(g => ({
+    name: bu[g].name || g,
+    data: (hbu[g]||[]).map(r => +(r.hydro && r.hydro.storage_mm3 || 0).toFixed(2))
+  }));
+  mkChart('c-rep-reservoir', {
+    chart:{type:'line', height:300, toolbar:{show:false}, animations:{enabled:false}},
+    series, xaxis:{categories:xs, labels:{show:false}, title:{text:'საათი'}},
+    yaxis:{labels:{formatter:v=>v.toFixed(0)}, title:{text:'Mm³'}},
+    stroke:{width:2, curve:'straight'},
+    legend:{position:'top', fontSize:'8px'},
+  });
+}
+
+// ── 4. Capacity-Factor heatmap ───────────────────────────────────────
+function _repCFHeatmap(ctx){
+  const { hbu, bu, monthly, dt_h } = ctx;
+  if(!monthly.length){
+    document.getElementById('c-rep-cf-heat').innerHTML =
+      '<div style="color:var(--t3);font-size:8px;padding:20px">No monthly_summary in results</div>';
+    return;
+  }
+  const months = monthly.map(m=>m.label||('M'+m.month));
+  const rows = Object.keys(bu).map(g => {
+    const a = bu[g];
+    const pmaxRef = a.type === 'wind' || a.type === 'solar'
+        ? +a.energy_mwh && (a.energy_mwh / Math.max(a.capacity_factor/100 * 8760, 1))
+        : null;
+    const denomMW = (function(){
+      // best estimate of nameplate MW — back-calculated from annual CF.
+      const e = a.energy_mwh || 0, cf = (a.capacity_factor||0)/100, hrs = monthly.reduce((s,m)=>s+(m.hours||0),0);
+      return cf>0 && hrs>0 ? e/(cf*hrs) : 0;
+    })();
+    const cells = months.map((_,i)=>{
+      const m = monthly[i];
+      const e = (m.by_unit && m.by_unit[g]) ? +m.by_unit[g].energy_mwh : 0;
+      const cf = denomMW>0 ? 100 * e / Math.max(denomMW * (m.hours||1), 1) : 0;
+      return cf;
+    });
+    return {name: a.name || g, type: a.type, cells};
+  });
+  // Build HTML table
+  const cell = (v) => {
+    const c = Math.max(0, Math.min(100, v));
+    const r = Math.round(255 * (c/100));
+    const g = Math.round(180 * (1 - c/100));
+    return `<td style="text-align:right;padding:2px 4px;font-family:monospace;font-size:8px;
+            background:rgba(${r},${g},80,${0.15+c/250});color:#fff">${c.toFixed(1)}</td>`;
+  };
+  const html = `<table style="font-size:8px;border-collapse:collapse;width:100%">
+    <thead><tr><th style="text-align:left;padding:3px 6px">Asset</th><th>Type</th>
+      ${months.map(m=>`<th style="text-align:right;padding:3px 4px">${m}</th>`).join('')}</tr></thead>
+    <tbody>${rows.map(r=>`<tr><td style="padding:2px 6px">${r.name}</td>
+      <td style="padding:2px 4px;color:var(--t3)">${r.type}</td>
+      ${r.cells.map(cell).join('')}</tr>`).join('')}</tbody></table>`;
+  document.getElementById('c-rep-cf-heat').innerHTML = html;
+}
+
+// ── 5. Cost waterfall ────────────────────────────────────────────────
+function _repCostWaterfall(ctx){
+  const { R, bu, hs, dt_h } = ctx;
+  const sm = R.system_summary || {};
+  const bars = [
+    {label:'Fuel',          v: +sm.total_fuel_cost || 0, color:'#e03144'},
+    {label:'Startup',       v: +sm.total_startup_cost || 0, color:'#f07830'},
+    {label:'No-Load',       v: Object.values(bu).reduce((s,a)=>s+(+a.no_load_cost||0),0), color:'#f0c040'},
+    {label:'VOM',           v: Object.values(bu).reduce((s,a)=>s+(+a.vom_cost||0),0), color:'#20d68a'},
+    {label:'Unserved Pen.', v: (R.diagnostics?.unserved_hours||0)*0 + (sm.total_unserved_mwh||0)*3000, color:'#a463f8'},
+    {label:'Reserve Pen.',  v: 0, color:'#3d8ef0'},
+  ];
+  // Reserve penalty estimate
+  const resSh = sm.reserve_shortfall_mwh || {};
+  const resPen = Object.values(resSh).reduce((s,v)=>s + +v*500, 0);
+  bars[5].v = resPen;
+  const tot = bars.reduce((s,b)=>s+b.v, 0);
+  mkChart('c-rep-cost', {
+    chart:{type:'bar', height:300, toolbar:{show:false}},
+    series:[{name:'$', data: bars.map(b=>+b.v.toFixed(0))}],
+    xaxis:{categories: bars.map(b=>b.label), labels:{style:{fontSize:'9px'}}},
+    yaxis:{labels:{formatter:v=>'$'+(v>=1e6?(v/1e6).toFixed(1)+'M':(v/1e3).toFixed(0)+'k')}},
+    plotOptions:{bar:{distributed:true, columnWidth:'55%'}},
+    colors: bars.map(b=>b.color), legend:{show:false},
+    dataLabels:{enabled:true, style:{fontSize:'9px',colors:['#fff']},
+      formatter: v=> tot ? ((v/tot)*100).toFixed(1)+'%' : ''},
+  });
+  document.getElementById('rep-cost-tbl').innerHTML =
+    `<table><thead><tr><th>Component</th><th class="mono">USD</th><th class="mono">% of total</th></tr></thead>
+     <tbody>${bars.map(b=>`<tr><td>${b.label}</td>
+       <td class="mono">$${(b.v||0).toLocaleString('en-US',{maximumFractionDigits:0})}</td>
+       <td class="mono">${tot?((b.v/tot)*100).toFixed(2)+'%':'—'}</td></tr>`).join('')}
+     <tr><td><b>Total</b></td><td class="mono"><b>$${tot.toLocaleString('en-US',{maximumFractionDigits:0})}</b></td><td>100%</td></tr></tbody></table>`;
+}
+
+// ── 6. Hourly heatmap (24 × days) ────────────────────────────────────
+function _repHourlyHeatmap(ctx){
+  const { hs } = ctx;
+  const metricSel = document.getElementById('rep-heat-metric');
+  const metric = (metricSel && metricSel.value) || 'load_mw';
+  const days = Math.ceil(hs.length / 24);
+  // Build 2D grid [day][hour]
+  const grid = Array.from({length: days}, () => new Array(24).fill(0));
+  let mn = Infinity, mx = -Infinity;
+  for(let t=0; t<hs.length; t++){
+    const v = +hs[t][metric] || 0;
+    const d = Math.floor(t / 24); const h = t % 24;
+    if(d < days) grid[d][h] = v;
+    if(v < mn) mn = v;
+    if(v > mx) mx = v;
+  }
+  if(!isFinite(mn)) mn = 0; if(!isFinite(mx)) mx = 1;
+  const range = Math.max(mx - mn, 1e-6);
+  const cell = v => {
+    const f = (v - mn) / range;
+    const r = Math.round(40 + 215 * f);
+    const g = Math.round(40 + 100 * (1 - Math.abs(f - 0.5) * 2));
+    const b = Math.round(220 - 200 * f);
+    return `<td style="background:rgb(${r},${g},${b});padding:1px 3px;text-align:right;
+            font-family:monospace;font-size:7.5px;color:#fff">${v.toFixed(1)}</td>`;
+  };
+  const hdr = '<tr><th></th>' + Array.from({length:24},(_,h)=>`<th style="font-size:7.5px">${h}</th>`).join('') + '</tr>';
+  const body = grid.map((row,d)=>`<tr><td style="font-size:7.5px;color:var(--t3)">d${d+1}</td>${row.map(cell).join('')}</tr>`).join('');
+  document.getElementById('c-rep-heat').innerHTML =
+    `<table style="border-collapse:collapse;font-size:8px;width:100%"><thead>${hdr}</thead><tbody>${body}</tbody></table>
+     <div style="font-size:7.5px;color:var(--t3);margin-top:4px">range: ${mn.toFixed(2)} – ${mx.toFixed(2)}, metric: <b>${metric}</b></div>`;
+}
+
+// ── 7. Reserve allocation breakdown ──────────────────────────────────
+function _repReserveAlloc(ctx){
+  const { hbu, bu, hs, dt_h } = ctx;
+  // Aggregate reserve_up + reserve_down by (product, asset).
+  const totals = {};   // {rid: {gid: {up_mwh, down_mwh}}}
+  for(const gid of Object.keys(hbu)){
+    for(const r of hbu[gid] || []){
+      for(const rid of Object.keys(r.reserve_up || {})){
+        totals[rid] = totals[rid] || {};
+        totals[rid][gid] = totals[rid][gid] || {up_mwh:0, down_mwh:0};
+        totals[rid][gid].up_mwh   += (+r.reserve_up[rid] || 0)   * dt_h;
+        totals[rid][gid].down_mwh += (+(r.reserve_down||{})[rid] || 0) * dt_h;
+      }
+    }
+  }
+  const rids = Object.keys(totals);
+  if(!rids.length){
+    document.getElementById('rep-reserve-tbl').innerHTML =
+      '<div style="font-size:8px;color:var(--t3);padding:8px">No reserve products in this run</div>';
+    document.getElementById('c-rep-reserve').innerHTML='';
+    return;
+  }
+  // Table per product.
+  const html = rids.map(rid => {
+    const rows = Object.entries(totals[rid])
+      .map(([g,v]) => ({g, name:(bu[g]||{}).name||g, ...v}))
+      .filter(r => r.up_mwh + r.down_mwh > 0.01)
+      .sort((a,b)=> (b.up_mwh+b.down_mwh) - (a.up_mwh+a.down_mwh));
+    return `<div style="margin-bottom:6px">
+      <div class="sh" style="margin-bottom:3px">${rid}</div>
+      <table><thead><tr><th>Asset</th><th class="mono">Up MWh</th><th class="mono">Dn MWh</th></tr></thead>
+      <tbody>${rows.map(r=>`<tr><td>${r.name}</td>
+        <td class="mono">${r.up_mwh.toFixed(1)}</td>
+        <td class="mono">${r.down_mwh.toFixed(1)}</td></tr>`).join('')}</tbody></table>
+    </div>`;
+  }).join('');
+  document.getElementById('rep-reserve-tbl').innerHTML = html;
+  // Stacked bar: per asset, stacked by product (sum up+down).
+  const allAssets = new Set();
+  rids.forEach(rid => Object.keys(totals[rid]).forEach(g => allAssets.add(g)));
+  const labels = [...allAssets].map(g => (bu[g]||{}).name || g);
+  const series = rids.map(rid => ({
+    name: rid,
+    data: [...allAssets].map(g => +(((totals[rid][g]||{}).up_mwh||0) + ((totals[rid][g]||{}).down_mwh||0)).toFixed(1))
+  }));
+  mkChart('c-rep-reserve', {
+    chart:{type:'bar', height:280, stacked:true, toolbar:{show:false}, animations:{enabled:false}},
+    series,
+    xaxis:{categories: labels, labels:{style:{fontSize:'7.5px'}, rotate:-30, hideOverlappingLabels:false}},
+    yaxis:{labels:{formatter:v=>v.toFixed(0)}, title:{text:'MWh (up+down)'}},
+    legend:{position:'top', fontSize:'8px'},
+    plotOptions:{bar:{columnWidth:'70%'}},
+    colors:['#3d8ef0','#f0c040','#a463f8','#20d68a','#e03144'],
+  });
+}
+
+// ── 8. Curtailment by asset ──────────────────────────────────────────
+function _repCurtailment(ctx){
+  const { hbu, bu, hs, dt_h, stack } = ctx;
+  // Per-RE asset: sum (potential − dispatch) × dt.
+  const re = Object.keys(bu).filter(g => bu[g].type === 'wind' || bu[g].type === 'solar');
+  if(!re.length){
+    document.getElementById('rep-curt-tbl').innerHTML =
+      '<div style="font-size:8px;color:var(--t3);padding:8px">No wind/solar assets</div>';
+    document.getElementById('c-rep-curt').innerHTML=''; return;
+  }
+  // We don't have potential-MW per asset in results; use total system curtailment
+  // attributed proportional to capacity.  Conservative.
+  const total_curt = (ctx.R.system_summary || {}).total_curtailed_mwh || 0;
+  const totalCap = re.reduce((s,g) => s + ((bu[g].energy_mwh||0)/(((bu[g].capacity_factor||0.001)/100)*8760 || 1)), 0);
+  const rows = re.map(g => {
+    const a = bu[g];
+    const cap = (a.energy_mwh||0)/(((a.capacity_factor||0.001)/100)*8760 || 1);
+    const share = totalCap > 0 ? cap / totalCap : 0;
+    const curt = total_curt * share;
+    const generated = a.energy_mwh || 0;
+    const pct = generated + curt > 0 ? 100 * curt / (generated + curt) : 0;
+    return {g, name: a.name||g, type:a.type, energy:generated, curt, pct};
+  }).sort((a,b)=> b.curt - a.curt);
+  document.getElementById('rep-curt-tbl').innerHTML =
+    `<table><thead><tr><th>Asset</th><th>Type</th><th class="mono">Energy MWh</th>
+       <th class="mono">Curtailed MWh</th><th class="mono">% of avail.</th></tr></thead>
+     <tbody>${rows.map(r=>`<tr><td>${r.name}</td><td>${r.type}</td>
+       <td class="mono">${r.energy.toFixed(0)}</td>
+       <td class="mono" style="color:${r.curt>0.5?'var(--orange)':'var(--t3)'}">${r.curt.toFixed(1)}</td>
+       <td class="mono">${r.pct.toFixed(2)}%</td></tr>`).join('')}</tbody></table>`;
+  mkChart('c-rep-curt', {
+    chart:{type:'bar', height:240, toolbar:{show:false}},
+    series:[
+      {name:'Energy MWh',     data: rows.map(r=>+r.energy.toFixed(0))},
+      {name:'Curtailed MWh',  data: rows.map(r=>+r.curt.toFixed(1))},
+    ],
+    xaxis:{categories: rows.map(r=>r.name), labels:{style:{fontSize:'7.5px'}}},
+    yaxis:{labels:{formatter:v=>v>=1e3?(v/1e3).toFixed(1)+'k':v.toFixed(0)}},
+    legend:{position:'top', fontSize:'8px'},
+    colors:['#20d68a','#f07830'],
+    plotOptions:{bar:{columnWidth:'55%'}},
+  });
+}
+
+// ── 9. CO₂ emissions estimator ───────────────────────────────────────
+function _repCO2(ctx){
+  const { monthly, bu } = ctx;
+  // Emission factors (tCO₂/MWh thermal output) using IEA-ish defaults.
+  const EF = { gas: 0.40, coal: 0.95 };
+  // Per asset: heat_rate, fuel_type from the input asset (not available here);
+  // approximate via type and name keyword.
+  const fuelOf = (a) => {
+    const nm = (a.name||'').toLowerCase();
+    if(a.type !== 'thermal') return null;
+    if(nm.includes('ნახშ') || nm.includes('coal') || nm.includes('ტყიბულ')) return 'coal';
+    return 'gas';
+  };
+  // Monthly by-fuel emissions.
+  const monthsLab = monthly.map(m => m.label || ('M'+m.month));
+  const fuels = ['gas','coal'];
+  const series = fuels.map(f => ({name: f.toUpperCase(),
+    data: monthly.map(m => {
+      let mwh = 0;
+      for(const [g,a] of Object.entries(bu)){
+        if(fuelOf(a) === f){
+          mwh += +((m.by_unit||{})[g] || {}).energy_mwh || 0;
+        }
+      }
+      return +(mwh * EF[f]).toFixed(1);
+    })
+  }));
+  mkChart('c-rep-co2', {
+    chart:{type:'bar', height:260, stacked:true, toolbar:{show:false}},
+    series,
+    xaxis:{categories: monthsLab, labels:{style:{fontSize:'8px'}}},
+    yaxis:{labels:{formatter:v=>v>=1e3?(v/1e3).toFixed(1)+'kt':v.toFixed(0)+'t'}, title:{text:'tCO₂'}},
+    legend:{position:'top', fontSize:'8px'},
+    colors:['#a463f8','#7a4a2a'],
+    plotOptions:{bar:{columnWidth:'55%'}},
+  });
+  const tot_gas  = series[0].data.reduce((s,v)=>s+v,0);
+  const tot_coal = series[1].data.reduce((s,v)=>s+v,0);
+  const tot = tot_gas + tot_coal;
+  const tot_mwh = monthly.reduce((s,m)=>s+(m.total_energy_mwh||0),0);
+  document.getElementById('rep-co2-stats').innerHTML =
+    `Σ CO₂ ≈ ${(tot/1000).toFixed(2)} kt   (gas ${(tot_gas/1000).toFixed(2)} kt + coal ${(tot_coal/1000).toFixed(2)} kt)<br>`
+    + `intensity ≈ ${tot_mwh? (1000*tot/tot_mwh).toFixed(1) : '—'} kgCO₂/MWh system-wide  ·  EF (gas ${EF.gas}, coal ${EF.coal} tCO₂/MWh)`;
+}
+
+// ── 10. Generator P&L ────────────────────────────────────────────────
+function _repPnL(ctx){
+  const { bu, hbu, hs, dt_h } = ctx;
+  // Revenue per asset = Σ dispatch × λ(t) × dt; cost = bu.gross_cost.
+  const lam = hs.map(h => +h.lambda_usd_mwh || 0);
+  const rows = Object.keys(bu).map(g => {
+    const a = bu[g];
+    let revenue = 0;
+    if(hbu[g]){
+      for(let t=0; t<hs.length; t++){
+        const r = hbu[g][t];
+        if(!r) continue;
+        const disp = +r.dispatch_mw || 0;
+        revenue += disp * lam[t] * dt_h;
+      }
+    }
+    const cost = +a.gross_cost || 0;
+    const profit = revenue - cost;
+    return {g, name:a.name||g, type:a.type, energy:+a.energy_mwh||0,
+            revenue, cost, profit};
+  }).sort((a,b)=> b.profit - a.profit);
+  document.getElementById('rep-pl-tbl').innerHTML =
+    `<table><thead><tr><th>Asset</th><th>Type</th><th class="mono">MWh</th>
+       <th class="mono">Revenue</th><th class="mono">Cost</th><th class="mono">P&amp;L</th>
+       <th class="mono">$/MWh</th></tr></thead>
+     <tbody>${rows.map(r=>`<tr>
+       <td>${r.name}</td><td>${r.type}</td>
+       <td class="mono">${r.energy.toLocaleString('en-US',{maximumFractionDigits:0})}</td>
+       <td class="mono">$${r.revenue.toLocaleString('en-US',{maximumFractionDigits:0})}</td>
+       <td class="mono">$${r.cost.toLocaleString('en-US',{maximumFractionDigits:0})}</td>
+       <td class="mono" style="color:${r.profit>=0?'var(--green)':'var(--red)'}">
+         ${r.profit>=0?'+':''}$${r.profit.toLocaleString('en-US',{maximumFractionDigits:0})}</td>
+       <td class="mono">${r.energy>0?(r.profit/r.energy).toFixed(2):'—'}</td>
+     </tr>`).join('')}</tbody></table>`;
+}
+
+// ── 11. Hydro spillage ───────────────────────────────────────────────
+function _repSpillage(ctx){
+  const { hbu, bu, dt_h } = ctx;
+  const hReg = Object.keys(bu).filter(g => bu[g].type === 'hydro_reg');
+  if(!hReg.length){
+    document.getElementById('rep-spill-tbl').innerHTML=
+      '<div style="font-size:8px;color:var(--t3);padding:8px">No reservoir hydro</div>';
+    document.getElementById('c-rep-spill').innerHTML=''; return;
+  }
+  const rows = hReg.map(g => {
+    let spill_mm3 = 0;
+    for(const r of hbu[g] || []){
+      if(r.hydro && r.hydro.spill_mm3h !== undefined){
+        spill_mm3 += (+r.hydro.spill_mm3h || 0) * dt_h;
+      }
+    }
+    // Lost energy ≈ spill_mm3 × efficiency (default 350 MWh/Mm³)
+    const eff = 350;
+    const lost_mwh = spill_mm3 * eff;
+    return {g, name: bu[g].name||g, spill_mm3, lost_mwh};
+  }).sort((a,b)=> b.spill_mm3 - a.spill_mm3);
+  const total = rows.reduce((s,r)=>s+r.spill_mm3,0);
+  document.getElementById('rep-spill-tbl').innerHTML =
+    `<table><thead><tr><th>Asset</th><th class="mono">Spilled Mm³</th>
+       <th class="mono">Est. Lost Energy MWh</th></tr></thead>
+     <tbody>${rows.map(r=>`<tr><td>${r.name}</td>
+       <td class="mono" style="color:${r.spill_mm3>0?'var(--red)':'var(--t3)'}">${r.spill_mm3.toFixed(3)}</td>
+       <td class="mono">${r.lost_mwh.toFixed(0)}</td></tr>`).join('')}
+     <tr><td><b>Total</b></td>
+       <td class="mono"><b>${total.toFixed(3)} Mm³</b></td>
+       <td class="mono"><b>${(total*350).toFixed(0)} MWh</b></td></tr></tbody></table>`;
+  mkChart('c-rep-spill', {
+    chart:{type:'bar', height:240, toolbar:{show:false}},
+    series:[{name:'Spilled Mm³', data: rows.map(r=>+r.spill_mm3.toFixed(3))}],
+    xaxis:{categories: rows.map(r=>r.name), labels:{style:{fontSize:'8px'}}},
+    yaxis:{labels:{formatter:v=>v.toFixed(2)}},
+    plotOptions:{bar:{distributed:true, columnWidth:'55%'}},
+    colors:['#00B0F0','#3d8ef0','#a463f8','#e03144','#f07830','#20d68a','#f0c040'],
+    legend:{show:false},
+  });
+}
+
+// ── 12. Marginal cost vs λ scatter ───────────────────────────────────
+function _repMCvsLambda(ctx){
+  const { hs, hbu, bu } = ctx;
+  // For each hour, the marginal MC ≈ max SRMC of any committed unit.
+  const points = [];
+  const srmcOf = g => +(bu[g] || {}).SRMC || 0;
+  for(let t=0; t<hs.length; t++){
+    let mc = 0;
+    for(const g of Object.keys(hbu)){
+      const r = hbu[g][t];
+      if(!r) continue;
+      if((+r.dispatch_mw||0) > 0.5){
+        const m = srmcOf(g);
+        if(m > mc) mc = m;
+      }
+    }
+    points.push([+(mc).toFixed(2), +(hs[t].lambda_usd_mwh || 0).toFixed(2)]);
+  }
+  // 45° reference line
+  const maxV = Math.max(...points.flat(), 1);
+  mkChart('c-rep-mclam', {
+    chart:{type:'scatter', height:280, toolbar:{show:false}, animations:{enabled:false}, zoom:{enabled:true,type:'xy'}},
+    series:[
+      {name:'hours', data: points},
+      {name:'45°',   data: [[0,0],[maxV,maxV]], type:'line'},
+    ],
+    xaxis:{type:'numeric', title:{text:'max committed-unit SRMC ($/MWh)'},
+           labels:{formatter:v=>v.toFixed(0)}, tickAmount:10},
+    yaxis:{title:{text:'system λ ($/MWh)'}, labels:{formatter:v=>v.toFixed(0)}},
+    stroke:{width:[0,1]}, colors:['#f0c040','#e03144'],
+    legend:{position:'top', fontSize:'8px'},
+    markers:{size:[3,0]},
+    tooltip:{shared:false},
+  });
+}
+// ── 13. Day-types average dispatch (peak / shoulder / off-peak) ──────
+function _repDayTypes(ctx){
+  const { hs, stack, cats, dt_h } = ctx;
+  // Bin hours-of-day into 3 day-types based on average load profile.
+  // peak    = hours-of-day where avg load > 90th percentile of load[h]
+  // shoulder= 50–90th
+  // off-peak= < 50th
+  const hod = Array.from({length:24},()=>[]);
+  for(let t=0; t<hs.length; t++){
+    const h = ((+hs[t].hour_of_year || hs[t].t || 0) % 24);
+    hod[h].push(+hs[t].load_mw || 0);
+  }
+  const avg = hod.map(arr => arr.reduce((s,v)=>s+v,0)/Math.max(arr.length,1));
+  const sorted = [...avg].sort((a,b)=>a-b);
+  const p90 = sorted[Math.floor(0.9 * 24)];
+  const p50 = sorted[Math.floor(0.5 * 24)];
+  const dayType = h => avg[h] >= p90 ? 'peak' : avg[h] >= p50 ? 'shoulder' : 'off-peak';
+  // For each day-type, average dispatch by category.
+  const dt = {peak:{}, shoulder:{}, 'off-peak':{}};
+  cats.forEach(c => { for(const k of Object.keys(dt)) dt[k][c] = []; });
+  for(let t=0; t<hs.length; t++){
+    const h = ((+hs[t].hour_of_year || hs[t].t || 0) % 24);
+    const k = dayType(h);
+    cats.forEach(c => dt[k][c].push(stack[c][t]));
+  }
+  const labels = ['off-peak','shoulder','peak'];
+  const series = cats.filter(c => stack[c].some(v => Math.abs(v)>0.01)).map(c => ({
+    name: c,
+    data: labels.map(k => +(dt[k][c].reduce((s,v)=>s+v,0)/Math.max(dt[k][c].length,1)).toFixed(1))
+  }));
+  mkChart('c-rep-day', {
+    chart:{type:'bar', height:280, stacked:true, toolbar:{show:false}},
+    series,
+    xaxis:{categories: labels, labels:{style:{fontSize:'9px'}}},
+    yaxis:{labels:{formatter:v=>v.toFixed(0)}, title:{text:'avg dispatch (MW)'}},
+    plotOptions:{bar:{columnWidth:'45%'}},
+    colors: series.map(s => FUEL_PALETTE[s.name]||'#888'),
+    legend:{position:'top', fontSize:'8px'},
+  });
+}
+
+// ── 14. KPI Radar — scorecard ────────────────────────────────────────
+function _repKPIRadar(ctx){
+  const { R, hs, dt_h } = ctx;
+  const sm = R.system_summary || {};
+  // Normalise each KPI to 0–100 (lower-is-better metrics inverted).
+  // Reference scales tuned for a typical Georgian-fleet annual run.
+  const kpis = [
+    {label:'Adequacy',     v: sm.total_unserved_mwh || 0, max:5000,  invert:true},
+    {label:'Cost effic.',  v: sm.avg_lambda_usd_mwh || 0, max:200,    invert:true},
+    {label:'Curtailment',  v: sm.total_curtailed_mwh || 0, max:50000, invert:true},
+    {label:'Gas reliance', v: sm.total_gas_mm3 || 0,       max:1500,   invert:true},
+    {label:'Hydro use',    v: (function(){
+        const re = (R.by_unit_summary||{});
+        return Object.values(re).filter(a=>a.type==='hydro_reg'||a.type==='hydro_ror')
+          .reduce((s,a)=>s+(+a.energy_mwh||0),0);
+      })(),                                                max:10e6, invert:false},
+    {label:'RE penetration', v:(function(){
+        const re = (R.by_unit_summary||{});
+        return Object.values(re).filter(a=>a.type==='wind'||a.type==='solar')
+          .reduce((s,a)=>s+(+a.energy_mwh||0),0);
+      })(),                                                max:1e6, invert:false},
+  ];
+  const series = [{name:'Score', data: kpis.map(k => {
+    const f = Math.max(0, Math.min(1, k.v / k.max));
+    return Math.round(100 * (k.invert ? 1 - f : f));
+  })}];
+  mkChart('c-rep-radar', {
+    chart:{type:'radar', height:320, toolbar:{show:false}},
+    series,
+    xaxis:{categories: kpis.map(k=>k.label), labels:{style:{fontSize:'9px'}}},
+    yaxis:{min:0, max:100, tickAmount:5},
+    colors:['#00cfb4'], stroke:{width:2}, fill:{opacity:0.4},
+    plotOptions:{radar:{polygons:{strokeColors:'rgba(168,196,224,0.3)'}}},
+    dataLabels:{enabled:true, style:{fontSize:'9px',colors:['#fff']}},
+  });
+}
+
+// ── 15. Storage arbitrage (BESS + pumped hydro) ──────────────────────
+function _repBessArb(ctx){
+  const { hs, hbu, bu, dt_h } = ctx;
+  const sids = Object.keys(bu).filter(g => bu[g].type === 'bess' || bu[g].type === 'pumped_hydro');
+  if(!sids.length){
+    document.getElementById('rep-bess-tbl').innerHTML =
+      '<div style="font-size:8px;color:var(--t3);padding:8px">No BESS / pumped-hydro assets</div>';
+    return;
+  }
+  const rows = sids.map(g => {
+    const a = bu[g];
+    const rs = hbu[g] || [];
+    let ch_cost = 0, dis_rev = 0, ch_e = 0, dis_e = 0, cycles = 0;
+    const cap = +(a.energy_mwh || a.power_mw*4 || 1);
+    for(let t=0; t<rs.length; t++){
+      const r = rs[t];
+      const lam = +hs[t].lambda_usd_mwh || 0;
+      let ch=0, dis=0;
+      if(a.type === 'bess' && r.bess){
+        ch  = +r.bess.charge_mw || 0;
+        dis = +r.bess.discharge_mw || 0;
+      }
+      if(a.type === 'pumped_hydro' && r.pumped_hydro){
+        ch  = +r.pumped_hydro.pump_mw || 0;
+        dis = +r.pumped_hydro.gen_mw || 0;
+      }
+      ch_cost += ch * lam * dt_h;
+      dis_rev += dis * lam * dt_h;
+      ch_e   += ch  * dt_h;
+      dis_e  += dis * dt_h;
+    }
+    cycles = (ch_e + dis_e) / (2 * cap);
+    const profit = dis_rev - ch_cost;
+    return {g, name:a.name||g, type:a.type, ch_e, dis_e, ch_cost, dis_rev, profit, cycles,
+            avg_ch_price: ch_e>0  ? ch_cost/ch_e  : 0,
+            avg_dis_price: dis_e>0 ? dis_rev/dis_e : 0};
+  });
+  document.getElementById('rep-bess-tbl').innerHTML =
+    `<table><thead><tr><th>Asset</th><th>Type</th>
+       <th class="mono">Ch MWh</th><th class="mono">Dis MWh</th>
+       <th class="mono">Avg Ch $/MWh</th><th class="mono">Avg Dis $/MWh</th>
+       <th class="mono">Cycles</th><th class="mono">Net P&amp;L</th></tr></thead>
+     <tbody>${rows.map(r=>`<tr><td>${r.name}</td><td>${r.type}</td>
+       <td class="mono">${r.ch_e.toFixed(1)}</td>
+       <td class="mono">${r.dis_e.toFixed(1)}</td>
+       <td class="mono">$${r.avg_ch_price.toFixed(2)}</td>
+       <td class="mono">$${r.avg_dis_price.toFixed(2)}</td>
+       <td class="mono">${r.cycles.toFixed(2)}</td>
+       <td class="mono" style="color:${r.profit>=0?'var(--green)':'var(--red)'}">
+         ${r.profit>=0?'+':''}$${r.profit.toLocaleString('en-US',{maximumFractionDigits:0})}</td>
+     </tr>`).join('')}</tbody></table>`;
+}
+
+// ── 16. Reservoir end-level vs target ────────────────────────────────
+function _repReservoirTarget(ctx){
+  const { hbu, bu } = ctx;
+  const hReg = Object.keys(bu).filter(g => bu[g].type === 'hydro_reg');
+  if(!hReg.length){
+    document.getElementById('c-rep-target').innerHTML=
+      '<div style="font-size:8px;color:var(--t3);padding:8px">No reservoir hydro</div>';
+    return;
+  }
+  const rows = hReg.map(g => {
+    const rs = hbu[g] || [];
+    const last = rs[rs.length-1];
+    const end_actual = (last && last.hydro && +last.hydro.storage_mm3) || 0;
+    return {g, name:bu[g].name||g, end_actual};
+  });
+  // Without access to the input config here, we infer "target" as the
+  // initial storage value (== first hour) — a reasonable proxy.
+  const targets = hReg.map(g => {
+    const rs = hbu[g] || [];
+    const init = (rs[0] && rs[0].hydro && +rs[0].hydro.storage_mm3) || 0;
+    return {g, target: init};
+  });
+  mkChart('c-rep-target', {
+    chart:{type:'bar', height:240, toolbar:{show:false}},
+    series:[
+      {name:'End-of-horizon Mm³',    data: rows.map(r=>+r.end_actual.toFixed(1))},
+      {name:'Initial Mm³ (proxy)',   data: targets.map(t=>+t.target.toFixed(1))},
+    ],
+    xaxis:{categories: rows.map(r=>r.name), labels:{style:{fontSize:'7.5px'}, rotate:-30}},
+    yaxis:{labels:{formatter:v=>v.toFixed(0)}, title:{text:'Mm³'}},
+    legend:{position:'top', fontSize:'8px'},
+    plotOptions:{bar:{columnWidth:'55%'}},
+    colors:['#00B0F0','#a8c4e0'],
+  });
+}
+
+// ── 17. Net-load ramp requirements ───────────────────────────────────
+function _repRampReq(ctx){
+  const { hs, stack, dt_h } = ctx;
+  const load = hs.map(h=>+h.load_mw||0);
+  const netload = load.map((v,t) =>
+    v - (stack.wind[t]||0) - (stack.solar[t]||0) - (stack.hydro_ror[t]||0));
+  const ramps = []; for(let t=1; t<netload.length; t++) ramps.push(netload[t]-netload[t-1]);
+  const sorted = [...ramps].sort((a,b)=>a-b);
+  const pct = q => sorted[Math.floor(q*(sorted.length-1))] || 0;
+  // Histogram of ramps, 21 bins centered around 0.
+  const mn = Math.min(...sorted), mx = Math.max(...sorted);
+  const span = Math.max(Math.abs(mn), Math.abs(mx), 1);
+  const nbins = 21;
+  const w = (2*span) / nbins;
+  const bins = new Array(nbins).fill(0);
+  ramps.forEach(r => {
+    const i = Math.max(0, Math.min(nbins-1, Math.floor((r + span) / w)));
+    bins[i]++;
+  });
+  const labels = bins.map((_,i)=>(-span + (i+0.5)*w).toFixed(0));
+  mkChart('c-rep-ramp', {
+    chart:{type:'bar', height:260, toolbar:{show:false}},
+    series:[{name:'hours', data: bins}],
+    xaxis:{categories: labels, title:{text:'Δ net-load MW per hour'},
+           labels:{style:{fontSize:'7.5px'}}},
+    yaxis:{labels:{formatter:v=>v.toFixed(0)}, title:{text:'count'}},
+    plotOptions:{bar:{distributed:true, columnWidth:'80%'}},
+    colors: bins.map((_,i)=>{
+      const f=Math.abs(i-(nbins-1)/2)/((nbins-1)/2);
+      return f<0.3?'#20d68a':f<0.6?'#f0c040':'#e03144';
+    }),
+    legend:{show:false},
+  });
+  document.getElementById('rep-ramp-stats').innerHTML =
+    `Δ stats — max-up <b style="color:var(--red)">+${Math.max(...ramps).toFixed(0)}</b> MW/h  ·  `+
+    `max-down <b style="color:var(--red)">${Math.min(...ramps).toFixed(0)}</b> MW/h  ·  `+
+    `P95 ±<b>${pct(0.95).toFixed(0)}</b>/<b>${pct(0.05).toFixed(0)}</b>  ·  P50 ±<b>${pct(0.5).toFixed(0)}</b>`;
+}
+
+// ── 18. Snapshot day cards ──────────────────────────────────────────
+function _repSnapshots(ctx){
+  const { hs } = ctx;
+  if(hs.length < 24){
+    document.getElementById('rep-snap-cards').innerHTML='<div style="font-size:8px;color:var(--t3);padding:8px;grid-column:span 3">need ≥24h horizon</div>';
+    return;
+  }
+  // Find peak-load day, max-curtailment day, max-unserved day
+  const days = Math.floor(hs.length / 24);
+  const dayStats = [];
+  for(let d=0; d<days; d++){
+    const sl = hs.slice(d*24, (d+1)*24);
+    dayStats.push({
+      d, peak_load: Math.max(...sl.map(h=>+h.load_mw||0)),
+      curt:       sl.reduce((s,h)=>s+(+h.curtailed_mwh||0),0),
+      unserv:     sl.reduce((s,h)=>s+(+h.unserved_mwh||0),0),
+      avg_lam:    sl.reduce((s,h)=>s+(+h.lambda_usd_mwh||0),0)/24,
+    });
+  }
+  const find = (key) => [...dayStats].sort((a,b)=>b[key]-a[key])[0];
+  const top = [
+    {kind:'peak_load', label:'🔥 Peak-Load Day',          d: find('peak_load'),  metric:'peak_load',  fmt:v=>v.toFixed(0)+' MW'},
+    {kind:'curt',      label:'☀️ Max-Curtailment Day',     d: find('curt'),      metric:'curt',      fmt:v=>v.toFixed(0)+' MWh'},
+    {kind:'unserv',    label:'⚠ Max-Unserved Day',         d: find('unserv'),    metric:'unserv',    fmt:v=>v.toFixed(0)+' MWh'},
+  ];
+  document.getElementById('rep-snap-cards').innerHTML = top.map(t => {
+    const sl = hs.slice(t.d.d*24, (t.d.d+1)*24);
+    const mini = sl.map(h=>+h.load_mw||0);
+    const pts = mini.map((v,i)=>`${(i*100/23).toFixed(1)},${(100-100*(v/Math.max(...mini,1))).toFixed(1)}`).join(' ');
+    return `<div style="background:var(--bg2);padding:8px;border-radius:6px;border:1px solid var(--border)">
+      <div style="font-size:9px;color:var(--t2);font-weight:700">${t.label}</div>
+      <div style="font-size:8px;color:var(--t3)">day ${t.d.d+1}</div>
+      <div style="font-size:14px;color:var(--teal);font-weight:700;margin:4px 0">${t.fmt(t.d[t.metric])}</div>
+      <svg viewBox="0 0 100 100" preserveAspectRatio="none" style="width:100%;height:80px">
+        <polyline points="${pts}" fill="none" stroke="var(--teal)" stroke-width="1.5"/>
+      </svg>
+      <div style="font-size:7.5px;color:var(--t3);display:flex;gap:8px">
+        <span>peak ${t.d.peak_load.toFixed(0)}MW</span>
+        <span>λ̄ $${t.d.avg_lam.toFixed(1)}</span>
+        <span>curt ${t.d.curt.toFixed(1)}</span>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── 19. Scenario delta waterfall ─────────────────────────────────────
+function _repScenarioDelta(ctx){
+  const slots = STATE.compareSlots || [];
+  const note = document.getElementById('rep-delta-note');
+  if(slots.length < 2){
+    document.getElementById('c-rep-delta').innerHTML='';
+    note.textContent = 'Load ≥2 scenarios in Compare tab first.';
+    return;
+  }
+  const A = slots[0].data.system_summary || {};
+  const B = slots[slots.length-1].data.system_summary || {};
+  // Decompose cost delta: fuel / startup / unserved penalty / other.
+  const fuelA = +A.total_fuel_cost || 0, fuelB = +B.total_fuel_cost || 0;
+  const startA = +A.total_startup_cost || 0, startB = +B.total_startup_cost || 0;
+  const unsA = (+A.total_unserved_mwh||0)*3000, unsB = (+B.total_unserved_mwh||0)*3000;
+  const totA = +A.total_cost_usd||0, totB = +B.total_cost_usd||0;
+  const otherA = totA - fuelA - startA - unsA;
+  const otherB = totB - fuelB - startB - unsB;
+  const components = [
+    {label:'Total A',           y: totA},
+    {label:'Δ Fuel',            y: fuelB - fuelA},
+    {label:'Δ Startup',         y: startB - startA},
+    {label:'Δ Unserved',        y: unsB - unsA},
+    {label:'Δ Other',           y: otherB - otherA},
+    {label:'Total B',           y: totB},
+  ];
+  // ApexCharts has no native waterfall — fake with stacked bars (transparent base + delta).
+  let cum = 0;
+  const baseSeries = []; const deltaSeries = [];
+  components.forEach((c,i) => {
+    if(i === 0 || i === components.length-1){
+      baseSeries.push(0);
+      deltaSeries.push(c.y);
+      cum = c.y;
+    } else {
+      baseSeries.push(c.y >= 0 ? cum : cum + c.y);
+      deltaSeries.push(Math.abs(c.y));
+      cum += c.y;
+    }
+  });
+  mkChart('c-rep-delta', {
+    chart:{type:'bar', height:300, stacked:true, toolbar:{show:false}, animations:{enabled:false}},
+    series:[
+      {name:'base',  data: baseSeries.map(v=>+v.toFixed(0)),
+       color:'transparent'},
+      {name:'value', data: components.map((c,i)=>+(i===0||i===components.length-1?c.y:Math.abs(c.y)).toFixed(0))},
+    ],
+    xaxis:{categories: components.map(c=>c.label), labels:{style:{fontSize:'8px'}}},
+    yaxis:{labels:{formatter:v=>'$'+(v>=1e6?(v/1e6).toFixed(2)+'M':(v/1e3).toFixed(0)+'k')}},
+    plotOptions:{bar:{columnWidth:'55%', dataLabels:{position:'top'}}},
+    colors:['#00000000','#3d8ef0'],
+    legend:{show:false},
+    dataLabels:{enabled:true, formatter:(v,o)=>{
+      if(o.seriesIndex !== 1) return '';
+      const c = components[o.dataPointIndex];
+      const sign = c.y > 0 ? '+' : c.y < 0 ? '-' : '';
+      return sign + '$' + (Math.abs(c.y)>=1e6?(Math.abs(c.y)/1e6).toFixed(2)+'M':(Math.abs(c.y)/1e3).toFixed(0)+'k');
+    }, style:{fontSize:'9px',colors:['#fff']}},
+  });
+  note.innerHTML = `Decomposition: <b>${slots[0].scenario||'A'}</b> → <b>${slots[slots.length-1].scenario||'B'}</b>  ·  Δ cost ${(totB-totA>=0?'+':'')}$${(totB-totA).toLocaleString('en-US',{maximumFractionDigits:0})}`;
+}
+
+// ── 20. DC-OPF nodal LMP + line congestion (v1.5) ───────────────────
+function _repNetwork(ctx){
+  const { hs } = ctx;
+  const lmpDiv = document.getElementById('rep-net-lmp');
+  const cgDiv  = document.getElementById('rep-net-cong');
+  const noteDiv= document.getElementById('rep-net-note');
+  if(!lmpDiv) return;
+  // Detect if any hourly row carries non-empty bus_lmp / line_flow.
+  const hasLMP  = hs.some(h => h.bus_lmp  && Object.keys(h.bus_lmp).length);
+  const hasFlow = hs.some(h => h.line_flow && Object.keys(h.line_flow).length);
+  if(!hasLMP && !hasFlow){
+    lmpDiv.innerHTML = '<div style="font-size:8px;color:var(--t3);padding:8px">DC-OPF არ ჩართულა — ქსელი copperplate</div>';
+    cgDiv.innerHTML  = '';
+    noteDiv.textContent = 'ჩართე Network tab-ზე DC-OPF და გაუშვი ხელახლა.';
+    return;
+  }
+  // Bus LMP time series (one line per bus).
+  const buses = hasLMP ? Object.keys(hs[0].bus_lmp || {}) : [];
+  const xs = hs.map(h=>h.t);
+  const lmpSeries = buses.map(b => ({
+    name: b,
+    data: hs.map(h => +(h.bus_lmp || {})[b] || 0)
+  }));
+  if(lmpSeries.length){
+    mkChart('rep-net-lmp', {
+      chart:{type:'line', height:240, toolbar:{show:false}, animations:{enabled:false}},
+      series: lmpSeries,
+      xaxis:{categories:xs, labels:{show:false}, title:{text:'საათი'}},
+      yaxis:{labels:{formatter:v=>'$'+v.toFixed(0)}, title:{text:'$/MWh'}},
+      stroke:{width:2}, legend:{position:'top', fontSize:'8px'},
+    });
+  }
+  // Line congestion table.
+  if(hasFlow){
+    const lines = Object.keys(hs[0].line_flow || {});
+    const rows = lines.map(lid => {
+      const flows = hs.map(h => +(h.line_flow||{})[lid] || 0);
+      const peak = Math.max(...flows.map(Math.abs));
+      const avg = flows.reduce((s,v)=>s+Math.abs(v),0)/flows.length;
+      // Cap is unknown from results alone — best-effort: peak is "≈cap" if congested.
+      const congested = flows.filter(v => Math.abs(v) >= peak * 0.99).length;
+      return {lid, peak, avg, congested};
+    });
+    cgDiv.innerHTML = `<table><thead><tr><th>Line</th><th class="mono">Peak |MW|</th>
+       <th class="mono">Avg |MW|</th><th class="mono">@peak hrs</th></tr></thead>
+       <tbody>${rows.map(r=>`<tr><td class="mono">${r.lid}</td>
+         <td class="mono">${r.peak.toFixed(1)}</td>
+         <td class="mono">${r.avg.toFixed(1)}</td>
+         <td class="mono" style="color:${r.congested>5?'var(--red)':'var(--t3)'}">${r.congested}</td></tr>`).join('')}</tbody></table>`;
+  }
+  // LMP spread = max-min across buses, peak hour
+  if(buses.length>1){
+    const peakIdx = hs.reduce((mi,h,i)=>{
+      const lmps = Object.values(h.bus_lmp||{}); if(!lmps.length) return mi;
+      const sp = Math.max(...lmps) - Math.min(...lmps);
+      const cur = hs[mi]; const cs = cur ? Math.max(...Object.values(cur.bus_lmp||{0:0})) - Math.min(...Object.values(cur.bus_lmp||{0:0})) : -1;
+      return sp>cs?i:mi;
+    }, 0);
+    const lmps = hs[peakIdx].bus_lmp || {};
+    const sp = Math.max(...Object.values(lmps)) - Math.min(...Object.values(lmps));
+    noteDiv.innerHTML = `Max LMP spread = <b>$${sp.toFixed(2)}/MWh</b> at hour ${peakIdx} `
+      + `(${Object.entries(lmps).map(([b,v])=>`${b}:$${v.toFixed(1)}`).join(' · ')})`;
+  } else {
+    noteDiv.textContent = 'Single bus — no spatial LMP variation.';
+  }
+}
+
+// ── 21. VRE Deep Analytics (Phase 7a #2) ────────────────────────────
+function _repVRE(ctx){
+  const { hbu, bu, hs, dt_h } = ctx;
+  const re = Object.keys(bu).filter(g => bu[g].type === 'wind' || bu[g].type === 'solar');
+  if(!re.length){
+    document.getElementById('c-vre-ramps').innerHTML = '<div style="font-size:8px;color:var(--t3);padding:8px">No wind/solar assets</div>';
+    document.getElementById('c-vre-cf-monthly').innerHTML='';
+    document.getElementById('c-vre-corr').innerHTML='';
+    document.getElementById('c-vre-diurnal').innerHTML='';
+    return;
+  }
+  // Per-asset MW dispatch series.
+  const dispOf = g => (hbu[g]||[]).map(r => +r.dispatch_mw||0);
+  // Ramp distribution per asset (Δ MW / hour).
+  const rampSeries = re.map(g => {
+    const d = dispOf(g);
+    const ramps = []; for(let t=1;t<d.length;t++) ramps.push(d[t]-d[t-1]);
+    const rmin = -50, rmax = 50, nbin = 21;
+    const w = (rmax-rmin)/nbin;
+    const bins = new Array(nbin).fill(0);
+    ramps.forEach(r => { const i=Math.max(0,Math.min(nbin-1, Math.floor((r-rmin)/w))); bins[i]++; });
+    return {name: bu[g].name||g, data: bins};
+  });
+  const rampLabels = Array.from({length:21}, (_,i)=>(-50+(i+0.5)*(100/21)).toFixed(0));
+  mkChart('c-vre-ramps', {
+    chart:{type:'bar', height:240, toolbar:{show:false}, animations:{enabled:false}},
+    series: rampSeries,
+    xaxis:{categories:rampLabels, title:{text:'Δ MW/h'}, labels:{style:{fontSize:'7.5px'}}},
+    yaxis:{labels:{formatter:v=>v.toFixed(0)}, title:{text:'count'}},
+    colors:['#00cfb4','#f0c040','#3d8ef0','#a463f8','#e03144','#20d68a','#f07830','#7a4a2a'],
+    legend:{position:'top', fontSize:'8px'},
+    plotOptions:{bar:{columnWidth:'80%'}},
+  });
+
+  // Monthly capacity factor heatmap → here as line chart per asset.
+  const monthly = ctx.monthly || [];
+  if(monthly.length){
+    const series = re.map(g => ({
+      name: bu[g].name||g,
+      data: monthly.map(m => {
+        const e = (m.by_unit||{})[g]?.energy_mwh || 0;
+        const hrs = (m.hours||0);
+        const cap = bu[g].type==='wind' || bu[g].type==='solar'
+            ? (bu[g].energy_mwh / Math.max((bu[g].capacity_factor||0.01)/100 * 8760, 1))
+            : 0;
+        return cap > 0 && hrs > 0 ? +(100 * e / (cap * hrs)).toFixed(1) : 0;
+      })
+    }));
+    mkChart('c-vre-cf-monthly', {
+      chart:{type:'line', height:240, toolbar:{show:false}, animations:{enabled:false}},
+      series, xaxis:{categories: monthly.map(m=>m.label||('M'+m.month))},
+      yaxis:{labels:{formatter:v=>v.toFixed(0)+'%'}, title:{text:'CF %'}, max:100, min:0},
+      colors:['#00cfb4','#f0c040','#3d8ef0','#a463f8','#e03144','#20d68a','#f07830'],
+      stroke:{width:2}, legend:{position:'top', fontSize:'8px'},
+    });
+  }
+
+  // Inter-site correlation matrix (Pearson r)
+  if(re.length >= 2){
+    const series_arr = re.map(dispOf);
+    const corr = (a,b) => {
+      const n = Math.min(a.length, b.length);
+      const ma = a.reduce((s,v)=>s+v,0)/n, mb = b.reduce((s,v)=>s+v,0)/n;
+      let num=0, da=0, db=0;
+      for(let i=0;i<n;i++){ const ax=a[i]-ma, bx=b[i]-mb; num+=ax*bx; da+=ax*ax; db+=bx*bx; }
+      return (da*db>0) ? num/Math.sqrt(da*db) : 0;
+    };
+    const cell = (r) => {
+      const c = Math.max(-1,Math.min(1,r));
+      const red = c<0 ? Math.round(255*(1+c*0.3)) : 255;
+      const green = c<0 ? Math.round(120*(1+c)) : Math.round(255*(1-c*0.4));
+      return `<td style="text-align:center;padding:3px 5px;font-family:monospace;font-size:8px;
+              background:rgba(${red},${green},80,${0.2+Math.abs(c)*0.6});color:#fff">${c.toFixed(2)}</td>`;
+    };
+    let html = `<table style="border-collapse:collapse"><thead><tr><th></th>${re.map(g=>`<th style="font-size:7.5px">${(bu[g].name||g).slice(0,12)}</th>`).join('')}</tr></thead><tbody>`;
+    re.forEach((g,i) => {
+      html += `<tr><td style="font-size:7.5px;color:var(--t3);padding:3px 5px">${(bu[g].name||g).slice(0,16)}</td>`;
+      re.forEach((g2,j) => { html += cell(i===j?1:corr(series_arr[i], series_arr[j])); });
+      html += '</tr>';
+    });
+    html += '</tbody></table><div style="font-size:7px;color:var(--t3);margin-top:4px">low correlation = better portfolio smoothing</div>';
+    document.getElementById('c-vre-corr').innerHTML = html;
+  }
+
+  // Diurnal pattern: avg MW by hour-of-day.
+  const hod = Array.from({length:24}, (_,h) => {
+    const sum_by_g = {};
+    re.forEach(g => sum_by_g[g] = {sum:0, n:0});
+    hs.forEach((row, t) => {
+      const tod = (+row.hour_of_year || row.t || 0) % 24;
+      if(Math.floor(tod) === h){
+        re.forEach(g => {
+          sum_by_g[g].sum += dispOf(g)[t]||0;
+          sum_by_g[g].n   += 1;
+        });
+      }
+    });
+    return sum_by_g;
+  });
+  const series_diurnal = re.map(g => ({
+    name: bu[g].name||g,
+    data: hod.map(s => +(s[g].n>0 ? s[g].sum/s[g].n : 0).toFixed(1))
+  }));
+  mkChart('c-vre-diurnal', {
+    chart:{type:'line', height:240, toolbar:{show:false}, animations:{enabled:false}},
+    series: series_diurnal,
+    xaxis:{categories: Array.from({length:24},(_,h)=>h+'h')},
+    yaxis:{labels:{formatter:v=>v.toFixed(0)}, title:{text:'avg MW'}},
+    stroke:{width:2,curve:'smooth'}, legend:{position:'top',fontSize:'8px'},
+    colors:['#00cfb4','#f0c040','#3d8ef0','#a463f8','#e03144','#20d68a','#f07830'],
+  });
+}
+
+// ── 22. Reliability Metrics (Phase 7a #3) ───────────────────────────
+function _repReliability(ctx){
+  const { hs, bu, dt_h, H } = ctx;
+  const total_unserved = hs.reduce((s,h) => s + (+h.unserved_mwh||0), 0);
+  // LOLE = hours with unserved>0.1, scaled to a year if horizon is shorter.
+  const lol_periods = hs.filter(h => (+h.unserved_mwh||0) > 0.1).length;
+  const lole_h_per_yr = (lol_periods * dt_h * 8760) / Math.max(H * dt_h, 1);
+  // EUE (Expected Unserved Energy) — already in MWh, scaled to a year.
+  const eue = total_unserved * 8760 / Math.max(H * dt_h, 1);
+  // Reserve margin per period:  (firm capacity − load) / load
+  // firm = sum of pmax for committed thermal + pmax_installed×cap_credit for VRE
+  const firmAt = (h) => {
+    let firm = 0;
+    for(const [gid, a] of Object.entries(bu)){
+      const com = (ctx.hbu[gid]||[])[hs.indexOf(h)]?.commitment || 0;
+      if(a.type === 'thermal' || a.type === 'hydro_reg'){
+        if(com) firm += +a.energy_mwh / Math.max((+a.capacity_factor||0.01)/100*H*dt_h,1);
+      } else if(a.type === 'wind' || a.type === 'solar'){
+        firm += 0.10 * (+a.energy_mwh / Math.max((+a.capacity_factor||0.01)/100*H*dt_h,1));
+      } else if(a.type === 'bess' || a.type === 'pumped_hydro') {
+        firm += +(a.energy_mwh) / Math.max((+a.capacity_factor||0.01)/100*H*dt_h, 1);
+      }
+    }
+    return firm;
+  };
+  const rm = hs.map(h => {
+    const f = firmAt(h);
+    const L = +h.load_mw || 0;
+    return L > 0 ? +((f - L) / L * 100).toFixed(2) : 0;
+  });
+  // KPI cards
+  document.getElementById('rep-rel-kpis').innerHTML = `
+    <div class="kpi"><div class="kpi-label">LOLE (h/yr)</div><div class="kpi-val ${lole_h_per_yr>10?'red':'green'}">${lole_h_per_yr.toFixed(1)}</div></div>
+    <div class="kpi"><div class="kpi-label">EUE (MWh/yr)</div><div class="kpi-val ${eue>1000?'red':''}">${eue.toFixed(0)}</div></div>
+    <div class="kpi"><div class="kpi-label">Loss-of-load periods</div><div class="kpi-val">${lol_periods}</div></div>
+    <div class="kpi"><div class="kpi-label">Min reserve margin %</div><div class="kpi-val ${Math.min(...rm)<10?'red':'green'}">${Math.min(...rm).toFixed(1)}</div></div>
+    <div class="kpi"><div class="kpi-label">Avg reserve margin %</div><div class="kpi-val">${(rm.reduce((s,v)=>s+v,0)/rm.length).toFixed(1)}</div></div>
+  `;
+  // LOLP duration curve (sorted unserved MWh descending)
+  const sorted = [...hs.map(h => +h.unserved_mwh||0)].sort((a,b)=>b-a);
+  const xs = sorted.map((_,i) => +(100*i/(sorted.length-1)).toFixed(2));
+  mkChart('c-rel-lolp', {
+    chart:{type:'line', height:240, toolbar:{show:false}, animations:{enabled:false}},
+    series:[{name:'Unserved MWh', data: sorted.map(v=>+v.toFixed(2))}],
+    xaxis:{categories: xs, type:'numeric', title:{text:'duration (% of horizon)'}, labels:{formatter:v=>v+'%'}},
+    yaxis:{labels:{formatter:v=>v.toFixed(0)}, title:{text:'MWh'}},
+    stroke:{width:2}, colors:['#e03144'],
+    fill:{type:'gradient', gradient:{shadeIntensity:0.6}},
+  });
+  // Reserve margin time series
+  mkChart('c-rel-rm', {
+    chart:{type:'line', height:240, toolbar:{show:false}, animations:{enabled:false}},
+    series:[{name:'Reserve margin %', data: rm}],
+    xaxis:{categories: hs.map(h=>h.t), labels:{show:false}, title:{text:'საათი'}},
+    yaxis:{labels:{formatter:v=>v.toFixed(0)+'%'}, title:{text:'%'}},
+    stroke:{width:2}, colors:['#20d68a'],
+    annotations:{ yaxis:[{y:15, borderColor:'#f0c040', label:{text:'15% target', style:{fontSize:'8px'}}}] },
+  });
+  document.getElementById('rep-rel-note').textContent =
+    `Notes: LOLE / EUE annualised by extrapolation from horizon (${(H*dt_h).toFixed(0)}h); for accurate LOLE, run 8760h MC sweep.`;
+}
+
+// ── 23. Cross-Border Balance (Phase 7b #4) ──────────────────────────
+function _repXBorder(ctx){
+  const { hbu, bu, hs, dt_h } = ctx;
+  const imps = Object.keys(bu).filter(g => bu[g].type === 'import');
+  if(!imps.length){
+    document.getElementById('c-xborder-hourly').innerHTML='<div style="color:var(--t3);font-size:8px;padding:8px">No import assets</div>';
+    document.getElementById('c-xborder-monthly').innerHTML='';
+    document.getElementById('rep-xborder-tbl').innerHTML='';
+    document.getElementById('rep-xborder-kpis').innerHTML='';
+    return;
+  }
+  // Hourly schedule chart (top 5 imports)
+  mkChart('c-xborder-hourly', {
+    chart:{type:'area', height:240, toolbar:{show:false}, stacked:true, animations:{enabled:false}},
+    series: imps.slice(0,5).map(g => ({
+      name: bu[g].name || g,
+      data: (hbu[g]||[]).slice(0, Math.min(720, hs.length)).map(r => +(r.dispatch_mw||0).toFixed(1))
+    })),
+    xaxis:{categories: hs.slice(0, Math.min(720, hs.length)).map(h=>h.t), labels:{show:false}},
+    yaxis:{labels:{formatter:v=>v.toFixed(0)}, title:{text:'MW'}},
+    stroke:{width:0}, fill:{opacity:0.85},
+    legend:{position:'top', fontSize:'8px'},
+    colors:['#a463f8','#3d8ef0','#f07830','#20d68a','#f0c040'],
+  });
+  // Monthly net by border
+  const monthly = ctx.monthly || [];
+  if(monthly.length){
+    mkChart('c-xborder-monthly', {
+      chart:{type:'bar', height:240, toolbar:{show:false}, stacked:false},
+      series: imps.map(g => ({
+        name: bu[g].name || g,
+        data: monthly.map(m => +((m.by_unit||{})[g]?.energy_mwh || 0).toFixed(0))
+      })),
+      xaxis:{categories: monthly.map(m=>m.label||('M'+m.month))},
+      yaxis:{labels:{formatter:v=>v>=1e3?(v/1e3).toFixed(1)+'k':v.toFixed(0)}, title:{text:'MWh'}},
+      colors:['#a463f8','#3d8ef0','#f07830','#20d68a','#f0c040'],
+      legend:{position:'top', fontSize:'8px'},
+    });
+  }
+  // KPI cards per border
+  const kpis = imps.map(g => {
+    const a = bu[g];
+    const e = +a.energy_mwh || 0;
+    const cost = +a.gross_cost || 0;
+    const cap = +a.energy_mwh / Math.max((+a.capacity_factor||0.01)/100 * 8760, 1);
+    return {g, name:a.name||g, energy:e, cost, cap, util:(+a.capacity_factor||0)};
+  });
+  document.getElementById('rep-xborder-kpis').innerHTML = kpis.map(k =>
+    `<div class="kpi"><div class="kpi-label">${k.name}</div>
+       <div class="kpi-val">${(k.energy/1000).toFixed(1)}k <span class="kpi-unit">MWh</span></div>
+       <div style="font-size:7.5px;color:var(--t3)">$/${k.energy>0?(k.cost/k.energy).toFixed(0):'—'}/MWh · util ${k.util.toFixed(1)}%</div>
+     </div>`).join('');
+  // Detail table
+  document.getElementById('rep-xborder-tbl').innerHTML =
+    `<table><thead><tr><th>Border</th><th class="mono">Energy MWh</th><th class="mono">Cost $</th>
+       <th class="mono">Avg $/MWh</th><th class="mono">Cap MW</th><th class="mono">Util %</th></tr></thead>
+     <tbody>${kpis.map(k=>`<tr><td>${k.name}</td>
+       <td class="mono">${(k.energy).toLocaleString('en-US',{maximumFractionDigits:0})}</td>
+       <td class="mono">$${(k.cost).toLocaleString('en-US',{maximumFractionDigits:0})}</td>
+       <td class="mono">$${k.energy>0?(k.cost/k.energy).toFixed(2):'—'}</td>
+       <td class="mono">${k.cap.toFixed(0)}</td>
+       <td class="mono">${k.util.toFixed(1)}</td></tr>`).join('')}</tbody></table>`;
+}
+
+// ── 24. Hydro Water-Energy Efficiency (Phase 7b #7) ─────────────────
+function _repWaterEnergy(ctx){
+  const { hbu, bu, hs, dt_h } = ctx;
+  const hReg = Object.keys(bu).filter(g => bu[g].type === 'hydro_reg');
+  if(!hReg.length){
+    document.getElementById('rep-water-tbl').innerHTML='<div style="font-size:8px;color:var(--t3);padding:8px">No reservoir hydro</div>';
+    document.getElementById('c-water-eff').innerHTML='';
+    document.getElementById('c-water-balance').innerHTML='';
+    return;
+  }
+  const NOMINAL_EFF = 350;   // assumed efficiency MWh/Mm³ for comparison
+  const rows = hReg.map(g => {
+    const rs = hbu[g] || [];
+    let energy = 0, release = 0, inflow = 0, spill = 0;
+    rs.forEach(r => {
+      energy  += (+r.dispatch_mw || 0) * dt_h;
+      const h = r.hydro || {};
+      release += (+h.release_mm3h || 0) * dt_h;
+      inflow  += (+h.inflow_mm3h  || 0) * dt_h;
+      spill   += (+h.spill_mm3h   || 0) * dt_h;
+    });
+    const realized_eff = release > 0 ? energy / release : 0;
+    return {g, name: bu[g].name||g, energy, release, inflow, spill, realized_eff};
+  }).sort((a,b)=>b.energy-a.energy);
+  document.getElementById('rep-water-tbl').innerHTML =
+    `<table><thead><tr><th>HPP</th><th class="mono">Energy MWh</th><th class="mono">Release Mm³</th>
+       <th class="mono">Inflow Mm³</th><th class="mono">Spill Mm³</th><th class="mono">MWh/Mm³</th><th>vs nominal</th></tr></thead>
+     <tbody>${rows.map(r=>{
+        const ratio = r.realized_eff / NOMINAL_EFF;
+        const cls = ratio>0.95?'var(--green)':ratio>0.8?'var(--gold)':'var(--red)';
+        return `<tr><td>${r.name}</td>
+          <td class="mono">${r.energy.toLocaleString('en-US',{maximumFractionDigits:0})}</td>
+          <td class="mono">${r.release.toFixed(2)}</td>
+          <td class="mono">${r.inflow.toFixed(2)}</td>
+          <td class="mono" style="color:${r.spill>0.5?'var(--red)':'var(--t3)'}">${r.spill.toFixed(3)}</td>
+          <td class="mono">${r.realized_eff.toFixed(0)}</td>
+          <td class="mono" style="color:${cls}">${(ratio*100).toFixed(0)}%</td></tr>`;}).join('')}
+     </tbody></table>`;
+  // Realized efficiency bar chart
+  mkChart('c-water-eff', {
+    chart:{type:'bar', height:240, toolbar:{show:false}},
+    series:[{name:'realized MWh/Mm³', data: rows.map(r=>+r.realized_eff.toFixed(0))}],
+    xaxis:{categories: rows.map(r=>r.name)},
+    yaxis:{labels:{formatter:v=>v.toFixed(0)}, title:{text:'MWh/Mm³'}},
+    plotOptions:{bar:{distributed:true, columnWidth:'55%'}},
+    colors: rows.map(r=>r.realized_eff>=NOMINAL_EFF*0.95?'#20d68a':r.realized_eff>=NOMINAL_EFF*0.8?'#f0c040':'#e03144'),
+    legend:{show:false},
+    annotations:{ yaxis:[{y:NOMINAL_EFF, borderColor:'#a8c4e0', label:{text:'nominal '+NOMINAL_EFF, style:{fontSize:'7.5px'}}}] },
+  });
+  // Stacked balance bars
+  mkChart('c-water-balance', {
+    chart:{type:'bar', height:240, toolbar:{show:false}, stacked:true},
+    series:[
+      {name:'Inflow',  data: rows.map(r=>+r.inflow.toFixed(2))},
+      {name:'Release', data: rows.map(r=>-(+r.release.toFixed(2)))},
+      {name:'Spill',   data: rows.map(r=>-(+r.spill.toFixed(2)))},
+    ],
+    xaxis:{categories: rows.map(r=>r.name)},
+    yaxis:{labels:{formatter:v=>v.toFixed(1)}, title:{text:'Mm³'}},
+    colors:['#00B0F0','#3d8ef0','#e03144'],
+    legend:{position:'top', fontSize:'8px'},
+  });
+}
+
+// ── 25. Marginal-Unit Timeline + Sankey (Phase 7c #9) ───────────────
+function _repMarginalSankey(ctx){
+  const { hs, hbu, bu } = ctx;
+  // Per hour: marginal asset is the dispatched committed asset with highest SRMC.
+  const mc_of = g => +(bu[g] || {}).SRMC || 0;
+  const marginal_per_t = hs.map((_, t) => {
+    let best = null, bestMC = -1;
+    for(const g of Object.keys(hbu)){
+      const r = hbu[g][t]; if(!r) continue;
+      if((+r.dispatch_mw||0) > 0.5){
+        const m = mc_of(g);
+        if(m > bestMC){ bestMC = m; best = g; }
+      }
+    }
+    return best || '—';
+  });
+  const counts = {};
+  marginal_per_t.forEach(g => { counts[g] = (counts[g]||0) + 1; });
+  const sorted = Object.entries(counts).sort((a,b)=>b[1]-a[1]);
+  // Pie of % hours marginal
+  mkChart('c-marg-pie', {
+    chart:{type:'pie', height:280},
+    series: sorted.slice(0,8).map(x=>x[1]),
+    labels: sorted.slice(0,8).map(([g])=>(bu[g]||{name:g}).name||g),
+    legend:{position:'bottom', fontSize:'8px'},
+  });
+  // Timeline of marginal asset for top 6 most-marginal assets
+  const top6 = sorted.slice(0,6).map(x=>x[0]);
+  const series = top6.map(g => ({
+    name: (bu[g]||{name:g}).name||g,
+    data: marginal_per_t.map(m => m===g ? 1 : 0)
+  }));
+  mkChart('c-marg-timeline', {
+    chart:{type:'area', height:280, stacked:true, toolbar:{show:false}, animations:{enabled:false}},
+    series, xaxis:{categories: hs.map(h=>h.t), labels:{show:false}},
+    yaxis:{labels:{show:false}, max:1, min:0},
+    stroke:{width:0}, fill:{opacity:0.85},
+    legend:{position:'top', fontSize:'8px'},
+    tooltip:{y:{formatter:v=>v?'marginal':'—'}},
+  });
+  // Energy-flow Sankey (rendered as simple HTML/SVG since ApexCharts doesn't have native Sankey)
+  const stack = ctx.stack;
+  const cats = ctx.cats.filter(c => stack[c].some(v => Math.abs(v)>0.01));
+  const totalMWh = (arr) => arr.reduce((s,v)=>s+v,0) * ctx.dt_h;
+  const tech_total = {}; cats.forEach(c => tech_total[c] = totalMWh(stack[c]));
+  const sysTotal = Object.values(tech_total).reduce((s,v)=>s+v,0);
+  const FUEL = {ccgt:'gas', ocgt:'gas', coal:'coal', hydro_reg:'water', hydro_ror:'water',
+                wind:'wind', solar:'solar', import:'imports', bess:'storage', dr:'demand-response',
+                pumped_hydro:'pumped storage'};
+  const fuels = {};
+  cats.forEach(c => { const f = FUEL[c]||c; fuels[f] = (fuels[f]||0) + tech_total[c]; });
+  // Render as 3-column flow: fuel → tech → load
+  const W = 600, H = 360, padX = 100;
+  const maxFlow = Math.max(...Object.values(tech_total).filter(v=>v>0), 1);
+  const yStep = H / Math.max(cats.length, 1);
+  let svg = `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:380px">
+    <text x="${padX/2}" y="14" font-size="9" fill="#a8c4e0" text-anchor="middle">Fuel</text>
+    <text x="${W/2}"   y="14" font-size="9" fill="#a8c4e0" text-anchor="middle">Technology</text>
+    <text x="${W-padX/2}" y="14" font-size="9" fill="#a8c4e0" text-anchor="middle">Demand</text>`;
+  // Fuel boxes (left)
+  let yF = 30;
+  const fuelY = {};
+  Object.entries(fuels).forEach(([f, v]) => {
+    const h = Math.max(8, (v/sysTotal)*H*0.85);
+    fuelY[f] = yF + h/2;
+    svg += `<rect x="${padX/2-30}" y="${yF}" width="60" height="${h}" fill="#0e2040" stroke="#1a3a5c"/>`;
+    svg += `<text x="${padX/2}" y="${yF+h/2+3}" font-size="8" fill="#e8f0fa" text-anchor="middle">${f}</text>`;
+    yF += h + 4;
+  });
+  // Tech boxes (middle)
+  let yT = 30;
+  const techY = {};
+  cats.forEach(c => {
+    const v = tech_total[c]; if(v<=0) return;
+    const h = Math.max(8, (v/sysTotal)*H*0.85);
+    techY[c] = yT + h/2;
+    const col = FUEL_PALETTE[c] || '#888';
+    svg += `<rect x="${W/2-40}" y="${yT}" width="80" height="${h}" fill="${col}" opacity="0.85"/>`;
+    svg += `<text x="${W/2}" y="${yT+h/2+3}" font-size="8" fill="#fff" text-anchor="middle">${c} ${(v/1000).toFixed(0)}k</text>`;
+    yT += h + 4;
+  });
+  // Demand box (right)
+  svg += `<rect x="${W-padX/2-30}" y="40" width="60" height="${H-80}" fill="#0d1f38" stroke="#1a3a5c"/>`;
+  svg += `<text x="${W-padX/2}" y="${H/2+3}" font-size="8" fill="#e8f0fa" text-anchor="middle">load ${(sysTotal/1000).toFixed(0)}k MWh</text>`;
+  // Flows fuel→tech
+  cats.forEach(c => {
+    const v = tech_total[c]; if(v<=0) return;
+    const f = FUEL[c] || c;
+    const yfuel = fuelY[f]||30, ytech = techY[c]||30;
+    svg += `<path d="M ${padX/2+30} ${yfuel} C ${W*0.35} ${yfuel}, ${W*0.4} ${ytech}, ${W/2-40} ${ytech}"
+        stroke="${FUEL_PALETTE[c]||'#888'}" stroke-width="${Math.max(1, (v/sysTotal)*H*0.4)}"
+        fill="none" opacity="0.4"/>`;
+  });
+  // Flows tech→load
+  cats.forEach(c => {
+    const v = tech_total[c]; if(v<=0) return;
+    const ytech = techY[c] || 30;
+    svg += `<path d="M ${W/2+40} ${ytech} C ${W*0.65} ${ytech}, ${W*0.7} ${H/2}, ${W-padX/2-30} ${H/2}"
+        stroke="${FUEL_PALETTE[c]||'#888'}" stroke-width="${Math.max(1, (v/sysTotal)*H*0.4)}"
+        fill="none" opacity="0.4"/>`;
+  });
+  svg += '</svg>';
+  document.getElementById('c-sankey').innerHTML = svg;
+}
+
+// ── 26. Maintenance Gantt (Phase 7c #10) ────────────────────────────
+function _repMaintenance(ctx){
+  const { bu, hbu, dt_h } = ctx;
+  // Detect outage windows: consecutive periods with commitment=0 for thermal/hydro_reg
+  const candidates = Object.keys(bu).filter(g => bu[g].type === 'thermal' || bu[g].type === 'hydro_reg');
+  const outages = [];     // {asset, start_h, end_h, dur_h}
+  candidates.forEach(g => {
+    const rows = hbu[g] || [];
+    let in_outage = false, start = 0;
+    for(let t=0; t<rows.length; t++){
+      const com = rows[t]?.commitment;
+      if(com === 0){
+        if(!in_outage){ in_outage = true; start = t; }
+      } else {
+        if(in_outage){
+          if(t - start >= 6){     // ≥6 periods to count as scheduled outage
+            outages.push({asset:g, start_h:start*dt_h, end_h:t*dt_h, dur_h:(t-start)*dt_h});
+          }
+          in_outage = false;
+        }
+      }
+    }
+    if(in_outage && rows.length - start >= 6){
+      outages.push({asset:g, start_h:start*dt_h, end_h:rows.length*dt_h, dur_h:(rows.length-start)*dt_h});
+    }
+  });
+  outages.sort((a,b)=>a.start_h-b.start_h);
+  document.getElementById('rep-maint-tbl').innerHTML =
+    !outages.length
+      ? `<div style="font-size:8px;color:var(--t3);padding:8px">No detected outages (≥6h commitment=0). For declared maintenance windows, set asset.maint_windows in input.</div>`
+      : `<table><thead><tr><th>Asset</th><th>Start h</th><th>End h</th><th>Duration h</th></tr></thead>
+         <tbody>${outages.slice(0,15).map(o=>`<tr><td>${(bu[o.asset]||{}).name||o.asset}</td>
+           <td class="mono">${o.start_h.toFixed(0)}</td><td class="mono">${o.end_h.toFixed(0)}</td>
+           <td class="mono">${o.dur_h.toFixed(0)}</td></tr>`).join('')}
+         ${outages.length>15?`<tr><td colspan="4" style="color:var(--t3)">… +${outages.length-15} more</td></tr>`:''}</tbody></table>`;
+  // Gantt — rows = assets, x = hours
+  if(outages.length){
+    const totalH = Math.max(...outages.map(o=>o.end_h), 24);
+    const assetsList = [...new Set(outages.map(o=>o.asset))];
+    const W = 800, rowH = 14, H = Math.max(140, assetsList.length * rowH + 40);
+    let svg = `<svg viewBox="0 0 ${W} ${H}" style="width:100%;min-height:${H}px">`;
+    // X axis ticks
+    const ticks = 8;
+    for(let i=0; i<=ticks; i++){
+      const x = 120 + (i/ticks)*(W-140);
+      svg += `<line x1="${x}" y1="20" x2="${x}" y2="${H-10}" stroke="#1a3a5c" stroke-dasharray="2 2"/>`;
+      svg += `<text x="${x}" y="14" font-size="7.5" fill="#a8c4e0" text-anchor="middle">${(i/ticks*totalH).toFixed(0)}h</text>`;
+    }
+    assetsList.forEach((g, i) => {
+      const y = 30 + i*rowH;
+      svg += `<text x="115" y="${y+9}" font-size="7.5" fill="#e8f0fa" text-anchor="end">${((bu[g]||{}).name||g).slice(0,20)}</text>`;
+      outages.filter(o=>o.asset===g).forEach(o=>{
+        const x1 = 120 + (o.start_h/totalH)*(W-140);
+        const w  = Math.max(1, (o.dur_h/totalH)*(W-140));
+        svg += `<rect x="${x1}" y="${y+1}" width="${w}" height="${rowH-3}" fill="#f07830" opacity="0.85"/>`;
+      });
+    });
+    svg += '</svg>';
+    document.getElementById('c-maint-gantt').innerHTML = svg;
+  } else {
+    document.getElementById('c-maint-gantt').innerHTML = '';
+  }
+  document.getElementById('rep-maint-note').textContent =
+    `Detected ${outages.length} outage windows (≥6 periods of commitment=0). For maintenance scheduling, edit asset.maint_windows in input JSON.`;
+}
+
+// Hook into renderReports
+const _origRenderReports = renderReports;
+renderReports = function(){
+  _origRenderReports();
+  const ctx = _repBuildContext(STATE.results);
+  try { _repNetwork(ctx);    } catch(e){ console.warn('Network panel:', e); }
+  try { _repVRE(ctx);        } catch(e){ console.warn('VRE panel:', e); }
+  try { _repReliability(ctx);} catch(e){ console.warn('Reliability:', e); }
+  try { _repXBorder(ctx);    } catch(e){ console.warn('Cross-border:', e); }
+  try { _repWaterEnergy(ctx);} catch(e){ console.warn('Water-energy:', e); }
+  try { _repMarginalSankey(ctx);} catch(e){ console.warn('Marginal/Sankey:', e); }
+  try { _repMaintenance(ctx);} catch(e){ console.warn('Maintenance:', e); }
+};
+
+// ── Excel export — rich pivot tables ─────────────────────────────────
+function exportReportsXls(){
+  if(!STATE.results){showBanner('შედეგები არ ჩაიტვ.','r');return;}
+  const R = STATE.results;
+  const ctx = _repBuildContext(R);
+  const wb = XLSX.utils.book_new();
+  const sm = R.system_summary || {};
+  const meta = R.metadata || {};
+  // 1. Summary
+  const summRows = [
+    ['Metric','Value','Unit'],
+    ['Scenario',          meta.scenario || '—', ''],
+    ['Schema version',    meta.schema_version || '—', ''],
+    ['Horizon hours',     meta.horizon_hours || '—', 'h'],
+    ['Resolution',        meta.resolution_min || 60, 'min'],
+    ['Total cost',        sm.total_cost_usd, '$'],
+    ['Total energy',      sm.total_energy_mwh, 'MWh'],
+    ['Avg lambda',        sm.avg_lambda_usd_mwh, '$/MWh'],
+    ['Peak load',         sm.peak_load_mw, 'MW'],
+    ['Total gas',         sm.total_gas_mm3, 'Mm³'],
+    ['Total unserved',    sm.total_unserved_mwh, 'MWh'],
+    ['Total curtailed',   sm.total_curtailed_mwh, 'MWh'],
+    ['Closure ok',        meta.closure_ok ? 'YES' : 'GAP', ''],
+    ['Closure gap',       meta.closure_gap, ''],
+  ];
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(summRows), 'Summary');
+  // 2. Hourly system
+  if(R.hourly_system) XLSX.utils.book_append_sheet(wb,
+    XLSX.utils.json_to_sheet(R.hourly_system), 'Hourly_System');
+  // 3. By unit summary
+  if(R.by_unit_summary){
+    const rows = Object.entries(R.by_unit_summary).map(([id, v]) => ({id, ...v}));
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'By_Unit_Summary');
+  }
+  // 4. Monthly
+  if(R.monthly_summary){
+    const flat = R.monthly_summary.map(m => ({
+      month:m.month, label:m.label, hours:m.hours,
+      total_energy_mwh: m.total_energy_mwh, total_cost_usd: m.total_cost_usd,
+      avg_lambda: m.avg_lambda, gas_mm3: m.gas_mm3,
+      curtailed_mwh: m.curtailed_mwh, unserved_mwh: m.unserved_mwh,
+      peak_load_mw: m.peak_load_mw,
+    }));
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(flat), 'Monthly_System');
+  }
+  // 5. Pivot: monthly × asset energy
+  if(R.monthly_summary){
+    const allAssets = new Set();
+    R.monthly_summary.forEach(m => Object.keys(m.by_unit||{}).forEach(g=>allAssets.add(g)));
+    const cols = ['month','label', ...allAssets];
+    const rows = R.monthly_summary.map(m => {
+      const row = {month:m.month, label:m.label};
+      for(const g of allAssets) row[g] = +((m.by_unit||{})[g] || {}).energy_mwh || 0;
+      return row;
+    });
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows, {header:cols}), 'Pivot_Monthly_Energy');
+  }
+  // 6. Stack/mix series
+  if(ctx.stack){
+    const cats = ctx.cats;
+    const rows = ctx.hs.map((h,t) => {
+      const row = {t, hour_of_year:h.hour_of_year, load_mw:h.load_mw};
+      for(const c of cats) row[c] = +ctx.stack[c][t].toFixed(2);
+      return row;
+    });
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'Tech_Mix_Hourly');
+  }
+  // 7. Diagnostics + IIS
+  const diag = R.diagnostics || {};
+  const dRows = Object.entries(diag).map(([k,v]) => ({key:k, value:typeof v==='object' ? JSON.stringify(v) : v}));
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(dRows), 'Diagnostics');
+  // 8. KPI templates if any
+  if(STATE.kpiTemplates && STATE.kpiTemplates.length){
+    const kpiRows = STATE.kpiTemplates.map(k => {
+      try { return {id:k.id, label:k.label, formula:k.formula,
+                    unit:k.unit, value: evaluateKpiTemplate(k.formula, R)}; }
+      catch(e) { return {id:k.id, label:k.label, formula:k.formula, error:e.message}; }
+    });
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(kpiRows), 'KPI_Templates');
+  }
+  XLSX.writeFile(wb, 'PowerSim_Reports_'+new Date().toISOString().slice(0,10)+'.xlsx');
+  showBanner('✅ Reports rich Excel — 8 sheet გადმოიტვ.','g');
 }
 
 function exportResultsXls(){

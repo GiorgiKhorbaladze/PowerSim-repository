@@ -86,11 +86,13 @@ SOLVER_VERSION = "powersim_solver 1.3.0"   # v1.3: sub-hourly, Gurobi, warm-star
 def resolve_resolution(inp: dict) -> tuple[int, int, float]:
     """
     Pick (resolution_min, periods_per_year, period_hours) from the input.
-    Defaults to 60-min (hourly) for back-compat. Only {5,15,30,60} are valid.
+    Defaults to 60-min (hourly) for back-compat. Allowed: {1,5,15,30,60}.
+    1-min × 8760h = 525,600 periods — only practical on short windows
+    (24-168h) for VRE high-resolution studies.
     """
     r = int(inp.get("resolution_min", 60))
-    if r not in (5, 15, 30, 60):
-        raise ValueError(f"resolution_min={r} not in (5,15,30,60)")
+    if r not in (1, 5, 15, 30, 60):
+        raise ValueError(f"resolution_min={r} not in (1,5,15,30,60)")
     ppy = HOURS_PER_YEAR * (60 // r)
     return r, ppy, r / 60.0
 
@@ -305,6 +307,14 @@ def slice_profiles(inp: dict) -> dict:
 
 def build_asset_map(inp: dict) -> dict:
     """Return {asset_id: asset_dict} with derived fields."""
+    # Top-level maintenance events → per-asset maintenance windows.
+    maint_by_asset = {}
+    for ev in inp.get("maintenance", []) or []:
+        aid = ev.get("asset_id")
+        if aid is None:
+            continue
+        maint_by_asset.setdefault(aid, []).append(ev)
+
     amap = {}
     for a in inp.get("assets", []):
         a2 = dict(a)
@@ -333,40 +343,79 @@ def build_asset_map(inp: dict) -> dict:
             and a.get("type") not in ("dr", "pumped_hydro")
         # Gas usage rate [Mm³/MWh]
         a2["_gas_rate"] = hr / 35_000.0 if hr > 0 and a.get("fuel_type","gas")=="gas" else 0.0
+        # Maintenance windows: per-asset field + top-level maintenance events.
+        mw = list(a.get("maint_windows", []) or [])
+        mw.extend(maint_by_asset.get(a2["id"], []))
+        if mw:
+            a2["maint_windows"] = mw
         amap[a2["id"]] = a2
     return amap
 
 
-def get_pmax_t(asset: dict, t_local: int, profiles: dict) -> float:
-    """Effective Pmax at hour t (0-indexed within horizon)."""
+def get_pmax_t(asset: dict, t_local: int, profiles: dict,
+               offset_h: int = 0, dt: float = 1.0) -> float:
+    """Effective Pmax at period t_local (0-indexed within the window).
+
+    `offset_h` + `dt` map the window-local period to the global hour-of-study
+    so maintenance windows (defined in global hours) can be enforced for every
+    asset type — not only thermal/hydro_reg.
+    """
     atype = asset.get("type")
     if atype in ("wind", "solar"):
         prof_key = asset.get("availability_profile")
         cf = profiles.get(prof_key, [1.0] * (t_local + 1))[t_local] if prof_key else 1.0
-        return float(asset.get("pmax_installed", asset.get("pmax", 0))) * max(0.0, min(1.0, cf))
+        base = float(asset.get("pmax_installed", asset.get("pmax", 0))) * max(0.0, min(1.0, cf))
     elif atype == "hydro_ror":
         prof_key = asset.get("availability_profile")
         cf = profiles.get(prof_key, [asset.get("cf", 0.65)] * (t_local + 1))[t_local] if prof_key else asset.get("cf", 0.65)
-        return float(asset.get("pmax", 0)) * max(0.0, min(1.0, cf))
+        base = float(asset.get("pmax", 0)) * max(0.0, min(1.0, cf))
     elif atype == "import":
         prof_key = asset.get("pmax_profile")
         if prof_key and isinstance(profiles.get(prof_key), list):
-            return float(profiles[prof_key][t_local])
-        return float(asset.get("pmax_profile", asset.get("pmax", 0)))
-    # Maintenance factor
-    pmax = float(asset.get("pmax", 0))
-    mf = _maint_factor(asset, t_local)
-    return pmax * mf
+            base = float(profiles[prof_key][t_local])
+        else:
+            base = float(asset.get("pmax_profile", asset.get("pmax", 0)))
+    else:
+        base = float(asset.get("pmax", 0))
+    # Maintenance derating applies uniformly to all asset types.
+    global_h = int(offset_h + round(t_local * dt))
+    return base * _maint_factor(asset, global_h)
 
 
-def _maint_factor(asset: dict, t_local: int) -> float:
-    """Return availability factor [0,1] based on maintenance windows."""
+def _maint_factor(asset: dict, global_h: int) -> float:
+    """Availability factor in [0,1] at global hour `global_h`.
+
+    Reads per-asset ``maint_windows`` (populated from the top-level
+    ``maintenance`` list by :func:`build_asset_map`). Each window:
+      {start_h|start, end_h|end, availability_factor? , available_capacity_mw?}
+    A window with neither factor nor capacity is treated as a full outage.
+    Overlapping windows compose multiplicatively-min (the most restrictive
+    factor wins).
+    """
     windows = asset.get("maint_windows", [])
     if not windows:
         return 1.0
-    # t_local → calendar date requires knowing start date
-    # For now return 1.0 if no window data; full implementation in Phase 2
-    return 1.0
+    pmax = float(asset.get("pmax",
+                 asset.get("pmax_installed",
+                 asset.get("power_mw", 0))) or 0)
+    factor = 1.0
+    for w in windows:
+        s = w.get("start_h", w.get("start"))
+        e = w.get("end_h", w.get("end"))
+        try:
+            s = float(s); e = float(e)
+        except (TypeError, ValueError):
+            continue
+        if not (s <= global_h < e):
+            continue
+        if w.get("availability_factor") is not None:
+            wf = float(w["availability_factor"])
+        elif w.get("available_capacity_mw") is not None and pmax > 0:
+            wf = float(w["available_capacity_mw"]) / pmax
+        else:
+            wf = 0.0
+        factor = min(factor, max(0.0, min(1.0, wf)))
+    return factor
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -628,17 +677,94 @@ def solve_window(
              + unserved_pen + res_pen + end_level_pen
     m.OBJ = pyo.Objective(rule=obj_rule, sense=pyo.minimize)
 
-    # ── Energy Balance ─────────────────────────────────────────────────
-    # Σ p[g,t] + unserv + DR_supply + PH_net - BESS_net = demand[t]
-    def balance(m, t):
-        gen  = sum(m.p[g,t] for g in disp_ids)
-        bess_net = sum(m.dis[b,t] - m.ch[b,t] for b in bess_ids) if bess_ids else 0
-        dr_supply = sum(m.dr[d,t] for d in dr_ids) if dr_ids else 0
-        ph_net = sum((m.ph_gen_hi[h,t] + m.ph_gen_lo[h,t])
-                     - (m.ph_pmp_hi[h,t] + m.ph_pmp_lo[h,t])
-                     for h in ph_ids) if ph_ids else 0
-        return gen + bess_net + dr_supply + ph_net + m.unserv[t] == demand_w[t-1]
-    m.Balance = pyo.Constraint(m.T, rule=balance)
+    # ── Network model — DC-OPF (v1.5) ────────────────────────────────
+    # When `buses` and `lines` are declared (any non-empty), we switch
+    # from copperplate to per-bus balance + DC line flows + capacity
+    # limits.  Output adds bus_lmp (= dual of per-bus balance) and
+    # line_flow MW.
+    _net_input = solver_cfg.get("_network", {})
+    buses     = _net_input.get("buses") or []
+    lines     = _net_input.get("lines") or []
+    bus_ids   = [b["id"] for b in buses]
+    use_dcopf = bool(buses and lines)
+
+    if use_dcopf:
+        # Map asset → bus (defaults to first bus when missing).
+        slack = next((b["id"] for b in buses if b.get("is_slack")), bus_ids[0])
+        asset_bus = {gid: (assets[gid].get("bus") or bus_ids[0]) for gid in assets}
+        # Demand per bus.  Two formats: explicit demand_by_bus (list per bus)
+        # or load_share_by_bus (fraction of total system demand).
+        demand_by_bus = _net_input.get("demand_by_bus")
+        load_share    = _net_input.get("load_share_by_bus") or {}
+        if not load_share and not demand_by_bus:
+            # Default: distribute load equally across buses.
+            load_share = {b: 1.0/len(bus_ids) for b in bus_ids}
+        if load_share:
+            tot = sum(load_share.values())
+            if tot > 0: load_share = {k: v/tot for k, v in load_share.items()}
+
+        m.B = pyo.Set(initialize=bus_ids)
+        m.L = pyo.Set(initialize=[ln["id"] for ln in lines])
+        m.theta = pyo.Var(m.B, m.T, domain=pyo.Reals)
+        m.fl    = pyo.Var(m.L, m.T, domain=pyo.Reals)         # MW flow from→to (signed)
+
+        line_dict = {ln["id"]: ln for ln in lines}
+        # Slack bus angle = 0
+        def _slack(m, t): return m.theta[slack, t] == 0
+        m.SlackTheta = pyo.Constraint(m.T, rule=_slack)
+        # DC flow: fl = (theta_from - theta_to) / x_pu
+        def _flow(m, lid, t):
+            ln = line_dict[lid]
+            x  = float(ln.get("x_pu", 0.05))
+            return m.fl[lid, t] == (m.theta[ln["from_bus"], t] - m.theta[ln["to_bus"], t]) / x
+        m.LineFlow = pyo.Constraint(m.L, m.T, rule=_flow)
+        # Capacity bounds (both directions)
+        def _cap_pos(m, lid, t):
+            return m.fl[lid, t] <= float(line_dict[lid]["capacity_mw"])
+        def _cap_neg(m, lid, t):
+            return m.fl[lid, t] >= -float(line_dict[lid]["capacity_mw"])
+        m.CapPos = pyo.Constraint(m.L, m.T, rule=_cap_pos)
+        m.CapNeg = pyo.Constraint(m.L, m.T, rule=_cap_neg)
+
+        # Per-bus balance: gen + bess_net + dr + ph + unserv = load_at_b + Σ(out-in flows)
+        # Σ_l_out fl_l - Σ_l_in fl_l   (positive = leaving)
+        from collections import defaultdict
+        out_lines = defaultdict(list); in_lines = defaultdict(list)
+        for ln in lines:
+            out_lines[ln["from_bus"]].append(ln["id"])
+            in_lines[ln["to_bus"]].append(ln["id"])
+
+        def _bus_balance(m, b, t):
+            gen  = sum(m.p[g,t] for g in disp_ids if asset_bus.get(g) == b)
+            bess_net = sum(m.dis[bid,t] - m.ch[bid,t] for bid in bess_ids
+                           if asset_bus.get(bid) == b) if bess_ids else 0
+            dr_supply = sum(m.dr[d,t] for d in dr_ids if asset_bus.get(d) == b) if dr_ids else 0
+            ph_net = sum((m.ph_gen_hi[h,t] + m.ph_gen_lo[h,t])
+                         - (m.ph_pmp_hi[h,t] + m.ph_pmp_lo[h,t])
+                         for h in ph_ids if asset_bus.get(h) == b) if ph_ids else 0
+            net_outflow = sum(m.fl[lid, t] for lid in out_lines[b]) \
+                        - sum(m.fl[lid, t] for lid in in_lines[b])
+            # Demand at bus b
+            if demand_by_bus and b in demand_by_bus:
+                d_b = demand_by_bus[b][t-1] if isinstance(demand_by_bus[b], list) else float(demand_by_bus[b])
+            else:
+                d_b = demand_w[t-1] * float(load_share.get(b, 0.0))
+            # bus-level unserved share = total unserved × bus share (proxy)
+            unserv_b = m.unserv[t] * float(load_share.get(b, 1.0/len(bus_ids)))
+            return gen + bess_net + dr_supply + ph_net + unserv_b - net_outflow == d_b
+        m.Balance = pyo.Constraint(m.B, m.T, rule=_bus_balance)
+    else:
+        # ── Copperplate (legacy) ────────────────────────────────────
+        # Σ p[g,t] + unserv + DR_supply + PH_net - BESS_net = demand[t]
+        def balance(m, t):
+            gen  = sum(m.p[g,t] for g in disp_ids)
+            bess_net = sum(m.dis[b,t] - m.ch[b,t] for b in bess_ids) if bess_ids else 0
+            dr_supply = sum(m.dr[d,t] for d in dr_ids) if dr_ids else 0
+            ph_net = sum((m.ph_gen_hi[h,t] + m.ph_gen_lo[h,t])
+                         - (m.ph_pmp_hi[h,t] + m.ph_pmp_lo[h,t])
+                         for h in ph_ids) if ph_ids else 0
+            return gen + bess_net + dr_supply + ph_net + m.unserv[t] == demand_w[t-1]
+        m.Balance = pyo.Constraint(m.T, rule=balance)
 
     # ── Generation bounds ──────────────────────────────────────────────
     def gen_lb(m, g, t):
@@ -646,7 +772,7 @@ def solve_window(
             return m.p[g,t] >= float(assets[g].get("pmin",0)) * m.u[g,t]
         return m.p[g,t] >= 0
     def gen_ub(m, g, t):
-        pmx = get_pmax_t(assets[g], t-1, profiles_w)
+        pmx = get_pmax_t(assets[g], t-1, profiles_w, offset_h, dt)
         if g in committable:
             return m.p[g,t] <= pmx * m.u[g,t]
         return m.p[g,t] <= pmx
@@ -983,7 +1109,7 @@ def solve_window(
         for g in elig:
             if dirn in ("up","symmetric"):
                 def res_head(m, t, _g=g, _rid=rid):
-                    pmx = get_pmax_t(assets[_g], t-1, profiles_w)
+                    pmx = get_pmax_t(assets[_g], t-1, profiles_w, offset_h, dt)
                     u_t = m.u[_g,t] if _g in committable else 1
                     return m.p[_g,t] + m.res_up[_rid,_g,t] <= pmx * u_t
                 m.add_component(f"ResHead_{rid}_{g}", pyo.Constraint(m.T, rule=res_head))
@@ -1199,12 +1325,40 @@ def solve_window(
         # Curtailment — MWh per period (pot - actual is MW, × dt).
         curt = 0.0
         for g in wind_solar:
-            pot = get_pmax_t(assets[g], t-1, profiles_w)
+            pot = get_pmax_t(assets[g], t-1, profiles_w, offset_h, dt)
             curt += max(0.0, pot - disp[g]) * dt
 
-        # Lambda (VOLL-aware, from ED resolve in Phase 2 — here use dual)
-        try:    lam = abs(float(m.dual[m.Balance[t]]))
-        except: lam = 0.0
+        # Lambda (VOLL-aware) — copperplate single λ vs nodal LMP per bus
+        bus_lmp = {}
+        line_flow = {}
+        if use_dcopf:
+            # Per-line MW flows (from primal m.fl).
+            try:
+                for ln in lines:
+                    lid = ln["id"]
+                    line_flow[lid] = round(float(pyo.value(m.fl[lid, t]) or 0.0), 2)
+            except Exception:
+                pass
+            # Per-bus dual.  For MIP runs HiGHS often doesn't surface
+            # constraint duals — when missing, broadcast the system λ
+            # (computed below) so the field is always populated.
+            dcopf_dual_ok = False
+            try:
+                tmp = {}
+                for b in bus_ids:
+                    tmp[b] = round(abs(float(m.dual[m.Balance[b, t]])), 3)
+                if all(isinstance(v, (int, float)) for v in tmp.values()):
+                    bus_lmp = tmp
+                    dcopf_dual_ok = True
+            except Exception:
+                pass
+            # Use slack-bus dual as system λ; if duals weren't loaded
+            # the bus_lmp dict was just broadcast from system λ below.
+            try:    lam = abs(float(m.dual[m.Balance[slack, t]]))
+            except: lam = sum(bus_lmp.values())/max(len(bus_lmp),1) if bus_lmp else 0.0
+        else:
+            try:    lam = abs(float(m.dual[m.Balance[t]]))
+            except: lam = 0.0
         if lam < 1e-6:
             # VOLL-aware fallback: check unserved → marginal committed
             unserv = pv(m.unserv, t)
@@ -1213,6 +1367,10 @@ def solve_window(
             else:
                 mcs = [assets[g]["_dispMC"] for g in disp_ids if disp.get(g,0) > 0.5]
                 lam = max(mcs) if mcs else 0.0
+        # If DC-OPF is on but MIP duals weren't available, populate
+        # bus_lmp with the system λ (zero-congestion assumption).
+        if use_dcopf and not bus_lmp:
+            bus_lmp = {b: round(lam, 3) for b in bus_ids}
 
         # Reserves
         res_up_h   = {rid: {g: pv(m.res_up,  rid, g, t) for g in res_elig[rid]}
@@ -1301,6 +1459,8 @@ def solve_window(
             "hydro":           hydro_h,
             "dr":              dr_h,
             "pumped_hydro":    ph_h,
+            "bus_lmp":         bus_lmp,
+            "line_flow":       line_flow,
         })
 
     # ── Carry final state ──────────────────────────────────────────────
@@ -1371,7 +1531,14 @@ def solve_all(inp: dict, assets: dict, profiles: dict, gas_limits: dict) -> tupl
     H_total_h = int(sh.get("horizon_hours", len(profiles.get("demand", [])) or HOURS_PER_YEAR))
     demand  = profiles["demand"]
     reserve_prods = inp.get("reserve_products", [])
-    solver_cfg    = inp.get("solver_settings", {})
+    solver_cfg    = dict(inp.get("solver_settings", {}))
+    # Pass network model into solve_window via solver_cfg piggyback.
+    solver_cfg["_network"] = {
+        "buses": inp.get("buses") or [],
+        "lines": inp.get("lines") or [],
+        "demand_by_bus": inp.get("demand_by_bus"),
+        "load_share_by_bus": inp.get("load_share_by_bus"),
+    }
 
     # Resolution → period duration.
     r_min, _ppy, dt_h = resolve_resolution(inp)
@@ -1518,7 +1685,17 @@ def compute_marginal_prices(hourly: list, assets: dict, profiles: dict,
     Post-process: fix commitment from UC solve, re-run LP ED to get
     clean dual-based marginal prices (lambda).
     This is the correct method for MIP → LP duality extraction.
+
+    Note: this is a copperplate LP resolve.  When DC-OPF is enabled
+    (`solver_cfg["_network"]["buses"]` non-empty), the per-bus LMPs
+    already come from the MIP balance duals / fallback in
+    `solve_window`; calling --ed-resolve on a DC-OPF run would
+    overwrite those with a copperplate λ and lose nodal information,
+    so we skip the resolve and emit a warning.
     """
+    if (solver_cfg.get("_network") or {}).get("buses"):
+        print("ℹ️  ED resolve skipped — DC-OPF is on; nodal LMPs already in bus_lmp.")
+        return hourly
     print("⚡ ED resolve for marginal prices (LP, fixed commitment)...")
     demand = [h["load_mw"] for h in hourly]
     H = len(demand)
@@ -1665,6 +1842,9 @@ def build_result_store(hourly: list, assets: dict, inp: dict, solve_time: float,
             "avg_cost_mwh":  round(gross / max(energy,1), 3),
             "gas_mm3":       round(gas_mm3, 4),
             "SRMC":          round(a["_dispMC"], 2),
+            "heat_rate":     float(a.get("heat_rate", 0) or 0),       # bug fix r-A1
+            "fuel_type":     a.get("fuel_type"),                       # bug fix r-A1
+            "bus":           a.get("bus"),                              # for DC-OPF
             "curtailed_mwh": round(curt, 1)
         }
 
@@ -1853,7 +2033,10 @@ def build_result_store(hourly: list, assets: dict, inp: dict, solve_time: float,
                 "unserved_mwh":  h["unserved_mwh"],
                 "curtailed_mwh": h["curtailed_mwh"],
                 "gas_mm3h":      h["gas_mm3h"],
-                "reserve_shortfall": h["reserve_shortfall"]
+                "reserve_shortfall": h["reserve_shortfall"],
+                # v1.5 DC-OPF: only present when network model is on.
+                "bus_lmp":       h.get("bus_lmp", {}),
+                "line_flow":     h.get("line_flow", {}),
             }
             for h in hourly
         ],
@@ -2226,7 +2409,10 @@ if __name__ == "__main__":
         print(f"   CVaR₉₅:     ${stoch['cvar95']:>12,.0f}")
         print(f"   Risk Prem.: ${stoch['risk_premium']:>12,.0f}")
 
-    # Save
+    # Save — ensure parent directories exist (bug fix r4-1).
+    from pathlib import Path as _P
+    _P(args.output).parent.mkdir(parents=True, exist_ok=True)
+    _P(args.excel).parent.mkdir(parents=True, exist_ok=True)
     with open(args.output, "w", encoding="utf-8") as f:
         json.dump(results, f, ensure_ascii=False, indent=2)
     print(f"\n💾 JSON:  {args.output}")

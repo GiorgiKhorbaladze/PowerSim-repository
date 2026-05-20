@@ -1,9 +1,14 @@
 """
 PowerSim v4.0 — Input/Output JSON Schema
 =========================================
-Schema version: 1.4
+Schema version: 1.5
 Timezone:       Asia/Tbilisi
-Resolution:     hourly, 8760h (non-leap year)
+Resolution:     hourly base, optional sub-hourly (60/30/15/5/1 min)
+
+Changes vs 1.4 (Stage 5):
+  + DC-OPF network (buses/lines), N-1 contingencies, stochastic tree,
+    capacity expansion, KPI templates, maintenance calendar
+  + 1-minute sub-hourly resolution for VRE high-res studies
 
 Changes vs 1.3 (Stage 4):
   + Optional sub-hourly resolution metadata and solver backend selection
@@ -47,15 +52,15 @@ from typing import Any
 # ──────────────────────────────────────────────────────────────────────
 # VERSION + FIXED CONSTANTS
 # ──────────────────────────────────────────────────────────────────────
-SCHEMA_VERSION          = "1.4"
-ACCEPTED_SCHEMA_PRIOR   = {"1.0", "1.1", "1.2", "1.3"}  # accept legacy configs with warning
+SCHEMA_VERSION          = "1.5"
+ACCEPTED_SCHEMA_PRIOR   = {"1.0", "1.1", "1.2", "1.3", "1.4"}  # accept legacy configs with warning
 MODEL_VERSION           = "PowerSim v4.0"
 TIMEZONE                = "Asia/Tbilisi"
 HOURS_PER_YEAR          = 8760
 
 # Allowed sub-hourly resolutions (minutes per period).
 # The default remains 60 for full backward-compatibility with v1.0..v1.4.
-ALLOWED_RESOLUTIONS_MIN: tuple[int, ...] = (60, 30, 15, 5)
+ALLOWED_RESOLUTIONS_MIN: tuple[int, ...] = (60, 30, 15, 5, 1)
 
 # Back-ends the solver can drive. 'auto' → HiGHS if Gurobi isn't importable.
 ALLOWED_SOLVER_BACKENDS: tuple[str, ...] = ("auto", "highs", "gurobi", "cplex")
@@ -650,6 +655,187 @@ def validate_input(inp: dict) -> tuple[bool, list[str], list[str]]:
             for k in kps:
                 if not (isinstance(k, dict) and k.get("id") and k.get("formula")):
                     errors.append("each kpi_template needs id + formula")
+
+    # ── v1.5: buses + lines + asset.bus + line-outage contingencies ──
+    buses = inp.get("buses") or []
+    bus_ids = set()
+    if buses:
+        if not isinstance(buses, list):
+            errors.append("buses must be a list")
+        else:
+            for b in buses:
+                bid = b.get("id")
+                if not bid:
+                    errors.append("bus missing id"); continue
+                if bid in bus_ids:
+                    errors.append(f"duplicate bus id '{bid}'")
+                bus_ids.add(bid)
+                v = b.get("voltage_kv")
+                if v is not None and not (isinstance(v, (int, float)) and v > 0):
+                    errors.append(f"bus '{bid}': voltage_kv must be > 0")
+            # If buses are declared, also recommend a slack bus.
+            n_slack = sum(1 for b in buses if b.get("is_slack"))
+            if n_slack == 0:
+                warnings.append("buses declared but no is_slack=true; "
+                                "first bus will be used as DC-OPF reference")
+            elif n_slack > 1:
+                errors.append(f"multiple slack buses ({n_slack}); pick exactly one")
+
+    lines = inp.get("lines") or []
+    line_ids = set()
+    if lines:
+        if not isinstance(lines, list):
+            errors.append("lines must be a list")
+        else:
+            for ln in lines:
+                lid = ln.get("id")
+                if not lid:
+                    errors.append("line missing id"); continue
+                if lid in line_ids:
+                    errors.append(f"duplicate line id '{lid}'")
+                line_ids.add(lid)
+                if not buses:
+                    errors.append(f"line '{lid}': lines declared but no buses")
+                fb, tb = ln.get("from_bus"), ln.get("to_bus")
+                if fb not in bus_ids:
+                    errors.append(f"line '{lid}': from_bus '{fb}' not in buses")
+                if tb not in bus_ids:
+                    errors.append(f"line '{lid}': to_bus '{tb}' not in buses")
+                if fb == tb:
+                    errors.append(f"line '{lid}': from_bus == to_bus")
+                cap = ln.get("capacity_mw")
+                if not (isinstance(cap, (int, float)) and cap > 0):
+                    errors.append(f"line '{lid}': capacity_mw must be > 0")
+                x = ln.get("x_pu")
+                if x is not None and not (isinstance(x, (int, float)) and x > 0):
+                    errors.append(f"line '{lid}': x_pu must be > 0 when provided")
+
+    # asset.bus must reference a declared bus (when buses exist).
+    if bus_ids:
+        for a in inp.get("assets") or []:
+            ab = a.get("bus")
+            if ab is not None and ab not in bus_ids:
+                errors.append(f"asset '{a.get('id')}': bus '{ab}' not in buses")
+
+    # demand_by_bus / load_share_by_bus (one or the other, optional).
+    db = inp.get("demand_by_bus")
+    if db is not None:
+        if not isinstance(db, dict):
+            errors.append("demand_by_bus must be a dict {bus_id: [...]}")
+        else:
+            for bid in db:
+                if bus_ids and bid not in bus_ids:
+                    errors.append(f"demand_by_bus key '{bid}' not in buses")
+    ls = inp.get("load_share_by_bus")
+    if ls is not None:
+        if not isinstance(ls, dict):
+            errors.append("load_share_by_bus must be a dict {bus_id: float}")
+        else:
+            tot = 0.0
+            for bid, v in ls.items():
+                if bus_ids and bid not in bus_ids:
+                    errors.append(f"load_share_by_bus key '{bid}' not in buses")
+                if not (isinstance(v, (int, float)) and 0 <= v <= 1):
+                    errors.append(f"load_share_by_bus['{bid}'] must be in [0, 1]")
+                else: tot += v
+            if abs(tot - 1.0) > 1e-3 and ls:
+                warnings.append(
+                    f"load_share_by_bus sums to {tot:.4f} (≠1.0); "
+                    "solver will renormalize")
+
+    # line_outage contingencies require live line ids.
+    for c in inp.get("contingencies") or []:
+        if not isinstance(c, dict):
+            errors.append(f"contingency must be a dict, got {type(c).__name__}"); continue
+        kind = c.get("kind", "unit_outage")
+        if kind not in ("unit_outage", "import_outage", "line_outage", "bus_outage"):
+            errors.append(f"contingency '{c.get('id')}': bad kind '{kind}'")
+        for el in (c.get("elements") or []):
+            if kind == "line_outage" and line_ids and el not in line_ids:
+                errors.append(f"contingency '{c.get('id')}': line '{el}' not in lines")
+
+    # ── v1.5: maintenance calendar ──────────────────────────────────
+    # Additive + backward compatible: absence is accepted. Events derate
+    # an asset's available capacity over a global-hour window. Accepts
+    # either availability_factor∈[0,1] OR available_capacity_mw≥0.
+    _MAINT_KINDS = ("planned_maintenance", "forced_outage", "partial_derating")
+    pmax_by_asset = {}
+    for a in inp.get("assets") or []:
+        pmax_by_asset[a.get("id")] = float(
+            a.get("pmax", a.get("pmax_installed", a.get("power_mw", 0))) or 0)
+
+    def _check_maint_event(ev, ctx, owner_id=None):
+        if not isinstance(ev, dict):
+            errors.append(f"{ctx} must be a dict"); return
+        aid = owner_id if owner_id is not None else ev.get("asset_id")
+        if aid is None:
+            errors.append(f"{ctx}: missing asset_id")
+        elif aid not in asset_ids:
+            errors.append(f"{ctx}: asset_id '{aid}' not in assets")
+        s = ev.get("start_h", ev.get("start"))
+        e = ev.get("end_h", ev.get("end"))
+        if not (isinstance(s, (int, float)) and isinstance(e, (int, float))):
+            errors.append(f"{ctx}: start/end must be numeric hours")
+        else:
+            if s < 0 or e > HOURS_PER_YEAR:
+                errors.append(f"{ctx}: window [{s}, {e}) outside [0, {HOURS_PER_YEAR}]")
+            if s >= e:
+                errors.append(f"{ctx}: start ({s}) must be < end ({e})")
+        et = ev.get("event_type")
+        if et is not None and et not in _MAINT_KINDS:
+            warnings.append(f"{ctx}: event_type '{et}' not in {_MAINT_KINDS}")
+        af = ev.get("availability_factor")
+        cap = ev.get("available_capacity_mw")
+        if af is not None:
+            if not (isinstance(af, (int, float)) and 0 <= af <= 1):
+                errors.append(f"{ctx}: availability_factor must be in [0, 1]")
+        elif cap is not None:
+            if not (isinstance(cap, (int, float)) and cap >= 0):
+                errors.append(f"{ctx}: available_capacity_mw must be >= 0")
+            else:
+                pmx = pmax_by_asset.get(aid, 0)
+                if pmx and cap > pmx + 1e-6:
+                    errors.append(
+                        f"{ctx}: available_capacity_mw {cap} exceeds pmax {pmx}")
+        # neither factor nor capacity → full outage (allowed)
+
+    maint = inp.get("maintenance")
+    if maint is not None:
+        if not isinstance(maint, list):
+            errors.append("maintenance must be a list of events")
+        else:
+            for i, ev in enumerate(maint):
+                _check_maint_event(ev, f"maintenance[{i}]")
+    # per-asset maint_windows (legacy / inline form)
+    for a in inp.get("assets") or []:
+        mw = a.get("maint_windows")
+        if mw is None:
+            continue
+        if not isinstance(mw, list):
+            errors.append(f"asset '{a.get('id')}': maint_windows must be a list")
+            continue
+        for i, ev in enumerate(mw):
+            _check_maint_event(ev, f"asset '{a.get('id')}'.maint_windows[{i}]",
+                               owner_id=a.get("id"))
+    # Overlap warning per asset (informational; overlaps compose min-factor).
+    _by_owner = {}
+    for ev in (maint or []):
+        if isinstance(ev, dict):
+            _by_owner.setdefault(ev.get("asset_id"), []).append(ev)
+    for aid, evs in _by_owner.items():
+        spans = []
+        for ev in evs:
+            s = ev.get("start_h", ev.get("start"))
+            e = ev.get("end_h", ev.get("end"))
+            if isinstance(s, (int, float)) and isinstance(e, (int, float)):
+                spans.append((s, e))
+        spans.sort()
+        for j in range(1, len(spans)):
+            if spans[j][0] < spans[j-1][1]:
+                warnings.append(
+                    f"maintenance: overlapping windows for asset '{aid}' "
+                    f"(most restrictive factor applies)")
+                break
 
     ok = len(errors) == 0
     return ok, errors, warnings
