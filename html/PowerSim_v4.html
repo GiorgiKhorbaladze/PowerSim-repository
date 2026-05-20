@@ -328,6 +328,7 @@ tr:hover td{background:var(--bg3)}
                 <th>MUT h</th><th>MDT h</th>
                 <th>SC $</th><th>NL $/h</th>
                 <th>VOM</th><th>FOR</th>
+                <th>პროფილი / Profile</th>
                 <th>ჩართ.</th><th>✕</th>
               </tr>
             </thead>
@@ -339,6 +340,54 @@ tr:hover td{background:var(--bg3)}
       <div class="card" id="asset-extra-panel" style="display:none">
         <div class="sh" id="asset-extra-title">⚙️ დეტალები</div>
         <div id="asset-extra-content"></div>
+      </div>
+      <!-- Maintenance calendar editor (Task B) -->
+      <div class="card" id="maint-card">
+        <div class="sh">📅 მოვლა / Maintenance Calendar</div>
+        <div class="frow" style="gap:4px;flex-wrap:wrap;align-items:flex-end">
+          <div class="field" style="min-width:120px">
+            <label>სადგური / Asset</label>
+            <select id="maint-asset" style="font-size:8px"></select>
+          </div>
+          <div class="field" style="width:70px">
+            <label>Start h</label>
+            <input type="number" id="maint-start" value="0" min="0" max="8760" step="1" style="font-size:8px">
+          </div>
+          <div class="field" style="width:70px">
+            <label>End h</label>
+            <input type="number" id="maint-end" value="168" min="0" max="8760" step="1" style="font-size:8px">
+          </div>
+          <div class="field" style="min-width:120px">
+            <label>ტიპი / Event</label>
+            <select id="maint-type" style="font-size:8px">
+              <option value="planned_maintenance">გეგმიური / Planned</option>
+              <option value="forced_outage">იძულ. / Forced outage</option>
+              <option value="partial_derating">ნაწილ. / Partial derating</option>
+            </select>
+          </div>
+          <div class="field" style="width:80px">
+            <label>Avail. factor</label>
+            <input type="number" id="maint-factor" placeholder="0–1" min="0" max="1" step="0.05" style="font-size:8px">
+          </div>
+          <div class="field" style="width:90px">
+            <label>Cap MW (alt)</label>
+            <input type="number" id="maint-cap" placeholder="MW" min="0" step="1" style="font-size:8px">
+          </div>
+          <div class="field" style="min-width:120px;flex:1">
+            <label>შენიშვნა / Note</label>
+            <input type="text" id="maint-note" placeholder="optional" style="font-size:8px">
+          </div>
+          <button class="btn btn-p btn-s" onclick="addMaintEvent()" style="height:24px">➕ დამატება</button>
+        </div>
+        <div style="font-size:7px;color:var(--t3);margin:3px 0">
+          ცარიელი factor + cap = სრული გაჩერება / empty factor + cap ⇒ full outage. factor უპირატესია cap-ზე.
+        </div>
+        <div class="tbl-wrap" style="max-height:220px;overflow:auto">
+          <table><thead><tr>
+            <th>Asset</th><th>Start</th><th>End</th><th>Type</th>
+            <th>Factor</th><th>Cap MW</th><th>Note</th><th>✕</th>
+          </tr></thead><tbody id="maint-tbody"></tbody></table>
+        </div>
       </div>
     </div>
   </div>
@@ -1118,6 +1167,7 @@ const STATE = {
   assets:         [],
   profiles:       {},   // {key: [float×8760]}
   reserveProducts: [],
+  maintenance:    [],   // [{asset_id,start_h,end_h,event_type,availability_factor?,available_capacity_mw?,note?}]
   gasConfig:      {mode:'annual', annual_cap:1200, monthly:{}, applies_to:[]},
   horizon:        {year:2026, start_date:'2026-01-01', start_hour:0, horizon_h:8760,
                    mode:'auto', window_h:168, step_h:24},
@@ -1283,6 +1333,18 @@ function renderAssetTable(){
     const isRE=a.type==='wind'||a.type==='solar';
     const isBESS=a.type==='bess';
     const isImport=a.type==='import';
+    // Profile binding — active only for wind / solar / hydro_ror (availability_profile).
+    const profileBindable=a.type==='wind'||a.type==='solar'||a.type==='hydro_ror';
+    const profKeys=Object.keys(STATE.profiles).filter(k=>k!=='demand'&&!/inflow/i.test(k));
+    const cur=a.availability_profile;
+    const staleOpt=(cur&&!STATE.profiles[cur])?`<option value="${cur}" selected>⚠️ ${cur} (?)</option>`:'';
+    const profileCell=profileBindable
+      ? `<select onchange="STATE.assets[${ci}].availability_profile=this.value||null;updateDashKpis()"
+                 style="width:96px;font-size:7.5px" title="availability profile binding (wind/solar/RoR)">
+           <option value="">— არჩევა / select —</option>${staleOpt}
+           ${profKeys.map(k=>`<option value="${k}" ${cur===k?'selected':''}>${k}</option>`).join('')}
+         </select>`
+      : `<span style="font-size:7px;color:var(--t3)" title="profile binding not applicable for this asset type">არ გამოიყენება / Not used</span>`;
     return`<tr ondblclick="showAssetDetail('${a.id}')" title="ორჯერ დააჭირე — დეტალები">
       <td><span style="color:${ti.color}">${ti.ico}</span> ${ti.label}</td>
       <td class="mono" style="font-size:7.5px;cursor:pointer;color:var(--teal)"
@@ -1301,6 +1363,7 @@ function renderAssetTable(){
       <td>${a.type==='thermal'?f('no_load_cost','number',300):'—'}</td>
       <td>${isBESS?f('vom_discharge'):f('vom')}</td>
       <td>${a.type==='bess'||isImport?'—':f('for_rate','number',0.08,0.01)}</td>
+      <td>${profileCell}</td>
       <td><select onchange="STATE.assets[${ci}].committable=this.value==='true'" style="font-size:7.5px;width:45px">
         <option value="true" ${a.committable?'selected':''}>✅</option>
         <option value="false" ${!a.committable?'selected':''}>⬜</option>
@@ -1316,6 +1379,69 @@ function renderAssetTable(){
     `<div>სულ სადგ: <b>${STATE.assets.length}</b></div>`+
     `<div>Pmax: <b>${total.toFixed(0)} MW</b></div>`+
     Object.entries(byType).map(([t,c])=>`<div>${ASSET_TYPES[t]?.ico||'?'} ${t}: ${c}</div>`).join('');
+  renderMaintTable();
+}
+
+// ── Maintenance calendar editor (Task B) ────────────────────────────
+// Per-asset planned maintenance / forced outage / partial derating
+// windows. Exported as a top-level `maintenance` list; the solver derates
+// available capacity over [start_h, end_h) via _maint_factor().
+function renderMaintTable(){
+  const sel=document.getElementById('maint-asset');
+  if(sel){
+    const cur=sel.value;
+    sel.innerHTML=STATE.assets.map(a=>`<option value="${a.id}">${(ASSET_TYPES[a.type]||{}).ico||''} ${a.name} (${a.id})</option>`).join('')
+      || '<option value="">— ჯერ დაამატე სადგური —</option>';
+    if(cur&&STATE.assets.some(a=>a.id===cur)) sel.value=cur;
+  }
+  const tb=document.getElementById('maint-tbody'); if(!tb) return;
+  tb.innerHTML=(STATE.maintenance||[]).map((ev,i)=>{
+    const a=STATE.assets.find(x=>x.id===ev.asset_id);
+    const nm=a?a.name:`<span style="color:var(--red)">${ev.asset_id} (?)</span>`;
+    const f=ev.availability_factor;
+    const c=ev.available_capacity_mw;
+    return `<tr>
+      <td>${nm}</td><td class="mono">${ev.start_h}</td><td class="mono">${ev.end_h}</td>
+      <td style="font-size:7px">${ev.event_type||''}</td>
+      <td class="mono">${f!=null?f:'—'}</td><td class="mono">${c!=null?c:'—'}</td>
+      <td style="font-size:7px;color:var(--t3)">${ev.note||''}</td>
+      <td><button onclick="removeMaintEvent(${i})" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:10px">✕</button></td>
+    </tr>`;
+  }).join('')||'<tr><td colspan="8" style="font-size:7.5px;color:var(--t3)">მოვლის ჩანაწერი არ არის / no maintenance events</td></tr>';
+}
+
+function addMaintEvent(){
+  const aid=(document.getElementById('maint-asset')||{}).value;
+  if(!aid){ showBanner('⚠ ჯერ დაამატე სადგური / add an asset first','o'); return; }
+  const s=+(document.getElementById('maint-start')||{}).value;
+  const e=+(document.getElementById('maint-end')||{}).value;
+  if(!(s>=0)||!(e>s)){ showBanner('❌ Start < End და ≥0 / invalid window','r'); return; }
+  const fRaw=(document.getElementById('maint-factor')||{}).value;
+  const cRaw=(document.getElementById('maint-cap')||{}).value;
+  const ev={asset_id:aid, start_h:s, end_h:e,
+            event_type:(document.getElementById('maint-type')||{}).value||'planned_maintenance'};
+  if(fRaw!==''&&fRaw!=null){
+    const f=+fRaw;
+    if(!(f>=0&&f<=1)){ showBanner('❌ factor must be 0–1','r'); return; }
+    ev.availability_factor=f;
+  } else if(cRaw!==''&&cRaw!=null){
+    const c=+cRaw;
+    const a=STATE.assets.find(x=>x.id===aid);
+    const pmax=+(a&&(a.pmax||a.pmax_installed||a.power_mw)||0);
+    if(!(c>=0)){ showBanner('❌ cap MW must be ≥0','r'); return; }
+    if(pmax&&c>pmax){ showBanner(`❌ cap ${c} > pmax ${pmax}`,'r'); return; }
+    ev.available_capacity_mw=c;
+  }
+  const note=(document.getElementById('maint-note')||{}).value;
+  if(note) ev.note=note;
+  STATE.maintenance.push(ev);
+  renderMaintTable();
+  showBanner('✅ მოვლის ჩანაწერი დაემატა / maintenance event added','g');
+}
+
+function removeMaintEvent(i){
+  STATE.maintenance.splice(i,1);
+  renderMaintTable();
 }
 
 // ── Asset detail panel (#10) ─────────────────────────────────────────
@@ -2487,12 +2613,16 @@ function runValidation(){
     if(demandArr.some(v=>v<0)) errors.push('demand < 0 values');
     if(demandArr.some(v=>isNaN(v))) errors.push('demand NaN values');
   }
-  // Check RE profiles linked
-  STATE.assets.filter(a=>a.type==='wind'||a.type==='solar').forEach(a=>{
+  // Check availability profiles linked (wind / solar / hydro_ror)
+  const horizonNeed=(STATE.horizon.start_hour||0)+(STATE.horizon.horizon_h||0);
+  STATE.assets.filter(a=>a.type==='wind'||a.type==='solar'||a.type==='hydro_ror').forEach(a=>{
     const pk=a.availability_profile;
-    if(pk&&!STATE.profiles[pk]) warnings.push(`${a.name}: profile '${pk}' ვერ მოიძებნა`);
-    else if(!pk) warnings.push(`${a.name}: availability_profile არ მითითებულა`);
-    else if(STATE.profiles[pk].length!==8760) errors.push(`${pk}: length ≠ 8760`);
+    if(pk&&!STATE.profiles[pk]) warnings.push(`${a.name}: profile '${pk}' ვერ მოიძებნა / not found`);
+    else if(!pk) warnings.push(`${a.name}: availability_profile არ მითითებულა / not selected`);
+    else if(STATE.profiles[pk].length!==8760){
+      if(STATE.profiles[pk].length<horizonNeed) errors.push(`${pk}: length ${STATE.profiles[pk].length} < horizon ${horizonNeed}`);
+      else warnings.push(`${pk}: length ${STATE.profiles[pk].length} ≠ 8760`);
+    }
   });
   // Hydro inflow
   STATE.assets.filter(a=>a.type==='hydro_reg').forEach(a=>{
@@ -2509,6 +2639,22 @@ function runValidation(){
   // Horizon
   const sh=STATE.horizon;
   if(sh.start_hour+sh.horizon_h>8760) errors.push('ჰორიზ. 8760h-ს გადასცდება');
+
+  // Maintenance calendar (Task B)
+  (STATE.maintenance||[]).forEach((ev,i)=>{
+    const a=STATE.assets.find(x=>x.id===ev.asset_id);
+    if(!a){ errors.push(`Maint #${i+1}: asset '${ev.asset_id}' ვერ მოიძ. / not found`); return; }
+    if(!(ev.start_h>=0&&ev.end_h>ev.start_h)) errors.push(`Maint #${i+1} (${a.name}): start<end & ≥0 required`);
+    if(ev.end_h>8760) errors.push(`Maint #${i+1} (${a.name}): end ${ev.end_h} > 8760`);
+    if(ev.availability_factor!=null&&!(ev.availability_factor>=0&&ev.availability_factor<=1))
+      errors.push(`Maint #${i+1} (${a.name}): factor must be 0–1`);
+    if(ev.available_capacity_mw!=null){
+      const pmax=+(a.pmax||a.pmax_installed||a.power_mw||0);
+      if(pmax&&ev.available_capacity_mw>pmax) errors.push(`Maint #${i+1} (${a.name}): cap ${ev.available_capacity_mw} > pmax ${pmax}`);
+    }
+    const horizonEnd=sh.start_hour+sh.horizon_h;
+    if(ev.start_h>=horizonEnd) warnings.push(`Maint #${i+1} (${a.name}): window outside study horizon`);
+  });
 
   // Render report
   STATE.validated=errors.length===0;
@@ -2581,6 +2727,7 @@ function buildInputPayload(){
     profiles: STATE.profiles,
     gas_constraints: gasConf,
     reserve_products: STATE.reserveProducts,
+    maintenance: (STATE.maintenance||[]).length ? STATE.maintenance : undefined,
     solver_settings:{
       mip_gap:0.005, time_limit_s:300,
       rolling_window_h: sh.window_h,
