@@ -8,15 +8,71 @@ Validates the following critical properties:
 5. Scenario runner produces all required scenarios.
 6. Energy closure within tolerance.
 """
+import io
 import math
+import zipfile
+
 import pytest
 
 from solver.bess_sizing import (
     BessSizingParams,
+    PlexosZipLoader,
     KSANI_P_MW,
     KSANI_E_MWH,
     solve_bess_sizing,
 )
+
+
+# ── Loader zip helper ────────────────────────────────────────────────────────
+
+_ROOT = 'plexos model/BESS Research 800-1400/'
+# Semicolon-delimited with a header so csv.Sniffer can detect the delimiter
+_ROWS_8760 = 'DATETIME;Value\n' + '\n'.join([f'{t};1.0' for t in range(8760)])
+
+
+def _make_loader_zip(include_pv: bool = True) -> PlexosZipLoader:
+    """Return a PlexosZipLoader backed by a minimal in-memory zip."""
+    from solver.bess_sizing import _PV_CAP, _WIND_CAP, _ROR_CAP
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, 'w') as zf:
+        zf.writestr(_ROOT + 'Load.csv', _ROWS_8760)
+        zf.writestr(_ROOT + 'Export.csv', _ROWS_8760)
+        zf.writestr(_ROOT + 'Tpp-Imp.csv', _ROWS_8760)
+        if include_pv:
+            for fname in _PV_CAP:
+                zf.writestr(_ROOT + fname, _ROWS_8760)
+        for fname in _WIND_CAP:
+            zf.writestr(_ROOT + fname, _ROWS_8760)
+        for fname in _ROR_CAP:
+            zf.writestr(_ROOT + fname, _ROWS_8760)
+    buf.seek(0)
+    loader = object.__new__(PlexosZipLoader)
+    loader.zip_path = None
+    loader.root = _ROOT
+    loader.zf = zipfile.ZipFile(buf)
+    loader._names_set = set(loader.zf.namelist())
+    return loader
+
+
+# ── Test 0: loader mapping ────────────────────────────────────────────────────
+
+class TestLoaderMapping:
+    def test_loader_refuses_missing_profile(self):
+        """PlexosZipLoader raises ValueError if any profile CSV is absent."""
+        loader = _make_loader_zip(include_pv=False)  # all PV files missing
+        with pytest.raises(ValueError, match='not found in zip'):
+            loader.load(verbose=False)
+
+    def test_loader_reads_all_profiles_when_present(self):
+        """When all profile files are present, _read and _scale_sum succeed."""
+        from solver.bess_sizing import _PV_CAP
+        loader = _make_loader_zip(include_pv=True)
+        for fname in _PV_CAP:
+            vals = loader._read(fname)
+            assert len(vals) == 8760
+        pv = loader._scale_sum(_PV_CAP)
+        assert len(pv) == 8760
+        assert all(v >= 0.0 for v in pv)
 
 
 # ── Synthetic dataset helpers ─────────────────────────────────────────────────
