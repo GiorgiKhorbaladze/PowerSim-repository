@@ -226,3 +226,90 @@ These are encoded in the asset mapper and reservoir override template.
 
 See [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md) for installation,
 schema, solver, and HTML issues.
+
+---
+
+## BESS Sizing (Georgia 2030)
+
+PowerSim includes a Python LP module for the Georgia 2030 BESS-sizing study:
+`solver/bess_sizing.py`.  The model co-optimizes BESS power (`Pbess`, MW) and
+energy (`Ebess`, MWh) over the full 8760-hour chronological year using HiGHS via
+Pyomo's `appsi_highs` interface.
+
+### Inputs and data rules
+
+The loader can read the uploaded `plexos model.zip` and uses the original
+hourly profile CSVs for available generation:
+
+* `Load.csv` for internal Georgian demand;
+* `Export.csv` for curtailable export demand, capped at 800 MW in the model;
+* `PV * Average.csv`, `Wind * Average.csv`, and `RoR * Medium.csv` as available
+  renewable / run-of-river generation profiles.
+
+It deliberately does **not** use `Model BEST Solution/Interval/ST
+Generator.Generation.csv` as the main renewable input, because those files are
+PLEXOS dispatch outputs and may already include curtailment or other dispatch
+logic rather than unconstrained available generation.
+
+Regulated hydro must be supplied with both monthly energy limits and monthly
+Pmax limits.  The default monthly energy limits are:
+
+```text
+[296, 276, 491, 429, 830, 890, 1050, 766, 498, 367, 319, 367] GWh
+```
+
+The CLI requires `--reg-pmax-mw` as 12 comma-separated monthly MW values.  If
+those Pmax values cannot be extracted or supplied, the module stops with a clear
+validation error rather than assuming an arbitrary regulated-hydro capacity.
+
+### Modes
+
+* **Reliability-constrained least-cost** (`--mode reliability`): minimizes
+  annualized BESS capex subject to an EENS target.  The implementation includes
+  tiny dispatch-cleanup penalties so the least-cost solution does not rely on
+  arbitrary simultaneous charge/discharge, spill, or export allocation.
+* **Economic optimum** (`--mode economic`): minimizes annualized BESS capex plus
+  dispatch terms (`VoLL × internal ENS`, BESS VOM, and export value).  The EENS
+  constraint is not enforced in this mode.
+* **Fixed-BESS validation** (`--mode fixed --fixed-p-mw 800 --fixed-e-mwh 1400`):
+  fixes BESS size for validation against the corrected PLEXOS 800 MW / 1400 MWh
+  case.
+
+### Reliability accounting
+
+Internal EENS is always calculated as:
+
+```text
+sum(internal ENS MWh) / sum(internal Load MWh)
+```
+
+Export curtailment is reported separately as **Export ENS** and never enters the
+internal EENS denominator or numerator.  Spill / curtailment is also reported
+separately and is never counted as ENS.
+
+### Example run
+
+```bash
+python -m solver.bess_sizing \
+  --plexos-zip "plexos model.zip" \
+  --mode reliability \
+  --reg-pmax-mw 1200,1200,1200,1200,1200,1200,1200,1200,1200,1200,1200,1200 \
+  --out out/bess_sizing_results.json
+```
+
+For corrected PLEXOS validation, use fixed-BESS mode:
+
+```bash
+python -m solver.bess_sizing \
+  --plexos-zip "plexos model.zip" \
+  --mode fixed \
+  --fixed-p-mw 800 \
+  --fixed-e-mwh 1400 \
+  --reg-pmax-mw <12 monthly RegPmax MW values> \
+  --out out/bess_fixed_800_1400_validation.json
+```
+
+Do not validate the zero-BESS baseline against the corrected PLEXOS
+`Internal ENS ≈ 59 GWh / EENS ≈ 0.33%` result.  That corrected anchor belongs to
+the fixed 800 MW / 1400 MWh BESS case.  A separate `Pbess = 0`, `Ebess = 0`
+run is expected to be worse and should be reported as its own baseline.
