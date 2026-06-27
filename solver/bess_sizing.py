@@ -219,6 +219,12 @@ class BessSizingParams:
     eta_d: float = 0.95
     ksani_p_mw: float = KSANI_P_MW
     ksani_e_mwh: float = KSANI_E_MWH
+    # Economic sizing: $/MWh penalty applied to VRE curtailment in the
+    # reliability-mode objective. Default 0 = pure reliability LP
+    # (back-compat). >0 makes the optimizer trade BESS capex against
+    # avoided curtailment, useful when reliability isn't binding (e.g.
+    # 2033/2036 with full VRE pipeline online).
+    curtailment_penalty_usd_per_mwh: float = 0.0
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -354,8 +360,15 @@ def solve_bess_sizing(
                 sense=pyo.minimize,
             )
         else:
+            # Reliability sizing — minimise added BESS MW.
+            # If curtailment_penalty_usd_per_mwh > 0 the objective also
+            # charges $/MWh per unit of spilled VRE, so the LP trades
+            # capex against avoided curtailment when reliability is slack.
+            curt_pen = float(params.curtailment_penalty_usd_per_mwh or 0)
+            cost_per_mw_yr = DURATION_COST.get(dur, dur * COST_1H_PER_MW_YR)
             m.obj = pyo.Objective(
-                expr=(m.P - Kp)
+                expr=cost_per_mw_yr * (m.P - Kp)
+                + curt_pen * sum(m.spill[t] for t in m.T)
                 + _EPS * sum(
                     m.ch[t] + m.dis[t] + m.spill[t] + (X[t] - m.exp[t])
                     for t in m.T
