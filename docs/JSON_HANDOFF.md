@@ -73,6 +73,55 @@ Validation (`schema.validate_input`) enforces:
 * `cascade_travel_delay_h ∈ [0, 168]` integer.
 * `target_end_level_frac ∈ [0, 1]`; `end_level_penalty ≥ 0`.
 
+### v1.5 hydro Stage 1 additions
+
+The reservoir balance is always written in **Mm³/h**. Source profiles
+can arrive in any of the units listed in
+`profile_bundle.hydro_inflow_unit`; the solver normalizes once at load
+time via `normalize_hydro_inflow_rate()`.
+
+| Unit          | Treatment                                                 |
+| ------------- | --------------------------------------------------------- |
+| `Mm3_per_h`   | unchanged                                                 |
+| `m3_per_s`    | `value * 3600 / 1_000_000`                                |
+| `raw`         | unchanged (legacy assumption; emits `hydro_raw_unit_warning`) |
+| `normalized`  | scaled by `hydro.inflow_scale_mm3h` or `hydro.annual_inflow_mm3 / 8760` (whichever is present) |
+
+The `raw` default exists only for backward compatibility. Final GSE-style
+validation runs should declare the actual source unit.
+
+Additional optional `hydro` sub-fields (all default-safe, additive):
+
+```json
+"hydro": {
+  "spill_cost_usd_per_mm3":  100.0,
+  "cascade_flow_mode":   "release_plus_spill",
+  "annual_inflow_mm3":       3200.0,
+  "inflow_scale_mm3h":          1.5
+}
+```
+
+* **`spill_cost_usd_per_mm3`** (or legacy `spill_cost`) — `$/Mm³` penalty
+  added to the objective per unit of `spill[h,t] * dt`. Default `0.0`.
+* **`cascade_flow_mode`** — for downstream reservoirs with
+  `cascade_upstream` set:
+    * `"turbined_only"` (default) — `cascade_in = gain * upstream_release`.
+    * `"release_plus_spill"` — `cascade_in = gain * (upstream_release + upstream_spill)`.
+* **`annual_inflow_mm3`** / **`inflow_scale_mm3h`** — required when
+  `hydro_inflow_unit = "normalized"` (else the conversion is a no-op and
+  the diagnostic block lists the asset under `missing_scale_for`).
+
+Results-side diagnostics added under `diagnostics`:
+
+* `hydro_inflow_unit_used` — the declared source unit.
+* `hydro_inflow_conversion_applied` — `true` when at least one profile was rescaled.
+* `hydro_raw_unit_warning` — `true` iff `unit == "raw"`.
+
+Per-reservoir aggregates added to `by_unit_summary[hydro_reg_id]`:
+
+* `total_spill_mm3` — sum of `spill_mm3h * dt` over the horizon.
+* `total_hydro_release_mm3` — sum of `release_mm3h * dt` over the horizon.
+
 ---
 
 ## Results JSON — `powersim_results.json`
