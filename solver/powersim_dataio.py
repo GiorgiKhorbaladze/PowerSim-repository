@@ -15,10 +15,11 @@ Input files this module knows about:
   - GSE_PLEXOS_sc2_2026_1.xlsx        (absolute MW, optional Stage 2 path)
 
 Hydro inflow unit handling:
-  Values are passed through as-is. The physical unit is declared in
-  profile_bundle.hydro_inflow_unit (default "raw"). No conversion is
-  performed here. Once the unit is verified, the solver will honor the
-  declared unit — this module needs no code changes to flip it.
+  Values are passed through as-is from the CSVs. The physical unit is
+  declared in profile_bundle.hydro_inflow_unit (default "raw"). Starting
+  in v1.5 the solver applies :func:`normalize_hydro_inflow_rate` at load
+  time so the LP balance always operates on Mm³/h. This module exposes
+  the helper for callers that need to pre-normalize on disk.
 
 Usage:
   # Library:
@@ -77,6 +78,57 @@ LOADER_VERSION = "powersim_dataio 1.0.1"
 # ══════════════════════════════════════════════════════════════════════
 class DataIOError(Exception):
     """Base class for dataio errors."""
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Hydro inflow unit normalization
+# ──────────────────────────────────────────────────────────────────────
+def normalize_hydro_inflow_rate(value, unit: str, *,
+                                asset: dict | None = None,
+                                profile_key: str | None = None) -> float:
+    """Convert a single inflow rate sample to **Mm³/h**.
+
+    The solver's reservoir balance is written in Mm³/h. Source data may
+    arrive in several physical units; ``profile_bundle.hydro_inflow_unit``
+    declares which one. Use this helper anywhere a raw sample needs to be
+    interpreted, so the LP only ever sees Mm³/h.
+
+    Supported ``unit`` values:
+
+    ``"Mm3_per_h"``
+        Already in target units — returned unchanged.
+    ``"m3_per_s"``
+        Multiplied by 3600 / 1_000_000 (s/h ÷ m³/Mm³).
+    ``"raw"``
+        Returned unchanged — backward-compat assumption that the caller's
+        source CSV happens to be in Mm³/h. The diagnostic block records a
+        ``hydro_raw_unit_warning`` so users know the unit was unverified.
+    ``"normalized"``
+        Requires a scaler on the asset's ``hydro`` dict, in priority order:
+        ``inflow_scale_mm3h`` (a per-sample multiplier) or
+        ``annual_inflow_mm3`` (the per-sample value is treated as a
+        share-of-annual, scaled by ``annual_mm3 / 8760``). If neither
+        is set the value is returned unchanged and the caller is expected
+        to surface a warning.
+
+    Raises ``ValueError`` on an unknown unit string.
+    """
+    v = float(value)
+    if unit in ("Mm3_per_h", "raw"):
+        return v
+    if unit == "m3_per_s":
+        return v * 3600.0 / 1_000_000.0
+    if unit == "normalized":
+        ha = ((asset or {}).get("hydro") or {})
+        scl = ha.get("inflow_scale_mm3h")
+        if scl is not None:
+            return v * float(scl)
+        ann = ha.get("annual_inflow_mm3")
+        if ann is not None:
+            return v * float(ann) / 8760.0
+        return v   # backward-compat: caller will warn
+    raise ValueError(
+        f"unknown hydro inflow unit: {unit!r} (profile_key={profile_key!r})")
 
 
 class FileFormatError(DataIOError):

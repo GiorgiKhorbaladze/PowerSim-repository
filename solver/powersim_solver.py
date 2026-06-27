@@ -251,12 +251,73 @@ def load_input(path: str = "powersim_input.json") -> dict:
     """Load and parse input JSON."""
     if not os.path.exists(path):
         print(f"⚠️  {path} not found — using built-in GSE 2026 demo data")
-        return _demo_input()
-    with open(path, "r", encoding="utf-8") as f:
-        data = json.load(f)
-    print(f"✅ Loaded: {path}")
-    _print_input_summary(data)
+        data = _demo_input()
+    else:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        print(f"✅ Loaded: {path}")
+        _print_input_summary(data)
+    # Single conversion layer — the LP balance always operates on Mm³/h.
+    normalize_hydro_inflow_profiles(data)
     return data
+
+
+def normalize_hydro_inflow_profiles(inp: dict) -> dict:
+    """Mutate ``inp`` so every hydro_reg ``inflow_profile`` is in Mm³/h.
+
+    Reads ``profile_bundle.hydro_inflow_unit`` (defaults to ``"raw"`` for
+    backward compatibility). Profiles already referenced by hydro_reg
+    assets are converted via :func:`normalize_hydro_inflow_rate`, and a
+    diagnostic block is attached at ``inp["_hydro_inflow_diagnostic"]``
+    so the results layer can emit ``hydro_inflow_unit_used``,
+    ``hydro_inflow_conversion_applied`` and ``hydro_raw_unit_warning``.
+    Idempotent: if the unit is already ``"Mm3_per_h"`` (or a previous
+    normalization already converted in place), no values change.
+    """
+    from powersim_dataio import normalize_hydro_inflow_rate
+    pb = (inp.get("profile_bundle") or {})
+    unit = pb.get("hydro_inflow_unit", "raw")
+    profiles = inp.get("profiles") or {}
+    converted_keys: list[str] = []
+    missing_scale: list[str] = []
+    skipped_unconverted = (unit in ("Mm3_per_h", "raw"))
+    asset_by_key = {}
+    for a in inp.get("assets", []) or []:
+        if a.get("type") != "hydro_reg":
+            continue
+        key = a.get("inflow_profile")
+        if key and key in profiles and key not in asset_by_key:
+            asset_by_key[key] = a
+    if not skipped_unconverted:
+        for key, asset in asset_by_key.items():
+            arr = profiles.get(key)
+            if not isinstance(arr, list):
+                continue
+            ha = (asset.get("hydro") or {})
+            if unit == "normalized" and not (
+                    ha.get("inflow_scale_mm3h") or ha.get("annual_inflow_mm3")):
+                missing_scale.append(key)
+                continue
+            profiles[key] = [
+                normalize_hydro_inflow_rate(v, unit, asset=asset, profile_key=key)
+                for v in arr
+            ]
+            converted_keys.append(key)
+    inp["_hydro_inflow_diagnostic"] = {
+        "unit_declared":          unit,
+        "conversion_applied":     bool(converted_keys),
+        "raw_unit_warning":       unit == "raw",
+        "normalized_profile_keys": converted_keys,
+        "missing_scale_for":      missing_scale,
+    }
+    if missing_scale:
+        print(f"⚠️  hydro_inflow_unit='normalized' but {len(missing_scale)} "
+              f"profile(s) lack annual_inflow_mm3/inflow_scale_mm3h — left as-is: "
+              f"{missing_scale}")
+    if unit == "raw":
+        print("⚠️  profile_bundle.hydro_inflow_unit='raw' — treating as Mm³/h "
+              "(legacy assumption; declare the true source unit to remove this).")
+    return inp
 
 
 def _print_input_summary(inp: dict):
@@ -687,6 +748,17 @@ def solve_window(
                 float(assets[h]["hydro"]["end_level_penalty"]) * m.end_short[h]
                 for h in m.GR_strat
             )
+        # Hydro spill cost — encourages turbining over bypass when storage
+        # head-room permits. Defaults to 0 → backward compatible.
+        spill_pen = 0
+        if hydro_reg:
+            spill_pen = sum(
+                float((assets[h]["hydro"] or {}).get(
+                    "spill_cost_usd_per_mm3",
+                    (assets[h]["hydro"] or {}).get("spill_cost", 0)) or 0)
+                * m.spill[h, t] * dt
+                for h in hydro_reg for t in m.T
+            )
         bess_end_pen = 0
         if hasattr(m, "bess_end_short"):
             bess_end_pen = sum(
@@ -694,7 +766,7 @@ def solve_window(
                 for b in m.BessEndTgt
             )
         return fuel + start + noload + bess_cost + dr_cost + ph_cost \
-             + unserved_pen + res_pen + end_level_pen + bess_end_pen
+             + unserved_pen + res_pen + end_level_pen + bess_end_pen + spill_pen
     m.OBJ = pyo.Objective(rule=obj_rule, sense=pyo.minimize)
 
     # ── Network model — DC-OPF (v1.5) ────────────────────────────────
@@ -874,13 +946,12 @@ def solve_window(
     #   cascade_in[t] = cascade_gain × release_upstream[t - travel_delay_h]
     #   (for t ≤ travel_delay_h the upstream contribution is 0 — bootstrap)
     #
-    # Note — we explicitly exclude upstream *spill* from downstream inflow.
-    # Spill is water released bypassing turbines (overflow); it physically
-    # does reach the downstream reservoir, but counting it here would re-
-    # introduce the double-counting we just fixed (spill = water the
-    # upstream plant didn't turbine; if we let the downstream plant
-    # turbine it, we've just recovered the upstream plant's waste).
-    # Conservative choice: downstream sees only turbined water.
+    # Downstream cascade inflow defaults to ``turbined_only`` — water that
+    # physically spilled at the upstream dam is NOT counted (avoids the
+    # double-counting we corrected earlier). For real cascades where the
+    # downstream reservoir does receive bypass flow, set
+    # ``hydro.cascade_flow_mode = "release_plus_spill"`` on the downstream
+    # plant; the upstream spill volume is then added to cascade_in.
     if hydro_reg:
         # Periods per hour & upstream cascade delay in periods (was hours).
         _per_per_h = max(1, int(round(1 / dt)))
@@ -901,10 +972,15 @@ def solve_window(
             if up_id and up_id in assets:
                 delay_h  = int(ha.get("cascade_travel_delay_h", 0))
                 gain     = float(ha.get("cascade_gain", 1.0))
+                mode     = ha.get("cascade_flow_mode", "turbined_only")
                 t_upstream = t - delay_h * _per_per_h
                 if t_upstream >= 1:
                     up_eff = float(assets[up_id].get("hydro", {}).get("efficiency", 350))
-                    cascade_in_rate = gain * (m.p[up_id, t_upstream] / max(up_eff, 0.001))
+                    up_turbined = m.p[up_id, t_upstream] / max(up_eff, 0.001)
+                    if mode == "release_plus_spill":
+                        cascade_in_rate = gain * (up_turbined + m.spill[up_id, t_upstream])
+                    else:                       # "turbined_only" (default)
+                        cascade_in_rate = gain * up_turbined
 
             infl_rate_total = infl_rate + cascade_in_rate
             if t == 1:
@@ -1972,6 +2048,16 @@ def build_result_store(hourly: list, assets: dict, inp: dict, solve_time: float,
                 "bess_calendar_used_pct":   round(study_yrs / float(life_years) * 100, 3)
                     if life_years and float(life_years) > 0 else None,
             })
+        # v1.5 Hydro Stage 1 — per-reservoir spill and turbined-release totals.
+        if atype == "hydro_reg":
+            spill_total   = sum((h.get("hydro", {}).get(gid, {}) or {}).get("spill_mm3h", 0)
+                                * dt_h for h in hourly)
+            release_total = sum((h.get("hydro", {}).get(gid, {}) or {}).get("release_mm3h", 0)
+                                * dt_h for h in hourly)
+            by_unit[gid].update({
+                "total_spill_mm3":         round(spill_total, 4),
+                "total_hydro_release_mm3": round(release_total, 4),
+            })
 
     # ── System summary ─────────────────────────────────────────────────
     total_cost    = sum(bu["gross_cost"]   for bu in by_unit.values())
@@ -2131,6 +2217,10 @@ def build_result_store(hourly: list, assets: dict, inp: dict, solve_time: float,
             "output_schema_warnings":  [],    # filled in after validation below
             # v1.4: IIS infeasibility report (null on feasible runs).
             "iis":                     getattr(solve_all, "_iis_reports", None) or None,
+            # v1.5 Hydro Stage 1 — inflow unit normalization provenance.
+            "hydro_inflow_unit_used":         (inp.get("_hydro_inflow_diagnostic") or {}).get("unit_declared"),
+            "hydro_inflow_conversion_applied": bool((inp.get("_hydro_inflow_diagnostic") or {}).get("conversion_applied")),
+            "hydro_raw_unit_warning":         bool((inp.get("_hydro_inflow_diagnostic") or {}).get("raw_unit_warning")),
         },
         "system_summary": {
             "total_cost_usd":      round(total_cost, 0),

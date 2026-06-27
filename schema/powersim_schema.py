@@ -555,6 +555,22 @@ def validate_input(inp: dict) -> tuple[bool, list[str], list[str]]:
         if elp is not None and not (isinstance(elp, (int, float)) and elp >= 0):
             errors.append(
                 f"hydro '{aid}': end_level_penalty must be >= 0")
+        # v1.5 Hydro Stage 1 — optional spill cost + cascade flow mode
+        # + inflow normalization scalers. All additive, default-safe.
+        for fld in ("spill_cost_usd_per_mm3", "spill_cost",
+                    "annual_inflow_mm3", "inflow_scale_mm3h"):
+            v = h.get(fld)
+            if v is not None and not (isinstance(v, (int, float)) and v >= 0):
+                errors.append(f"hydro '{aid}': {fld} must be >= 0")
+        cfm = h.get("cascade_flow_mode")
+        if cfm is not None and cfm not in ("turbined_only", "release_plus_spill"):
+            errors.append(
+                f"hydro '{aid}': cascade_flow_mode '{cfm}' must be "
+                f"'turbined_only' or 'release_plus_spill'")
+        if cfm == "release_plus_spill" and not h.get("cascade_upstream"):
+            warnings.append(
+                f"hydro '{aid}': cascade_flow_mode='release_plus_spill' set "
+                f"but no cascade_upstream — the mode will be inert.")
 
     # ── Stage 2: monthly gas_constraints validation ─────────────────
     gc = inp.get("gas_constraints") or {}
