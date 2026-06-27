@@ -502,7 +502,7 @@ def validate_input(inp: dict) -> tuple[bool, list[str], list[str]]:
 
     # ── reserves ────────────────────────────────────────────────────
     _asset_type_by_id = {a.get("id"): a.get("type") for a in inp.get("assets") or []}
-    _RESERVE_INCOMPATIBLE = {"bess", "pumped_hydro", "dr"}
+    _RESERVE_INCOMPATIBLE = {"pumped_hydro", "dr"}
     for rp in inp.get("reserve_products") or []:
         rid = rp.get("id", "?")
         for uid in rp.get("eligible_units", []):
@@ -513,10 +513,10 @@ def validate_input(inp: dict) -> tuple[bool, list[str], list[str]]:
             if t in _RESERVE_INCOMPATIBLE:
                 warnings.append(
                     f"reserve '{rid}': unit '{uid}' is type '{t}' — reserve "
-                    f"provision is not yet wired for this asset type "
-                    f"(only dispatchable thermal / hydro / wind / solar / import "
-                    f"are currently supported). The solver will treat it as "
-                    f"non-eligible at run time.")
+                    f"provision is not fully wired for this asset type. "
+                    f"BESS is supported; DR and pumped hydro remain diagnostic-only "
+                    f"in this release, and the solver reports filtered providers "
+                    f"in reserve_eligible_filtered.")
         if rp.get("direction") not in ("up", "down", "symmetric"):
             errors.append(
                 f"reserve '{rid}': bad direction '{rp.get('direction')}'")

@@ -217,7 +217,7 @@ These are encoded in the asset mapper and reservoir override template.
 |-----------|---------|-----------------|
 | Schema    | 1.2     | `schema/powersim_schema.py::SCHEMA_VERSION` (1.0 / 1.1 still load with a warning) |
 | Loader    | 1.0.1   | `solver/powersim_dataio.py::LOADER_VERSION` |
-| Solver    | 1.1.0   | `solver/powersim_solver.py::SOLVER_VERSION` |
+| Solver    | 1.6.0   | `solver/powersim_solver.py::SOLVER_VERSION` |
 | HTML UI   | 1.2     | `html/PowerSim_v4.html::SCHEMA_VERSION` |
 
 ---
@@ -313,3 +313,11 @@ Do not validate the zero-BESS baseline against the corrected PLEXOS
 `Internal ENS ≈ 59 GWh / EENS ≈ 0.33%` result.  That corrected anchor belongs to
 the fixed 800 MW / 1400 MWh BESS case.  A separate `Pbess = 0`, `Ebess = 0`
 run is expected to be worse and should be reported as its own baseline.
+
+### Solver hardening v1.6.0
+
+PowerSim Solver v1.6.0 keeps `system_summary.total_cost_usd` as the backward-compatible production/gross cost and adds `system_summary.total_objective_cost_usd` plus `diagnostics.objective_breakdown` for the full optimization objective. The full objective includes production costs, BESS degradation/end-SOC penalties, DR and pumped-hydro operating costs, unserved-energy penalties, reserve-shortfall penalties, hydro end-level penalties, and hydro spill penalties.
+
+Reserve products now support BESS provision with inverter headroom and SOC/empty-SOC duration limits. Unsupported eligible providers such as DR or pumped hydro are reported in diagnostics instead of being silently dropped. Rolling-horizon solves enforce first-period ramp limits from previous-window dispatch when carryover dispatch is available. Stochastic summaries are based on full scenario solve outputs and objective costs, with warnings when scenario profile overrides are not actually switched.
+
+Remaining limitations: PowerSim is not a full PLEXOS clone; DC-OPF is simplified; AC power flow, voltage, and reactive power are not modeled; reserve market settlement is not modeled.

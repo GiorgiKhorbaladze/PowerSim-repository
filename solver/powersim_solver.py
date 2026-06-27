@@ -77,7 +77,7 @@ except ImportError:
 SCHEMA_VERSION = _SCHEMA_VER
 MODEL_VERSION  = _MODEL_VER
 HOURS_PER_YEAR = 8760
-SOLVER_VERSION = "powersim_solver 1.3.0"   # v1.3: sub-hourly, Gurobi, warm-start, heat-rate curves
+SOLVER_VERSION = "powersim_solver 1.6.0"   # v1.6: solver hardening, storage reserves, closure, stochastic summary
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -578,7 +578,7 @@ def solve_window(
     ph_ids     = [i for i,a in assets.items() if a["type"]=="pumped_hydro"]
     # Dispatchable ids — DR and pumped-hydro do NOT belong to m.G because
     # they have their own dispatch variables (dr/ph_gen/ph_pump).
-    disp_ids   = [i for i in all_ids if assets[i]["type"] not in ("dr", "pumped_hydro")]
+    disp_ids   = [i for i in all_ids if assets[i]["type"] not in ("dr", "pumped_hydro", "bess")]
     committable = [i for i in disp_ids if assets[i]["_committable"]]
     non_commit = [i for i in all_ids if not assets[i]["_committable"]]
     gas_units  = [i for i in thermal
@@ -631,17 +631,34 @@ def solve_window(
     m.RIDS = pyo.Set(initialize=res_ids)
     m.res_sh = pyo.Var(m.RIDS, m.T, domain=pyo.NonNegativeReals)
 
-    # Reserve allocation per eligible unit per product per hour.
-    # NB: BESS / DR / pumped-hydro reserve provision is not yet wired —
-    # silently filter them out so the solver doesn't crash on m.res_up[g]
-    # indexing (g must be in m.G). Schema validation warns the user.
-    res_elig = {}  # {res_id: [eligible_asset_ids]}
+    # Reserve allocation per eligible provider per product per hour.
+    # Conventional dispatch assets keep the legacy variables. BESS has
+    # separate variables because it is bounded by inverter headroom and SOC.
+    res_elig = {}       # {res_id: [all eligible asset ids present in model]}
+    res_elig_g = {}     # conventional dispatch providers
+    res_elig_bess = {}  # BESS providers
+    reserve_eligible_filtered = []
+    supported_reserve_types = {"thermal", "hydro_reg", "hydro_ror", "import", "bess"}
     _disp_set = set(disp_ids)
+    _bess_set = set(bess_ids)
     for rp in reserve_prods:
-        res_elig[rp["id"]] = [u for u in rp.get("eligible_units", [])
-                              if u in assets and u in _disp_set]
+        rid = rp["id"]
+        listed = [u for u in rp.get("eligible_units", []) if u in assets]
+        res_elig_g[rid] = [u for u in listed if u in _disp_set]
+        res_elig_bess[rid] = [u for u in listed if u in _bess_set]
+        res_elig[rid] = res_elig_g[rid] + res_elig_bess[rid]
+        for u in listed:
+            typ = assets[u].get("type")
+            if typ not in supported_reserve_types:
+                reserve_eligible_filtered.append({
+                    "product": rid, "asset": u, "type": typ,
+                    "reason": "reserve provider type not implemented in Stage 1"
+                })
     m.res_up   = pyo.Var(m.RIDS, m.G, m.T, domain=pyo.NonNegativeReals)
     m.res_down = pyo.Var(m.RIDS, m.G, m.T, domain=pyo.NonNegativeReals)
+    if bess_ids:
+        m.bess_res_up   = pyo.Var(m.RIDS, m.BESS, m.T, domain=pyo.NonNegativeReals)
+        m.bess_res_down = pyo.Var(m.RIDS, m.BESS, m.T, domain=pyo.NonNegativeReals)
 
     # Hydro reservoir storage and spill
     if hydro_reg:
@@ -926,14 +943,20 @@ def solve_window(
 
     # ── Ramp constraints (ramp_up/down are MW per HOUR → MW per period = ramp*dt)
     def ramp_up_c(m, g, t):
-        if t == 1: return pyo.Constraint.Skip
         ru = float(assets[g].get("ramp_up", 9999))
         if ru >= 9999: return pyo.Constraint.Skip
+        if t == 1:
+            prev = init_state.get(g, {}).get("p") if isinstance(init_state, dict) else None
+            if prev is None: return pyo.Constraint.Skip
+            return m.p[g,t] - float(prev) <= ru * dt
         return m.p[g,t] - m.p[g,t-1] <= ru * dt
     def ramp_dn_c(m, g, t):
-        if t == 1: return pyo.Constraint.Skip
         rd = float(assets[g].get("ramp_down", 9999))
         if rd >= 9999: return pyo.Constraint.Skip
+        if t == 1:
+            prev = init_state.get(g, {}).get("p") if isinstance(init_state, dict) else None
+            if prev is None: return pyo.Constraint.Skip
+            return float(prev) - m.p[g,t] <= rd * dt
         return m.p[g,t-1] - m.p[g,t] <= rd * dt
     m.RampUp = pyo.Constraint(m.G, m.T, rule=ramp_up_c)
     m.RampDn = pyo.Constraint(m.G, m.T, rule=ramp_dn_c)
@@ -1270,14 +1293,19 @@ def solve_window(
     for rp in reserve_prods:
         rid  = rp["id"]
         req  = float(rp["requirement"]) if isinstance(rp["requirement"],(int,float)) else 0
-        elig = res_elig[rid]
+        elig = res_elig_g[rid]
+        elig_bess = res_elig_bess.get(rid, [])
         dirn = rp.get("direction","up")
         derating = rp.get("derating_factors", {})
+        dur_h = max(1e-9, float(rp.get("reserve_duration_h", 1.0) or 1.0))
 
-        def res_supply(m, t, _rid=rid, _elig=elig, _req=req, _dirn=dirn, _der=derating):
-            sup = sum(m.res_up[_rid,g,t] * _der.get(g,1.0) for g in _elig) \
-                  if _dirn in ("up","symmetric") else \
-                  sum(m.res_down[_rid,g,t] * _der.get(g,1.0) for g in _elig)
+        def res_supply(m, t, _rid=rid, _elig=elig, _belig=elig_bess, _req=req, _dirn=dirn, _der=derating):
+            up = sum(m.res_up[_rid,g,t] * _der.get(g,1.0) for g in _elig)
+            dn = sum(m.res_down[_rid,g,t] * _der.get(g,1.0) for g in _elig)
+            if bess_ids:
+                up += sum(m.bess_res_up[_rid,b,t] * _der.get(b,1.0) for b in _belig)
+                dn += sum(m.bess_res_down[_rid,b,t] * _der.get(b,1.0) for b in _belig)
+            sup = up if _dirn in ("up","symmetric") else dn
             return sup + m.res_sh[_rid,t] >= _req
         m.add_component(f"ResSup_{rid}", pyo.Constraint(m.T, rule=res_supply))
 
@@ -1296,12 +1324,46 @@ def solve_window(
                     return m.p[_g,t] - m.res_down[_rid,_g,t] >= pmin * u_t
                 m.add_component(f"ResFoot_{rid}_{g}", pyo.Constraint(m.T, rule=res_foot))
 
+        for b in elig_bess:
+            if dirn not in ("up", "symmetric"):
+                for t in T: m.bess_res_up[rid,b,t].fix(0)
+            if dirn not in ("down", "symmetric"):
+                for t in T: m.bess_res_down[rid,b,t].fix(0)
+            if dirn in ("up", "symmetric"):
+                def bess_res_head(m, t, _b=b, _rid=rid, _dur=dur_h):
+                    a = assets[_b]; ed = float(a.get("eta_discharge", 1) or 1)
+                    soc_min = float(a.get("soc_min", 0)) * float(a.get("energy_mwh", 0))
+                    soc_avail = (init_state.get(_b, {}).get("soc", float(a["soc_init"]) * float(a["energy_mwh"]))
+                                 if t == 1 else m.soc[_b,t-1])
+                    return m.bess_res_up[_rid,_b,t] <= (soc_avail - soc_min) * ed / _dur
+                def bess_res_dis_head(m, t, _b=b, _rid=rid):
+                    return m.dis[_b,t] + m.bess_res_up[_rid,_b,t] <= _bess_discharge_cap(_b)
+                m.add_component(f"BessResEnergyUp_{rid}_{b}", pyo.Constraint(m.T, rule=bess_res_head))
+                m.add_component(f"BessResHeadUp_{rid}_{b}", pyo.Constraint(m.T, rule=bess_res_dis_head))
+            if dirn in ("down", "symmetric"):
+                def bess_res_empty(m, t, _b=b, _rid=rid, _dur=dur_h):
+                    a = assets[_b]; ec = float(a.get("eta_charge", 1) or 1)
+                    soc_max = float(a.get("soc_max", 1)) * float(a.get("energy_mwh", 0))
+                    soc_avail = (init_state.get(_b, {}).get("soc", float(a["soc_init"]) * float(a["energy_mwh"]))
+                                 if t == 1 else m.soc[_b,t-1])
+                    return m.bess_res_down[_rid,_b,t] <= (soc_max - soc_avail) / max(ec, 1e-9) / _dur
+                def bess_res_ch_head(m, t, _b=b, _rid=rid):
+                    return m.ch[_b,t] + m.bess_res_down[_rid,_b,t] <= _bess_charge_cap(_b)
+                m.add_component(f"BessResEnergyDn_{rid}_{b}", pyo.Constraint(m.T, rule=bess_res_empty))
+                m.add_component(f"BessResHeadDn_{rid}_{b}", pyo.Constraint(m.T, rule=bess_res_ch_head))
+
         # Ineligible units: zero reserve
         for g in disp_ids:
             if g not in elig:
                 for t in T:
                     m.res_up[rid,g,t].fix(0)
                     m.res_down[rid,g,t].fix(0)
+        if bess_ids:
+            for b in bess_ids:
+                if b not in elig_bess:
+                    for t in T:
+                        m.bess_res_up[rid,b,t].fix(0)
+                        m.bess_res_down[rid,b,t].fix(0)
 
     # ── Gas constraints with rolling-window carry-over ────────────────
     # Gas flow per period = gas_rate[Mm³/MWh] × p[MW] × dt[h].
@@ -1549,10 +1611,15 @@ def solve_window(
             bus_lmp = {b: round(lam, 3) for b in bus_ids}
 
         # Reserves
-        res_up_h   = {rid: {g: pv(m.res_up,  rid, g, t) for g in res_elig[rid]}
-                      for rid in res_ids}
-        res_down_h = {rid: {g: pv(m.res_down, rid, g, t) for g in res_elig[rid]}
-                      for rid in res_ids}
+        res_up_h = {}
+        res_down_h = {}
+        for rid in res_ids:
+            res_up_h[rid] = {g: pv(m.res_up, rid, g, t) for g in res_elig_g[rid]}
+            res_down_h[rid] = {g: pv(m.res_down, rid, g, t) for g in res_elig_g[rid]}
+            if bess_ids:
+                for b in res_elig_bess.get(rid, []):
+                    res_up_h[rid][b] = pv(m.bess_res_up, rid, b, t)
+                    res_down_h[rid][b] = pv(m.bess_res_down, rid, b, t)
         res_sh_h   = {rid: pv(m.res_sh, rid, t) for rid in res_ids}
 
         # BESS
@@ -1637,6 +1704,7 @@ def solve_window(
             "pumped_hydro":    ph_h,
             "bus_lmp":         bus_lmp,
             "line_flow":       line_flow,
+            "reserve_eligible_filtered": reserve_eligible_filtered,
         })
 
     # ── Carry final state ──────────────────────────────────────────────
@@ -2068,6 +2136,18 @@ def build_result_store(hourly: list, assets: dict, inp: dict, solve_time: float,
     avg_lam       = sum(h["lambda_usd_mwh"] for h in hourly) / H if H else 0
     peak_load     = max((h["load_mw"] for h in hourly), default=0)
     res_shortfall = {rid: sum(h["reserve_shortfall"].get(rid,0) for h in hourly) for rid in res_ids}
+    reserve_supply_by_type = {}
+    for h in hourly:
+        for rid in res_ids:
+            for gid, mw in (h.get("reserve_up", {}).get(rid, {}) or {}).items():
+                typ = assets.get(gid, {}).get("type", "unknown")
+                reserve_supply_by_type.setdefault(typ, 0.0)
+                reserve_supply_by_type[typ] += float(mw or 0) * dt_h
+            for gid, mw in (h.get("reserve_down", {}).get(rid, {}) or {}).items():
+                typ = assets.get(gid, {}).get("type", "unknown")
+                reserve_supply_by_type.setdefault(typ, 0.0)
+                reserve_supply_by_type[typ] += float(mw or 0) * dt_h
+    reserve_supply_by_type = {k: round(v, 6) for k, v in reserve_supply_by_type.items()}
 
     # ── Gas binding check (Stage-1 patch: real binding detection) ──────
     gas_used_h        = [h["gas_mm3h"] for h in hourly]
@@ -2154,15 +2234,45 @@ def build_result_store(hourly: list, assets: dict, inp: dict, solve_time: float,
                     "shortfall":  round(end_min - stor, 3),
                 })
 
-    # ── Closure reconciliation (Stage-1 patch: real gap) ───────────────
-    # reconstructed_cost: sum of the objective terms from hourly results.
+    # ── Closure reconciliation (v1.6: full structured objective) ───────
     unserv_pen = float(s_cfg.get("unserved_penalty", 3000))
     res_pen_by = {rp["id"]: float(rp.get("shortfall_penalty", 500))
                   for rp in inp.get("reserve_products", [])}
+    fuel_cost = sum(bu["fuel_cost"] for bu in by_unit.values())
+    startup_cost = sum(bu["startup_cost"] for bu in by_unit.values())
+    no_load_cost = sum(bu["no_load_cost"] for bu in by_unit.values())
+    vom_cost = sum(bu["vom_cost"] for bu in by_unit.values()
+                   if bu.get("type") not in ("bess", "dr", "pumped_hydro"))
+    bess_degradation_cost = 0.0
+    bess_end_soc_penalty = 0.0
+    dr_cost = sum(bu["vom_cost"] for bu in by_unit.values() if bu.get("type") == "dr")
+    pumped_hydro_cost = sum(bu["vom_cost"] for bu in by_unit.values() if bu.get("type") == "pumped_hydro")
+    hydro_end_level_penalty = 0.0
+    hydro_spill_penalty = 0.0
+    for gid, a in assets.items():
+        if a.get("type") == "bess":
+            for h in hourly:
+                bh = (h.get("bess", {}) or {}).get(gid, {}) or {}
+                ch = float(bh.get("charge_mw", 0) or 0); dis = float(bh.get("discharge_mw", 0) or 0)
+                bess_degradation_cost += (float(a.get("vom_discharge", 0) or 0) * dis
+                    + float(a.get("cycle_cost_per_mwh", 0) or 0) * (ch + dis)) * dt_h
+            if a.get("soc_end_target") is not None and hourly:
+                end_soc = float((hourly[-1].get("bess", {}) or {}).get(gid, {}).get("soc_mwh", 0) or 0)
+                target = float(a.get("soc_end_target") or 0) * float(a.get("energy_mwh", 0) or 0)
+                bess_end_soc_penalty += max(0.0, target - end_soc) * float(a.get("soc_end_penalty_usd_mwh", 0) or 0)
+        if a.get("type") == "hydro_reg" and hourly:
+            ha = a.get("hydro", {}) or {}
+            if float(ha.get("end_level_penalty", 0) or 0) > 0 and float(ha.get("target_end_level_frac", 0) or 0) > 0:
+                end_stor = float((hourly[-1].get("hydro", {}) or {}).get(gid, {}).get("storage_mm3", 0) or 0)
+                target = float(ha.get("target_end_level_frac", 0)) * float(ha.get("reservoir_max", 0) or 0)
+                hydro_end_level_penalty += max(0.0, target - end_stor) * float(ha.get("end_level_penalty", 0) or 0)
+            spill_cost = float(ha.get("spill_cost_usd_per_mm3", ha.get("spill_cost", 0)) or 0)
+            hydro_spill_penalty += spill_cost * sum(float((h.get("hydro", {}) or {}).get(gid, {}).get("spill_mm3h", 0) or 0) * dt_h for h in hourly)
     pen_unserved = unserv_pen * total_unserv
-    pen_reserve  = sum(res_pen_by.get(rid, 0) * res_shortfall.get(rid, 0)
-                       for rid in res_ids)
-    reconstructed = total_cost + pen_unserved + pen_reserve
+    pen_reserve  = sum(res_pen_by.get(rid, 0) * res_shortfall.get(rid, 0) for rid in res_ids)
+    reconstructed = (fuel_cost + startup_cost + no_load_cost + vom_cost + bess_degradation_cost
+        + bess_end_soc_penalty + dr_cost + pumped_hydro_cost + pen_unserved + pen_reserve
+        + hydro_end_level_penalty + hydro_spill_penalty)
 
     if obj_total is None or obj_total != obj_total:      # NaN / not supplied
         closure_gap  = None
@@ -2174,6 +2284,21 @@ def build_result_store(hourly: list, assets: dict, inp: dict, solve_time: float,
         closure_ok  = closure_gap < 5e-3                  # 0.5% tolerance
         closure_note = (f"obj={obj_total:.2f} reconstructed={reconstructed:.2f} "
                         f"gap={closure_gap*100:.4f}%")
+
+    objective_breakdown = {
+        "fuel_cost": round(fuel_cost, 6), "startup_cost": round(startup_cost, 6),
+        "no_load_cost": round(no_load_cost, 6), "vom_cost": round(vom_cost, 6),
+        "bess_degradation_cost": round(bess_degradation_cost, 6),
+        "bess_end_soc_penalty": round(bess_end_soc_penalty, 6),
+        "dr_cost": round(dr_cost, 6), "pumped_hydro_cost": round(pumped_hydro_cost, 6),
+        "unserved_penalty": round(pen_unserved, 6),
+        "reserve_shortfall_penalty": round(pen_reserve, 6),
+        "hydro_end_level_penalty": round(hydro_end_level_penalty, 6),
+        "hydro_spill_penalty": round(hydro_spill_penalty, 6),
+        "total_reconstructed": round(reconstructed, 6),
+        "pyomo_objective": None if obj_total is None or obj_total != obj_total else round(obj_total, 6),
+        "closure_gap_pct": None if closure_gap is None else round(closure_gap * 100, 6),
+    }
 
     # ── Provenance: echo profile_bundle into metadata ──────────────────
     fingerprint = {
@@ -2221,9 +2346,15 @@ def build_result_store(hourly: list, assets: dict, inp: dict, solve_time: float,
             "hydro_inflow_unit_used":         (inp.get("_hydro_inflow_diagnostic") or {}).get("unit_declared"),
             "hydro_inflow_conversion_applied": bool((inp.get("_hydro_inflow_diagnostic") or {}).get("conversion_applied")),
             "hydro_raw_unit_warning":         bool((inp.get("_hydro_inflow_diagnostic") or {}).get("raw_unit_warning")),
+            "reserve_eligible_filtered": hourly[0].get("reserve_eligible_filtered", []) if hourly else [],
+            "reserve_provider_types": sorted({assets[gid].get("type") for h in hourly for rid in res_ids for gid in (h.get("reserve_up", {}).get(rid, {}) | h.get("reserve_down", {}).get(rid, {}))}),
+            "reserve_supply_by_type": reserve_supply_by_type,
+            "reserve_shortfall_by_product": res_shortfall,
+            "objective_breakdown": objective_breakdown,
         },
         "system_summary": {
             "total_cost_usd":      round(total_cost, 0),
+            "total_objective_cost_usd": round(reconstructed, 0),
             "total_energy_mwh":    round(total_energy, 0),
             "avg_cost_usd_mwh":    round(total_cost / max(total_energy,1), 3),
             "avg_lambda_usd_mwh":  round(avg_lam, 3),
@@ -2509,7 +2640,10 @@ def _resolve_stoch_scenarios(inp: dict) -> list:
             continue
         label = sc.get("label", sid)
         prob  = float(sc.get("prob", sc.get("probability", 0.0)))
-        out.append({"id": sid, "label": label, "prob": prob})
+
+        sc_norm = dict(sc)
+        sc_norm.update({"id": sid, "label": label, "prob": prob})
+        out.append(sc_norm)
         total += prob
     if not out:
         return list(_DEFAULT_STOCH_SCENARIOS)
@@ -2520,46 +2654,94 @@ def _resolve_stoch_scenarios(inp: dict) -> list:
     return out
 
 
+def _apply_stochastic_profile_overrides(inp: dict, sc: dict) -> tuple[dict, list[str]]:
+    import copy
+    inp_sc = copy.deepcopy(inp)
+    warnings = []
+    overrides = sc.get("profile_overrides") or sc.get("profiles") or {}
+    if overrides:
+        inp_sc.setdefault("profiles", {})
+        for key, val in overrides.items():
+            inp_sc["profiles"][key] = val
+    else:
+        switched = False
+        sid = sc.get("id")
+        for key, val in list((inp_sc.get("profiles") or {}).items()):
+            if isinstance(val, dict) and sid in val:
+                inp_sc["profiles"][key] = val[sid]
+                switched = True
+        if not switched:
+            warnings.append("stochastic_profiles_not_switched")
+    inp_sc["scenario_metadata"] = {"id": sc["id"], "label": sc["label"], "probability": sc["prob"]}
+    return inp_sc, warnings
+
+
+def _weighted_percentile(items: list[tuple[float, float]], q: float) -> float | None:
+    if not items:
+        return None
+    total = sum(w for _, w in items)
+    target = q * total
+    acc = 0.0
+    for val, wt in sorted(items):
+        acc += wt
+        if acc >= target:
+            return val
+    return sorted(items)[-1][0]
+
+
 def run_stochastic(inp: dict) -> dict:
-    """Run UC for each scenario and compute E[Cost], CVaR."""
+    """Run full solves for each stochastic scenario and summarize objective costs."""
     scenarios = _resolve_stoch_scenarios(inp)
     print(f"🎲 Stochastic run with {len(scenarios)} scenario(s) "
           f"(source: {'input' if inp.get('stochastic_scenarios') else 'default'})")
-    results = {}
+    rows = []
+    diagnostics = {"warnings": []}
     for sc in scenarios:
         print(f"\n── Scenario {sc['label']} (π={sc['prob']:.3f}) ──")
-        inp_sc = dict(inp)
-        inp_sc["scenario_metadata"] = {"id":sc["id"],"label":sc["label"],"probability":sc["prob"]}
-        assets   = build_asset_map(inp_sc)
+        inp_sc, warns = _apply_stochastic_profile_overrides(inp, sc)
+        diagnostics["warnings"].extend(warns)
+        assets = build_asset_map(inp_sc)
         profiles, H = slice_profiles(inp_sc)
-        gas_lim  = build_gas_limits(inp_sc, int(inp_sc.get("study_horizon",{}).get("start_hour",0)), H)
-        hourly, dt, _obj = solve_all(inp_sc, assets, profiles, gas_lim)
-        results[sc["id"]] = {
-            "prob": sc["prob"], "label": sc["label"],
-            "total_cost": sum(assets[g]["_dispMC"]*h["dispatch"].get(g,0)
-                              for h in hourly for g in assets),
-            "avg_lambda": sum(h["lambda_usd_mwh"] for h in hourly) / max(len(hourly),1),
-            "total_unserved": sum(h["unserved_mwh"] for h in hourly)
-        }
-    # Aggregate
-    active = [s for s in scenarios if s["id"] in results]
-    exp_cost = sum(s["prob"]*results[s["id"]]["total_cost"] for s in active)
-    costs_s  = sorted([{"cost":results[s["id"]]["total_cost"],"prob":s["prob"],"label":s["label"]}
-                        for s in active], key=lambda x: -x["cost"])
-    tail = 1 - CVaR_ALPHA; cum = 0; cvar_n = 0; cvar_d = 0
-    for c in costs_s:
+        gas_lim = build_gas_limits(inp_sc, int(inp_sc.get("study_horizon",{}).get("start_hour",0)), H)
+        hourly, solve_time, obj = solve_all(inp_sc, assets, profiles, gas_lim)
+        result = build_result_store(hourly, assets, inp_sc, solve_time, obj)
+        sm = result.get("system_summary", {})
+        diag = result.get("diagnostics", {})
+        ob = diag.get("objective_breakdown", {})
+        rows.append({
+            "id": sc["id"], "label": sc["label"], "probability": sc["prob"], "prob": sc["prob"],
+            "total_objective_cost_usd": sm.get("total_objective_cost_usd", ob.get("total_reconstructed", obj)),
+            "total_cost_usd": sm.get("total_cost_usd"),
+            "avg_lambda_usd_mwh": sm.get("avg_lambda_usd_mwh"),
+            "total_unserved_mwh": sm.get("total_unserved_mwh", 0),
+            "total_curtailed_mwh": sm.get("total_curtailed_mwh", 0),
+            "total_gas_mm3": sm.get("total_gas_mm3", 0),
+            "reserve_shortfall": sm.get("reserve_shortfall_mwh", {}),
+            "solve_status": diag.get("solver_status", "solved"),
+            "closure_ok": result.get("metadata", {}).get("closure_ok"),
+        })
+    exp_obj = sum(float(r["probability"]) * float(r.get("total_objective_cost_usd") or 0) for r in rows)
+    exp_unserved = sum(float(r["probability"]) * float(r.get("total_unserved_mwh") or 0) for r in rows)
+    exp_curt = sum(float(r["probability"]) * float(r.get("total_curtailed_mwh") or 0) for r in rows)
+    exp_gas = sum(float(r["probability"]) * float(r.get("total_gas_mm3") or 0) for r in rows)
+    weighted_costs = [(float(r.get("total_objective_cost_usd") or 0), float(r["probability"])) for r in rows]
+    costs_desc = sorted(weighted_costs, key=lambda x: -x[0])
+    tail = 1 - CVaR_ALPHA; cum = cvar_n = cvar_d = 0.0
+    for cost, prob in costs_desc:
         if cum >= tail: break
-        contrib = min(c["prob"], tail-cum)
-        cvar_n += c["cost"]*contrib; cvar_d += contrib; cum += c["prob"]
-    cvar = cvar_n/cvar_d if cvar_d > 0 else (costs_s[0]["cost"] if costs_s else 0)
+        take = min(prob, tail - cum)
+        cvar_n += cost * take; cvar_d += take; cum += take
+    cvar = cvar_n / cvar_d if cvar_d > 0 else (costs_desc[0][0] if costs_desc else 0)
     return {
-        "expected_cost": round(exp_cost, 0),
-        "cvar95":        round(cvar, 0),
-        "risk_premium":  round(cvar - exp_cost, 0),
-        "scenarios":     [{"id":s["id"],"label":s["label"],"prob":s["prob"],
-                           **results[s["id"]]} for s in active]
+        "expected_objective_cost": round(exp_obj, 0), "expected_cost": round(exp_obj, 0),
+        "expected_unserved_mwh": round(exp_unserved, 3),
+        "expected_curtailed_mwh": round(exp_curt, 3), "expected_gas_mm3": round(exp_gas, 6),
+        "p10_cost": None if len(rows) < 2 else round(_weighted_percentile(weighted_costs, 0.10), 0),
+        "p50_cost": None if len(rows) < 2 else round(_weighted_percentile(weighted_costs, 0.50), 0),
+        "p90_cost": None if len(rows) < 2 else round(_weighted_percentile(weighted_costs, 0.90), 0),
+        "cvar95": round(cvar, 0), "risk_premium": round(cvar - exp_obj, 0),
+        "scenarios": rows, "diagnostics": diagnostics,
     }
-
 
 # ══════════════════════════════════════════════════════════════════════
 # 11. MAIN
