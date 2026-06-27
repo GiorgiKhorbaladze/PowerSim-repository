@@ -1904,12 +1904,50 @@ function showAssetDetail(id){
     }
   }
 
+  // ── BESS advanced (v1.5 PLEXOS-parity) editable inputs ──────────
+  // Only rendered for type=bess; all fields optional, backward-compat.
+  let bessAdv = '';
+  if(a.type === 'bess'){
+    const ci = STATE.assets.findIndex(x=>x.id===id);
+    const inp = (fld, lbl, hint, step) => {
+      const v = a[fld];
+      return `<tr><td style="color:var(--t3)" title="${hint||''}">${lbl}</td>
+        <td><input type="number" step="${step||'any'}" value="${v==null?'':v}"
+          placeholder="—" style="width:90px;font-size:8px"
+          onchange="const v=this.value===''?null:+this.value;STATE.assets[${ci}].${fld}=v;showAssetDetail('${id}')">
+        </td></tr>`;
+    };
+    bessAdv = `
+      <div style="margin-top:8px;padding:6px;background:var(--bg2);border-radius:5px">
+        <div style="font-size:8px;color:var(--gold);font-weight:700;margin-bottom:4px">
+          🔋 BESS Advanced (PLEXOS-parity, optional)
+        </div>
+        <table style="font-size:8px;width:100%"><tbody>
+          ${inp('self_discharge_pct_per_h', 'self_discharge %/h',  'SOC fraction lost per hour when idle', '0.1')}
+          ${inp('aux_mw',                   'aux load MW',         'Parasitic / standby draw',           '0.1')}
+          ${inp('charge_power_mw',          'charge power MW',     'Asymmetric charge cap; defaults to power_mw')}
+          ${inp('discharge_power_mw',       'discharge power MW',  'Asymmetric discharge cap; defaults to power_mw')}
+          ${inp('c_rate_max',               'C-rate max',          'P/E ratio cap (e.g. 0.5 = 2-hr)',     '0.1')}
+          ${inp('ramp_up_mw_min',           'ramp ↑ MW/min',       'Inverter ramp-up limit')}
+          ${inp('ramp_down_mw_min',         'ramp ↓ MW/min',       'Inverter ramp-down limit')}
+          ${inp('soc_end_target',           'end-SOC target',      'Soft target (0–1 of energy_mwh)',     '0.05')}
+          ${inp('soc_end_penalty_usd_mwh',  'end-SOC penalty $/MWh','Soft-target shortfall penalty')}
+          ${inp('lifetime_full_cycles',     'lifetime cycles',     'For cycle-life-used % output metric', '1')}
+          ${inp('calendar_life_years',      'calendar life years', 'For calendar-life-used % output metric', '0.5')}
+        </tbody></table>
+        <div style="font-size:7px;color:var(--t3);margin-top:3px">
+          ცარიელი = ნაგულისხმევი / blank = default. ცვლილება ავტომატურად ხდება STATE-ში.
+        </div>
+      </div>`;
+  }
+
   body.innerHTML = `
     ${yearStr}
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
       <div>
         <div class="sh">⚙️ Schema fields</div>
         <table style="font-size:8px"><tbody>${lines.join('')}${hydroRows}</tbody></table>
+        ${bessAdv}
       </div>
       <div>${resultsCard || '<div style="color:var(--t3);font-size:8px;padding:10px">📥 Import Results JSON to see operational metrics here.</div>'}</div>
     </div>`;
