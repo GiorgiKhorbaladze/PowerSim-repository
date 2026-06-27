@@ -1299,15 +1299,28 @@ def solve_window(
         derating = rp.get("derating_factors", {})
         dur_h = max(1e-9, float(rp.get("reserve_duration_h", 1.0) or 1.0))
 
-        def res_supply(m, t, _rid=rid, _elig=elig, _belig=elig_bess, _req=req, _dirn=dirn, _der=derating):
+        def _reserve_up_expr(m, t, _rid=rid, _elig=elig, _belig=elig_bess, _der=derating):
             up = sum(m.res_up[_rid,g,t] * _der.get(g,1.0) for g in _elig)
-            dn = sum(m.res_down[_rid,g,t] * _der.get(g,1.0) for g in _elig)
             if bess_ids:
                 up += sum(m.bess_res_up[_rid,b,t] * _der.get(b,1.0) for b in _belig)
+            return up
+        def _reserve_down_expr(m, t, _rid=rid, _elig=elig, _belig=elig_bess, _der=derating):
+            dn = sum(m.res_down[_rid,g,t] * _der.get(g,1.0) for g in _elig)
+            if bess_ids:
                 dn += sum(m.bess_res_down[_rid,b,t] * _der.get(b,1.0) for b in _belig)
-            sup = up if _dirn in ("up","symmetric") else dn
-            return sup + m.res_sh[_rid,t] >= _req
-        m.add_component(f"ResSup_{rid}", pyo.Constraint(m.T, rule=res_supply))
+            return dn
+        if dirn == "symmetric":
+            def res_supply_up(m, t, _rid=rid, _req=req):
+                return _reserve_up_expr(m, t) + m.res_sh[_rid,t] >= _req
+            def res_supply_dn(m, t, _rid=rid, _req=req):
+                return _reserve_down_expr(m, t) + m.res_sh[_rid,t] >= _req
+            m.add_component(f"ResSupUp_{rid}", pyo.Constraint(m.T, rule=res_supply_up))
+            m.add_component(f"ResSupDn_{rid}", pyo.Constraint(m.T, rule=res_supply_dn))
+        else:
+            def res_supply(m, t, _rid=rid, _req=req, _dirn=dirn):
+                sup = _reserve_up_expr(m, t) if _dirn == "up" else _reserve_down_expr(m, t)
+                return sup + m.res_sh[_rid,t] >= _req
+            m.add_component(f"ResSup_{rid}", pyo.Constraint(m.T, rule=res_supply))
 
         # Headroom/footroom: p + res_up ≤ pmax·u ; p - res_down ≥ pmin·u
         for g in elig:

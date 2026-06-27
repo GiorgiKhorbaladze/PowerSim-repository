@@ -35,10 +35,16 @@ def test_bess_reserve_down_limited_by_empty_soc_and_headroom():
     assert h[0]['reserve_down']['R']['bat'] <= 5.01
     assert h[0]['reserve_shortfall']['R'] >= 14.9
 
+def test_symmetric_bess_reserve_requires_up_and_down_supply():
+    _,h,_=_solve(_inp(soc=0.85, req=20, direction='symmetric'))
+    assert h[0]['reserve_up']['R']['bat'] >= 19.9
+    assert h[0]['reserve_down']['R']['bat'] <= 5.01
+    assert h[0]['reserve_shortfall']['R'] >= 14.9
+
 def test_unsupported_eligible_asset_warned_not_silent():
     _,_,r=_solve(_inp())
     filt=r['diagnostics']['reserve_eligible_filtered']
     assert any(x['asset']=='dr1' and x['type']=='dr' for x in filt)
 
 if __name__=='__main__':
-    test_bess_can_satisfy_reserve_up_without_dispatch(); test_bess_reserve_up_limited_by_soc(); test_bess_reserve_down_limited_by_empty_soc_and_headroom(); test_unsupported_eligible_asset_warned_not_silent(); print('reserve storage tests passed')
+    test_bess_can_satisfy_reserve_up_without_dispatch(); test_bess_reserve_up_limited_by_soc(); test_bess_reserve_down_limited_by_empty_soc_and_headroom(); test_symmetric_bess_reserve_requires_up_and_down_supply(); test_unsupported_eligible_asset_warned_not_silent(); print('reserve storage tests passed')
