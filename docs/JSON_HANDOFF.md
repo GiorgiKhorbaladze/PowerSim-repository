@@ -178,3 +178,12 @@ A complete worked example: `samples/sample_results_168h.json`.
 | `output schema_version 'X' unsupported` | Mixing files from different PowerSim versions |
 | `hourly_system length N ≠ metadata.horizon_hours M` | Window size mismatch in rolling horizon — re-run with `rolling_step_h ≤ rolling_window_h` |
 | Excel KPIs look right but Compare tab shows zeros | One of the loaded scenarios doesn't have `system_summary` — confirm it's a results JSON, not an input JSON |
+
+## Solver hardening v1.6.0 notes
+
+- BESS can provide reserve up/down subject to discharge/charge headroom and SOC or empty-SOC over `reserve_duration_h` (default 1 hour).
+- Eligible reserve assets with unsupported provider types are surfaced in diagnostics (`reserve_eligible_filtered`) rather than silently ignored.
+- Rolling-horizon first-period ramp constraints use previous-window dispatch carryover where available.
+- `system_summary.total_cost_usd` remains production/gross cost for compatibility; `system_summary.total_objective_cost_usd` and `diagnostics.objective_breakdown` report the full objective and closure gap.
+- Stochastic summaries use full scenario result stores/objective costs and warn with `stochastic_profiles_not_switched` when no scenario-specific profiles or overrides are applied.
+- Limitations remain: not a full PLEXOS clone, simplified DC-OPF, no AC voltage/reactive power, and no reserve market settlement.
