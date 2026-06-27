@@ -38,6 +38,7 @@ jobs:
               scripts/batch.py \
               tests/smoke_168h.py \
               tests/test_maintenance.py \
+              tests/test_bess_plexos_parity.py \
               tests/check_json_contract.py \
               tests/test_rolling_carryover.py \
               tests/test_subhourly_ramp.py
@@ -55,6 +56,10 @@ jobs:
         run: python schema/powersim_schema.py
       - name: Maintenance enforcement test (deterministic)
         run: python tests/test_maintenance.py
+      - name: BESS PLEXOS-parity test (deterministic)
+        # Proves new optional BESS fields (self-discharge, asymmetric power,
+        # c-rate, aux load, ramp, end-SOC target) and aging output metrics.
+        run: python tests/test_bess_plexos_parity.py
       - name: JSON contract regression checks
         run: python tests/check_json_contract.py
       - name: Rolling-horizon carry-over deterministic tests

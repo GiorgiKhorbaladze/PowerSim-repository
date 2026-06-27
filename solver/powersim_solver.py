@@ -531,6 +531,15 @@ def solve_window(
     m.DR   = pyo.Set(initialize=dr_ids)
     m.PH   = pyo.Set(initialize=ph_ids)
 
+    # v1.5: BESS end-SOC target var must exist BEFORE the objective rule
+    # runs (Pyomo evaluates the rule once at component construction).
+    _bess_end_target = [b for b in bess_ids
+                        if assets[b].get("soc_end_target") is not None
+                        and float(assets[b].get("soc_end_penalty_usd_mwh", 0) or 0) > 0]
+    if _bess_end_target:
+        m.BessEndTgt = pyo.Set(initialize=_bess_end_target)
+        m.bess_end_short = pyo.Var(m.BessEndTgt, domain=pyo.NonNegativeReals)
+
     # ── Decision Variables ─────────────────────────────────────────────
     m.p  = pyo.Var(m.G,  m.T, domain=pyo.NonNegativeReals)  # dispatch MW
     m.u  = pyo.Var(m.GC, m.T, domain=pyo.Binary)            # commitment
@@ -561,10 +570,15 @@ def solve_window(
     m.RIDS = pyo.Set(initialize=res_ids)
     m.res_sh = pyo.Var(m.RIDS, m.T, domain=pyo.NonNegativeReals)
 
-    # Reserve allocation per eligible unit per product per hour
+    # Reserve allocation per eligible unit per product per hour.
+    # NB: BESS / DR / pumped-hydro reserve provision is not yet wired —
+    # silently filter them out so the solver doesn't crash on m.res_up[g]
+    # indexing (g must be in m.G). Schema validation warns the user.
     res_elig = {}  # {res_id: [eligible_asset_ids]}
+    _disp_set = set(disp_ids)
     for rp in reserve_prods:
-        res_elig[rp["id"]] = [u for u in rp.get("eligible_units",[]) if u in assets]
+        res_elig[rp["id"]] = [u for u in rp.get("eligible_units", [])
+                              if u in assets and u in _disp_set]
     m.res_up   = pyo.Var(m.RIDS, m.G, m.T, domain=pyo.NonNegativeReals)
     m.res_down = pyo.Var(m.RIDS, m.G, m.T, domain=pyo.NonNegativeReals)
 
@@ -673,8 +687,14 @@ def solve_window(
                 float(assets[h]["hydro"]["end_level_penalty"]) * m.end_short[h]
                 for h in m.GR_strat
             )
+        bess_end_pen = 0
+        if hasattr(m, "bess_end_short"):
+            bess_end_pen = sum(
+                float(assets[b].get("soc_end_penalty_usd_mwh", 0) or 0) * m.bess_end_short[b]
+                for b in m.BessEndTgt
+            )
         return fuel + start + noload + bess_cost + dr_cost + ph_cost \
-             + unserved_pen + res_pen + end_level_pen
+             + unserved_pen + res_pen + end_level_pen + bess_end_pen
     m.OBJ = pyo.Objective(rule=obj_rule, sense=pyo.minimize)
 
     # ── Network model — DC-OPF (v1.5) ────────────────────────────────
@@ -930,31 +950,111 @@ def solve_window(
             m.EndShort = pyo.Constraint(m.GR_strat, rule=end_short_c)
 
     # ── BESS Constraints ───────────────────────────────────────────────
+    # v1.5 PLEXOS-parity additions (all optional, gated by field presence):
+    #   self_discharge_pct_per_h   — fraction of SOC lost per hour
+    #   aux_mw                     — parasitic / standby draw (MW, always on)
+    #   charge_power_mw / discharge_power_mw — asymmetric inverter sizing
+    #   c_rate_max                 — additional P/E ratio cap
+    #   ramp_up_mw_min / ramp_down_mw_min — inverter ramp on |ch| and |dis|
+    #   soc_end_target / soc_end_penalty_usd_mwh — soft end-of-horizon target
+    def _bess_charge_cap(b):
+        a = assets[b]
+        cp = float(a.get("charge_power_mw", a.get("power_mw", 0)))
+        cr = a.get("c_rate_max")
+        if cr is not None:
+            cp = min(cp, float(cr) * float(a.get("energy_mwh", 0)))
+        return cp
+
+    def _bess_discharge_cap(b):
+        a = assets[b]
+        dp = float(a.get("discharge_power_mw", a.get("power_mw", 0)))
+        cr = a.get("c_rate_max")
+        if cr is not None:
+            dp = min(dp, float(cr) * float(a.get("energy_mwh", 0)))
+        return dp
+
     if bess_ids:
         def bess_soc(m, b, t):
             a  = assets[b]
             ec = float(a["eta_charge"])
             ed = float(a["eta_discharge"])
+            sd = float(a.get("self_discharge_pct_per_h", 0) or 0) / 100.0
+            aux = float(a.get("aux_mw", 0) or 0)
             if t == 1:
                 soc_prev = init_state.get(b, {}).get("soc",
                            float(a["soc_init"]) * float(a["energy_mwh"]))
             else:
                 soc_prev = m.soc[b,t-1]
             # ch/dis are MW; × dt converts to MWh per period.
-            return m.soc[b,t] == soc_prev + (ec * m.ch[b,t] - m.dis[b,t] / max(ed,0.001)) * dt
+            # Self-discharge: fraction lost over the period. aux: constant drain.
+            return m.soc[b,t] == soc_prev * (1.0 - sd * dt) \
+                   + (ec * m.ch[b,t] - m.dis[b,t] / max(ed,0.001) - aux) * dt
         def bess_soc_lb(m, b, t):
             return m.soc[b,t] >= float(assets[b]["soc_min"]) * float(assets[b]["energy_mwh"])
         def bess_soc_ub(m, b, t):
             return m.soc[b,t] <= float(assets[b]["soc_max"]) * float(assets[b]["energy_mwh"])
         def bess_ch_ub(m, b, t):
-            return m.ch[b,t] <= float(assets[b]["power_mw"]) * m.xch[b,t]
+            return m.ch[b,t] <= _bess_charge_cap(b) * m.xch[b,t]
         def bess_dis_ub(m, b, t):
-            return m.dis[b,t] <= float(assets[b]["power_mw"]) * (1 - m.xch[b,t])
+            return m.dis[b,t] <= _bess_discharge_cap(b) * (1 - m.xch[b,t])
         m.BessSOC   = pyo.Constraint(m.BESS, m.T, rule=bess_soc)
         m.BessSOCLB = pyo.Constraint(m.BESS, m.T, rule=bess_soc_lb)
         m.BessSOCUB = pyo.Constraint(m.BESS, m.T, rule=bess_soc_ub)
         m.BessCHUB  = pyo.Constraint(m.BESS, m.T, rule=bess_ch_ub)
         m.BessDISUB = pyo.Constraint(m.BESS, m.T, rule=bess_dis_ub)
+
+        # ── Ramp constraints on inverter charge / discharge ────────────
+        # Inverter MW/min × 60 × dt → MW/period delta cap.
+        ramp_ch_bess = [b for b in bess_ids
+                        if float(assets[b].get("ramp_up_mw_min", 0) or 0) > 0
+                        or float(assets[b].get("ramp_down_mw_min", 0) or 0) > 0]
+        if ramp_ch_bess:
+            def _bess_ch_ramp_up(m, b, t):
+                ru = float(assets[b].get("ramp_up_mw_min", 0) or 0) * 60.0 * dt
+                if ru <= 0:
+                    return pyo.Constraint.Skip
+                if t == 1:
+                    prev = float(init_state.get(b, {}).get("ch_prev", 0))
+                    return m.ch[b,t] - prev <= ru
+                return m.ch[b,t] - m.ch[b,t-1] <= ru
+            def _bess_ch_ramp_dn(m, b, t):
+                rd = float(assets[b].get("ramp_down_mw_min", 0) or 0) * 60.0 * dt
+                if rd <= 0:
+                    return pyo.Constraint.Skip
+                if t == 1:
+                    prev = float(init_state.get(b, {}).get("ch_prev", 0))
+                    return prev - m.ch[b,t] <= rd
+                return m.ch[b,t-1] - m.ch[b,t] <= rd
+            def _bess_dis_ramp_up(m, b, t):
+                ru = float(assets[b].get("ramp_up_mw_min", 0) or 0) * 60.0 * dt
+                if ru <= 0:
+                    return pyo.Constraint.Skip
+                if t == 1:
+                    prev = float(init_state.get(b, {}).get("dis_prev", 0))
+                    return m.dis[b,t] - prev <= ru
+                return m.dis[b,t] - m.dis[b,t-1] <= ru
+            def _bess_dis_ramp_dn(m, b, t):
+                rd = float(assets[b].get("ramp_down_mw_min", 0) or 0) * 60.0 * dt
+                if rd <= 0:
+                    return pyo.Constraint.Skip
+                if t == 1:
+                    prev = float(init_state.get(b, {}).get("dis_prev", 0))
+                    return prev - m.dis[b,t] <= rd
+                return m.dis[b,t-1] - m.dis[b,t] <= rd
+            m.BessChRampU  = pyo.Constraint(m.BESS, m.T, rule=_bess_ch_ramp_up)
+            m.BessChRampD  = pyo.Constraint(m.BESS, m.T, rule=_bess_ch_ramp_dn)
+            m.BessDisRampU = pyo.Constraint(m.BESS, m.T, rule=_bess_dis_ramp_up)
+            m.BessDisRampD = pyo.Constraint(m.BESS, m.T, rule=_bess_dis_ramp_dn)
+
+        # ── End-of-horizon SOC target (soft, penalized) ────────────────
+        # NB: m.BessEndTgt and m.bess_end_short are declared up-front (just
+        # after the index sets) so the objective rule sees them.
+        if hasattr(m, "bess_end_short"):
+            def _bess_end_short(m, b):
+                a = assets[b]
+                tgt_mwh = float(a["soc_end_target"]) * float(a["energy_mwh"])
+                return m.bess_end_short[b] >= tgt_mwh - m.soc[b, T[-1]]
+            m.BessEndShort = pyo.Constraint(m.BessEndTgt, rule=_bess_end_short)
 
         # v1.4: BESS depth-multiplier — split discharge into a 'deep'
         # component that's only non-zero when SOC is below the deep
@@ -1500,7 +1600,12 @@ def solve_window(
     for h_id in hydro_reg:
         fin_state.setdefault(h_id, {})["stor"] = pv(m.stor, h_id, boundary_t)
     for b in bess_ids:
-        fin_state.setdefault(b, {})["soc"] = pv(m.soc, b, boundary_t)
+        s = fin_state.setdefault(b, {})
+        s["soc"] = pv(m.soc, b, boundary_t)
+        # Carry final-period ch/dis MW so the next window's ramp
+        # constraint (if any) has a non-zero boundary.
+        s["ch_prev"]  = pv(m.ch,  b, boundary_t)
+        s["dis_prev"] = pv(m.dis, b, boundary_t)
     for h_id in ph_ids:
         fin_state.setdefault(h_id, {})["ph_soc"] = pv(m.ph_soc, h_id, boundary_t)
     if iis_report is not None:
@@ -1847,6 +1952,26 @@ def build_result_store(hourly: list, assets: dict, inp: dict, solve_time: float,
             "bus":           a.get("bus"),                              # for DC-OPF
             "curtailed_mwh": round(curt, 1)
         }
+        # v1.5: BESS aging metrics — cycle counter + calendar life used.
+        if atype == "bess":
+            cap = float(a.get("energy_mwh", 0) or 0)
+            ch_total  = sum((h.get("bess", {}).get(gid, {}) or {}).get("charge_mw", 0)
+                            * dt_h for h in hourly)
+            dis_total = sum((h.get("bess", {}).get(gid, {}) or {}).get("discharge_mw", 0)
+                            * dt_h for h in hourly)
+            throughput = ch_total + dis_total
+            equiv_cycles = throughput / (2.0 * cap) if cap > 0 else 0.0
+            life_cycles = a.get("lifetime_full_cycles")
+            life_years  = a.get("calendar_life_years")
+            study_yrs   = H_hours / 8760.0
+            by_unit[gid].update({
+                "bess_throughput_mwh":      round(throughput, 1),
+                "bess_equivalent_cycles":   round(equiv_cycles, 4),
+                "bess_cycle_life_used_pct": round(equiv_cycles / float(life_cycles) * 100, 3)
+                    if life_cycles and float(life_cycles) > 0 else None,
+                "bess_calendar_used_pct":   round(study_yrs / float(life_years) * 100, 3)
+                    if life_years and float(life_years) > 0 else None,
+            })
 
     # ── System summary ─────────────────────────────────────────────────
     total_cost    = sum(bu["gross_cost"]   for bu in by_unit.values())
@@ -2164,10 +2289,18 @@ def export_excel(results: dict, filename: str = "powersim_results.xlsx"):
                 comm_df[gid] = [r["commitment"] for r in rows]
             sheet("Commitment", comm_df)
 
-        # By Unit Summary
-        bu_rows = [[gid]+list(d.values()) for gid,d in results["by_unit_summary"].items()]
-        if bu_rows:
-            cols = ["id"] + list(results["by_unit_summary"][list(results["by_unit_summary"].keys())[0]].keys())
+        # By Unit Summary — union of all keys across assets (type-specific
+        # fields like bess_throughput_mwh appear only on BESS rows).
+        bu = results["by_unit_summary"]
+        if bu:
+            all_keys = []
+            seen = set()
+            for d in bu.values():
+                for k in d.keys():
+                    if k not in seen:
+                        all_keys.append(k); seen.add(k)
+            cols = ["id"] + all_keys
+            bu_rows = [[gid] + [d.get(k) for k in all_keys] for gid, d in bu.items()]
             sheet("By_Unit_Summary", pd.DataFrame(bu_rows, columns=cols))
 
         # Monthly

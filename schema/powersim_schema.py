@@ -353,6 +353,41 @@ def validate_input(inp: dict) -> tuple[bool, list[str], list[str]]:
             dth = a.get("soc_deep_threshold")
             if dth is not None and not (isinstance(dth, (int, float)) and 0 <= dth <= 1):
                 errors.append(f"bess '{aid}': soc_deep_threshold must be in [0, 1]")
+            # v1.5: PLEXOS-parity BESS fields (all optional, additive).
+            _bess_pos = {
+                "charge_power_mw":      "must be > 0",
+                "discharge_power_mw":   "must be > 0",
+                "ramp_up_mw_min":       "must be > 0",
+                "ramp_down_mw_min":     "must be > 0",
+                "c_rate_max":           "must be > 0",
+                "lifetime_full_cycles": "must be > 0",
+                "calendar_life_years":  "must be > 0",
+            }
+            for f, msg in _bess_pos.items():
+                v = a.get(f)
+                if v is not None and not (isinstance(v, (int, float)) and v > 0):
+                    errors.append(f"bess '{aid}': {f} {msg}")
+            _bess_nn = ("self_discharge_pct_per_h", "aux_mw",
+                        "soc_end_penalty_usd_mwh", "startup_energy_mwh")
+            for f in _bess_nn:
+                v = a.get(f)
+                if v is not None and not (isinstance(v, (int, float)) and v >= 0):
+                    errors.append(f"bess '{aid}': {f} must be ≥ 0")
+            sd = a.get("self_discharge_pct_per_h")
+            if sd is not None and sd > 100:
+                errors.append(f"bess '{aid}': self_discharge_pct_per_h must be ≤ 100")
+            tgt = a.get("soc_end_target")
+            if tgt is not None and not (isinstance(tgt, (int, float)) and 0 <= tgt <= 1):
+                errors.append(f"bess '{aid}': soc_end_target must be in [0, 1]")
+            for f in ("min_charge_h", "min_discharge_h", "min_idle_h"):
+                v = a.get(f)
+                if v is not None and not (isinstance(v, int) and v >= 0):
+                    errors.append(f"bess '{aid}': {f} must be a non-negative integer")
+            cap = float(a.get("energy_mwh", 0) or 0)
+            sep = a.get("startup_energy_mwh")
+            if sep is not None and cap > 0 and sep > cap:
+                errors.append(
+                    f"bess '{aid}': startup_energy_mwh {sep} exceeds energy_mwh {cap}")
 
         elif atype == "dr":
             # v1.4: demand-response / interruptible loads.
@@ -466,11 +501,22 @@ def validate_input(inp: dict) -> tuple[bool, list[str], list[str]]:
                     errors.append("demand_spec.annual_twh must be > 0")
 
     # ── reserves ────────────────────────────────────────────────────
+    _asset_type_by_id = {a.get("id"): a.get("type") for a in inp.get("assets") or []}
+    _RESERVE_INCOMPATIBLE = {"bess", "pumped_hydro", "dr"}
     for rp in inp.get("reserve_products") or []:
         rid = rp.get("id", "?")
         for uid in rp.get("eligible_units", []):
             if uid not in asset_ids:
                 errors.append(f"reserve '{rid}': unit '{uid}' not in assets")
+                continue
+            t = _asset_type_by_id.get(uid)
+            if t in _RESERVE_INCOMPATIBLE:
+                warnings.append(
+                    f"reserve '{rid}': unit '{uid}' is type '{t}' — reserve "
+                    f"provision is not yet wired for this asset type "
+                    f"(only dispatchable thermal / hydro / wind / solar / import "
+                    f"are currently supported). The solver will treat it as "
+                    f"non-eligible at run time.")
         if rp.get("direction") not in ("up", "down", "symmetric"):
             errors.append(
                 f"reserve '{rid}': bad direction '{rp.get('direction')}'")
