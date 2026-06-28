@@ -729,6 +729,11 @@ tr:hover td{background:var(--row-hover)}
             მცირე resolution ⇒ ცოტა საათი (problem size = horizon × 60/min).
           </div>
         </div>
+        <div class="field" title="Thermal Stage 3 — CO₂ emissions are priced via co2_factor_t_per_mwh × this $/t. 0 disables.">
+          <label>CO₂ price $/t (Thermal Stage 3)</label>
+          <input type="number" id="hor-co2-price" min="0" step="1" value="0"
+                 onchange="STATE.co2PriceUsdPerT=this.value===''?0:+this.value">
+        </div>
         <div class="field">
           <label>Solver backend (v1.3 #5)</label>
           <select id="hor-solver">
@@ -1283,6 +1288,7 @@ const STATE = {
   profiles:       {},   // {key: [float×8760]}
   reserveProducts: [],
   maintenance:    [],   // [{asset_id,start_h,end_h,event_type,availability_factor?,available_capacity_mw?,note?}]
+  co2PriceUsdPerT: 0,   // top-level CO₂ price (Thermal Stage 3)
   gasConfig:      {mode:'annual', annual_cap:1200, monthly:{}, applies_to:[]},
   horizon:        {year:2026, start_date:'2026-01-01', start_hour:0, horizon_h:8760,
                    mode:'auto', window_h:168, step_h:24},
@@ -1906,8 +1912,12 @@ function showAssetDetail(id){
 
   // ── BESS advanced (v1.5 PLEXOS-parity) editable inputs ──────────
   // Only rendered for type=bess; all fields optional, backward-compat.
-  let bessAdv = '';
-  if(a.type === 'bess'){
+  // ── Per-type advanced editor panels (PLEXOS-parity v1.5 fields) ─────
+  // BESS / Thermal / Solar / Wind: optional fields the LP picks up if set,
+  // otherwise unchanged behavior. Every input is two-way-bound to STATE so
+  // they round-trip through Export Input JSON.
+  let advancedPanel = '';
+  if(a.type === 'bess' || a.type === 'thermal' || a.type === 'solar' || a.type === 'wind'){
     const ci = STATE.assets.findIndex(x=>x.id===id);
     const inp = (fld, lbl, hint, step) => {
       const v = a[fld];
@@ -1917,26 +1927,101 @@ function showAssetDetail(id){
           onchange="const v=this.value===''?null:+this.value;STATE.assets[${ci}].${fld}=v;showAssetDetail('${id}')">
         </td></tr>`;
     };
-    bessAdv = `
+    const txtInp = (fld, lbl, hint) => {
+      const v = a[fld];
+      return `<tr><td style="color:var(--t3)" title="${hint||''}">${lbl}</td>
+        <td><input type="text" value="${v==null?'':v}" placeholder="profile key"
+          style="width:120px;font-size:8px"
+          onchange="STATE.assets[${ci}].${fld}=this.value||null;showAssetDetail('${id}')">
+        </td></tr>`;
+    };
+    const boolInp = (fld, lbl, hint) => {
+      const v = a[fld] === true;
+      return `<tr><td style="color:var(--t3)" title="${hint||''}">${lbl}</td>
+        <td><input type="checkbox" ${v?'checked':''}
+          onchange="STATE.assets[${ci}].${fld}=this.checked;showAssetDetail('${id}')">
+        </td></tr>`;
+    };
+    const arrInp = (fld, lbl, hint, len) => {
+      const v = a[fld];
+      const json = (Array.isArray(v) && v.length===len)
+        ? JSON.stringify(v.map(x=>x==null?null:+x))
+        : '';
+      return `<tr><td style="color:var(--t3)" title="${hint||''}">${lbl}</td>
+        <td><input type="text" value='${json}'
+          placeholder="[a,b,c,...] length ${len}" style="width:250px;font-size:8px;font-family:monospace"
+          onchange="try{const x=this.value.trim()?JSON.parse(this.value):null;if(x!=null&&(!Array.isArray(x)||x.length!==${len})){showBanner('${lbl}: must be a JSON list of length ${len}','r');return;}STATE.assets[${ci}].${fld}=x;}catch(e){showBanner('${lbl}: invalid JSON','r');}showAssetDetail('${id}')">
+        </td></tr>`;
+    };
+    const matInp = (fld, lbl, hint) => {
+      const v = a[fld];
+      const json = Array.isArray(v) ? JSON.stringify(v) : '';
+      return `<tr><td style="color:var(--t3)" title="${hint||''}">${lbl}</td>
+        <td><input type="text" value='${json}'
+          placeholder="[[x1,y1],[x2,y2],...]" style="width:250px;font-size:8px;font-family:monospace"
+          onchange="try{const x=this.value.trim()?JSON.parse(this.value):null;if(x!=null&&!Array.isArray(x)){showBanner('${lbl}: must be a JSON 2-D list','r');return;}STATE.assets[${ci}].${fld}=x;}catch(e){showBanner('${lbl}: invalid JSON','r');}showAssetDetail('${id}')">
+        </td></tr>`;
+    };
+
+    let rows = '', title = '';
+    if(a.type === 'bess'){
+      title = '🔋 BESS Advanced (PLEXOS-parity, optional)';
+      rows = [
+        inp('self_discharge_pct_per_h', 'self_discharge %/h',  'SOC fraction lost per hour when idle', '0.1'),
+        inp('aux_mw',                   'aux load MW',         'Parasitic / standby draw',           '0.1'),
+        inp('charge_power_mw',          'charge power MW',     'Asymmetric charge cap; defaults to power_mw'),
+        inp('discharge_power_mw',       'discharge power MW',  'Asymmetric discharge cap; defaults to power_mw'),
+        inp('c_rate_max',               'C-rate max',          'P/E ratio cap (e.g. 0.5 = 2-hr)',     '0.1'),
+        inp('ramp_up_mw_min',           'ramp ↑ MW/min',       'Inverter ramp-up limit'),
+        inp('ramp_down_mw_min',         'ramp ↓ MW/min',       'Inverter ramp-down limit'),
+        inp('soc_end_target',           'end-SOC target',      'Soft target (0–1 of energy_mwh)',     '0.05'),
+        inp('soc_end_penalty_usd_mwh',  'end-SOC penalty $/MWh','Soft-target shortfall penalty'),
+        inp('lifetime_full_cycles',     'lifetime cycles',     'For cycle-life-used % output metric', '1'),
+        inp('calendar_life_years',      'calendar life years', 'For calendar-life-used % output metric', '0.5'),
+      ].join('');
+    } else if(a.type === 'thermal'){
+      title = '🔥 Thermal Advanced (PLEXOS-parity, optional)';
+      rows = [
+        inp('co2_factor_t_per_mwh',     'CO₂ factor tCO₂/MWh', 'Per-MWh emissions; priced via top-level co2_price_usd_per_t', '0.01'),
+        inp('startup_cost_hot',         'startup_cost hot $',  'Hot-start cost (offline ≤ hot_start_threshold_h)'),
+        inp('startup_cost_cold',        'startup_cost cold $', 'Cold-start cost (offline > hot threshold)'),
+        inp('hot_start_threshold_h',    'hot threshold h',     'Hours offline that still qualify as hot', '1'),
+        matInp('temp_derating_curve',   'temp_derating_curve', '[[temp_c, capacity_factor], …]'),
+        txtInp('temp_profile_key',      'temp_profile_key',    'Ambient °C profile name (from Profiles tab)'),
+      ].join('');
+    } else if(a.type === 'solar'){
+      title = '☀️ Solar Advanced (PLEXOS-parity, optional)';
+      rows = [
+        inp('dc_ac_ratio',              'DC/AC ratio',         'DC array MW / AC inverter MW (1.0–1.4)', '0.05'),
+        inp('inverter_efficiency',      'inverter efficiency', 'AC-side efficiency (typical 0.95–0.98)', '0.01'),
+        inp('degradation_rate_per_year','degradation /year',   'Annual fractional capacity loss (typ 0.005)', '0.001'),
+        inp('commissioning_year',       'commissioning year',  'Used with degradation; defaults to study_year', '1'),
+        matInp('temp_derating_curve',   'temp_derating_curve', '[[temp_c, capacity_factor], …]'),
+        txtInp('temp_profile_key',      'temp_profile_key',    'Ambient °C profile name (from Profiles tab)'),
+      ].join('');
+    } else if(a.type === 'wind'){
+      title = '💨 Wind Advanced (PLEXOS-parity, optional)';
+      rows = [
+        inp('wake_loss_frac',           'wake loss frac',      'Farm-level constant loss (typ 0.05–0.15)', '0.01'),
+        inp('inverter_efficiency',      'inverter efficiency', 'AC-side efficiency (typ 0.95–0.98)', '0.01'),
+        inp('degradation_rate_per_year','degradation /year',   'Annual fractional capacity loss', '0.001'),
+        inp('commissioning_year',       'commissioning year',  'Used with degradation; defaults to study_year', '1'),
+        arrInp('monthly_availability_factor', 'monthly avail (Jan…Dec)',
+                'Length-12 list of monthly availability factors', 12),
+        boolInp('air_density_correction','air density correction','Scale by (T_ref_K)/(T_amb_K)'),
+        inp('density_ref_temp_c',       'density ref °C',      'Reference temp for density correction (IEC 15°C)', '1'),
+        matInp('temp_derating_curve',   'temp_derating_curve', '[[temp_c, capacity_factor], …]'),
+        txtInp('temp_profile_key',      'temp_profile_key',    'Ambient °C profile name (from Profiles tab)'),
+      ].join('');
+    }
+    advancedPanel = `
       <div style="margin-top:8px;padding:6px;background:var(--bg2);border-radius:5px">
         <div style="font-size:8px;color:var(--gold);font-weight:700;margin-bottom:4px">
-          🔋 BESS Advanced (PLEXOS-parity, optional)
+          ${title}
         </div>
-        <table style="font-size:8px;width:100%"><tbody>
-          ${inp('self_discharge_pct_per_h', 'self_discharge %/h',  'SOC fraction lost per hour when idle', '0.1')}
-          ${inp('aux_mw',                   'aux load MW',         'Parasitic / standby draw',           '0.1')}
-          ${inp('charge_power_mw',          'charge power MW',     'Asymmetric charge cap; defaults to power_mw')}
-          ${inp('discharge_power_mw',       'discharge power MW',  'Asymmetric discharge cap; defaults to power_mw')}
-          ${inp('c_rate_max',               'C-rate max',          'P/E ratio cap (e.g. 0.5 = 2-hr)',     '0.1')}
-          ${inp('ramp_up_mw_min',           'ramp ↑ MW/min',       'Inverter ramp-up limit')}
-          ${inp('ramp_down_mw_min',         'ramp ↓ MW/min',       'Inverter ramp-down limit')}
-          ${inp('soc_end_target',           'end-SOC target',      'Soft target (0–1 of energy_mwh)',     '0.05')}
-          ${inp('soc_end_penalty_usd_mwh',  'end-SOC penalty $/MWh','Soft-target shortfall penalty')}
-          ${inp('lifetime_full_cycles',     'lifetime cycles',     'For cycle-life-used % output metric', '1')}
-          ${inp('calendar_life_years',      'calendar life years', 'For calendar-life-used % output metric', '0.5')}
-        </tbody></table>
+        <table style="font-size:8px;width:100%"><tbody>${rows}</tbody></table>
         <div style="font-size:7px;color:var(--t3);margin-top:3px">
-          ცარიელი = ნაგულისხმევი / blank = default. ცვლილება ავტომატურად ხდება STATE-ში.
+          ცარიელი = ნაგულისხმევი / blank = default. ცვლილება ავტომატურად STATE-ში.
         </div>
       </div>`;
   }
@@ -1947,7 +2032,7 @@ function showAssetDetail(id){
       <div>
         <div class="sh">⚙️ Schema fields</div>
         <table style="font-size:8px"><tbody>${lines.join('')}${hydroRows}</tbody></table>
-        ${bessAdv}
+        ${advancedPanel}
       </div>
       <div>${resultsCard || '<div style="color:var(--t3);font-size:8px;padding:10px">📥 Import Results JSON to see operational metrics here.</div>'}</div>
     </div>`;
@@ -3180,6 +3265,7 @@ function buildInputPayload(){
     buses: (STATE.network && STATE.network.enabled && STATE.network.buses.length) ? STATE.network.buses : undefined,
     lines: (STATE.network && STATE.network.enabled && STATE.network.lines.length) ? STATE.network.lines : undefined,
     load_share_by_bus: (STATE.network && STATE.network.enabled && STATE.network.load_share_by_bus) ? STATE.network.load_share_by_bus : undefined,
+    co2_price_usd_per_t: (+STATE.co2PriceUsdPerT||0) > 0 ? +STATE.co2PriceUsdPerT : undefined,
     scenario_metadata:(function(){
       const sel=document.getElementById('hor-scenario');
       const sid=(sel&&sel.value)||'A_mean';
