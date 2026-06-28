@@ -472,7 +472,36 @@ def get_pmax_t(asset: dict, t_local: int, profiles: dict,
         base = float(asset.get("pmax", 0))
     # Maintenance derating applies uniformly to all asset types.
     global_h = int(offset_h + round(t_local * dt))
-    return base * _maint_factor(asset, global_h)
+    # v1.5 Thermal Stage 3 — optional ambient-temperature derating curve.
+    return base * _maint_factor(asset, global_h) * _temp_factor(asset, profiles, t_local)
+
+
+def _temp_factor(asset: dict, profiles: dict, t_local: int) -> float:
+    """Capacity multiplier from ``asset.temp_derating_curve`` evaluated at
+    ``profiles[asset.temp_profile_key][t_local]`` (ambient °C). Default 1.0
+    when the curve or profile is absent. Piecewise-linear, clamped to the
+    curve endpoints outside its domain.
+    """
+    curve = asset.get("temp_derating_curve")
+    key   = asset.get("temp_profile_key")
+    if not curve or not key:
+        return 1.0
+    series = profiles.get(key)
+    if not isinstance(series, list) or t_local >= len(series):
+        return 1.0
+    temp = float(series[t_local])
+    pts = sorted(curve, key=lambda p: float(p[0]))
+    if temp <= float(pts[0][0]):
+        return max(0.0, float(pts[0][1]))
+    if temp >= float(pts[-1][0]):
+        return max(0.0, float(pts[-1][1]))
+    for i in range(1, len(pts)):
+        t0, f0 = float(pts[i-1][0]), float(pts[i-1][1])
+        t1, f1 = float(pts[i][0]),   float(pts[i][1])
+        if temp <= t1:
+            frac = (temp - t0) / max(t1 - t0, 1e-9)
+            return max(0.0, f0 + frac * (f1 - f0))
+    return 1.0
 
 
 def _maint_factor(asset: dict, global_h: int) -> float:
@@ -671,6 +700,20 @@ def solve_window(
     m.y  = pyo.Var(m.GC, m.T, domain=pyo.Binary)            # startup
     m.z  = pyo.Var(m.GC, m.T, domain=pyo.Binary)            # shutdown
 
+    # v1.5 Thermal Stage 3 — multi-stage startup (hot vs cold). A unit
+    # qualifies for hot-start cost iff it was committed within the prior
+    # ``hot_start_threshold_h`` periods. Otherwise the cold cost applies.
+    _ms_start = [g for g in committable
+                 if assets[g].get("startup_cost_hot") is not None
+                 and assets[g].get("startup_cost_cold") is not None]
+    if _ms_start:
+        m.MSStart = pyo.Set(initialize=_ms_start)
+        m.y_hot = pyo.Var(m.MSStart, m.T, domain=pyo.Binary)
+        m._ms_hot_threshold = {
+            g: max(1, int(assets[g].get("hot_start_threshold_h", 3) or 3))
+            for g in _ms_start
+        }
+
     # v1.4: DR curtailment MW per period.
     if dr_ids:
         m.dr = pyo.Var(m.DR, m.T, domain=pyo.NonNegativeReals)
@@ -783,13 +826,32 @@ def solve_window(
                 for k in hrc_idx[g])
         return (assets[g]["_dispMC"] + assets[g].get("vom", 0)) * m.p[g, t] * dt
 
+    # CO₂ price for this window (0 disables the term cleanly).
+    inp_co2_price = float(solver_cfg.get("_co2_price_usd_per_t", 0) or 0)
+
     def obj_rule(m):
         fuel  = sum(_fuel_term(g, t) for g in disp_ids for t in m.T)
         # Startup is per-event (no dt); no-load is $/h so × dt.
-        start = sum(float(assets[g].get("startup_cost", 0)) * m.y[g, t]
-                    for g in committable for t in m.T)
+        # Multi-stage: hot for y_hot, cold for the residual (y - y_hot).
+        # Plain start cost still applies to assets without multi-stage fields.
+        def _startup_cost_g(g, t):
+            if g in (_ms_start if _ms_start else []):
+                hot  = float(assets[g]["startup_cost_hot"])
+                cold = float(assets[g]["startup_cost_cold"])
+                return hot * m.y_hot[g, t] + cold * (m.y[g, t] - m.y_hot[g, t])
+            return float(assets[g].get("startup_cost", 0)) * m.y[g, t]
+        start = sum(_startup_cost_g(g, t) for g in committable for t in m.T)
         noload= sum(float(assets[g].get("no_load_cost", 0)) * m.u[g, t] * dt
                     for g in committable for t in m.T)
+        # v1.5 Thermal Stage 3 — CO₂ cost on dispatched MWh per thermal unit.
+        cp = float(inp_co2_price)
+        co2_cost = 0
+        if cp > 0:
+            co2_cost = sum(
+                float(assets[g].get("co2_factor_t_per_mwh", 0) or 0)
+                * m.p[g, t] * dt * cp
+                for g in thermal for t in m.T
+            )
         # BESS: base vom + v1.4 cycle-depth degradation.
         # Throughput (|ch|+|dis|) × cycle_cost, plus an additional
         # depth_multiplier on discharge below soc_deep_threshold.
@@ -854,7 +916,7 @@ def solve_window(
             )
         return fuel + start + noload + bess_cost + dr_cost + ph_cost \
              + unserved_pen + res_pen + end_level_pen + bess_end_pen \
-             + spill_pen + stor_target_pen
+             + spill_pen + stor_target_pen + co2_cost
     m.OBJ = pyo.Objective(rule=obj_rule, sense=pyo.minimize)
 
     # ── Network model — DC-OPF (v1.5) ────────────────────────────────
@@ -967,6 +1029,27 @@ def solve_window(
 
     def yz_ub(m, g, t): return m.y[g,t] + m.z[g,t] <= 1
     m.YZUB = pyo.Constraint(m.GC, m.T, rule=yz_ub)
+
+    # v1.5 Thermal Stage 3 — multi-stage startup linking constraints.
+    # y_hot[g,t] ≤ y[g,t] and y_hot[g,t] ≤ Σ_{k=1..hot_h} u[g, t-k].
+    # The history window must look BACK; for periods where t-k < 1 we
+    # fold in init_state's prior on-state (1 if periods_on > k-1 else 0),
+    # so rolling-horizon boundaries don't gratuitously force cold-starts.
+    if _ms_start:
+        def _u_hist(m, g, t, k):
+            tk = t - k
+            if tk >= 1:
+                return m.u[g, tk]
+            # tk <= 0 ⇒ look in init_state: was the unit on at boundary?
+            prev_on = int((init_state.get(g, {}) or {}).get("periods_on", 0))
+            return 1.0 if prev_on >= (1 - tk) else 0.0
+        def _ms_hot_ub_y(m, g, t):
+            return m.y_hot[g, t] <= m.y[g, t]
+        def _ms_hot_ub_hist(m, g, t):
+            hth = m._ms_hot_threshold[g]
+            return m.y_hot[g, t] <= sum(_u_hist(m, g, t, k) for k in range(1, hth + 1))
+        m.MSHotUBy   = pyo.Constraint(m.MSStart, m.T, rule=_ms_hot_ub_y)
+        m.MSHotUBhist = pyo.Constraint(m.MSStart, m.T, rule=_ms_hot_ub_hist)
 
     # min_up / min_down are specified in HOURS; convert to periods.
     def _hours_to_periods(h): return max(1, int(math.ceil(h / dt)))
@@ -1681,6 +1764,9 @@ def solve_window(
         comm = {g: round(pv(m.u, g, t))    for g in committable}
         start_h = {g: round(pv(m.y, g, t)) for g in committable}
         shut_h  = {g: round(pv(m.z, g, t)) for g in committable}
+        # v1.5 Thermal Stage 3 — emit hot-start indicator for multi-stage units.
+        hot_h = ({g: round(pv(m.y_hot, g, t)) for g in _ms_start}
+                 if _ms_start else {})
 
         # Gas — reported as Mm³/h rate (intensive). Total volume per period
         # is `hgas × dt` but the output keeps the rate for back-compat.
@@ -1822,6 +1908,7 @@ def solve_window(
             "dispatch":        disp,
             "commitment":      comm,
             "startup":         start_h,
+            "startup_hot":     hot_h,
             "shutdown":        shut_h,
             "reserve_up":      res_up_h,
             "reserve_down":    res_down_h,
@@ -1909,7 +1996,8 @@ def solve_all(inp: dict, assets: dict, profiles: dict, gas_limits: dict) -> tupl
     demand  = profiles["demand"]
     reserve_prods = inp.get("reserve_products", [])
     solver_cfg    = dict(inp.get("solver_settings", {}))
-    # Pass network model into solve_window via solver_cfg piggyback.
+    # Pass CO₂ price + network model into solve_window via solver_cfg piggyback.
+    solver_cfg["_co2_price_usd_per_t"] = float(inp.get("co2_price_usd_per_t", 0) or 0)
     solver_cfg["_network"] = {
         "buses": inp.get("buses") or [],
         "lines": inp.get("lines") or [],
@@ -2178,7 +2266,14 @@ def build_result_store(hourly: list, assets: dict, inp: dict, solve_time: float,
         starts    = sum(1 for i,h in enumerate(hourly)
                         if h["startup"].get(gid,0) > 0.5)
         fuel_cost = energy * a["_dispMC"]
-        sc_cost   = starts * float(a.get("startup_cost",0))
+        # v1.5 Thermal Stage 3 — multi-stage startup cost reconstruction.
+        if a.get("startup_cost_hot") is not None and a.get("startup_cost_cold") is not None:
+            hot_n  = sum(1 for h in hourly if (h.get("startup_hot") or {}).get(gid, 0) > 0.5)
+            cold_n = starts - hot_n
+            sc_cost = (hot_n * float(a["startup_cost_hot"])
+                       + cold_n * float(a["startup_cost_cold"]))
+        else:
+            sc_cost = starts * float(a.get("startup_cost", 0))
         nl_cost   = oper_h * float(a.get("no_load_cost",0))
         vom_cost  = energy * float(a.get("vom",0))
         if atype == "dr":
@@ -2253,6 +2348,16 @@ def build_result_store(hourly: list, assets: dict, inp: dict, solve_time: float,
             by_unit[gid].update({
                 "total_spill_mm3":         round(spill_total, 4),
                 "total_hydro_release_mm3": round(release_total, 4),
+            })
+        # v1.5 Thermal Stage 3 — CO₂ emissions + cost per unit.
+        if atype == "thermal":
+            co2_factor = float(a.get("co2_factor_t_per_mwh", 0) or 0)
+            co2_price  = float(inp.get("co2_price_usd_per_t", 0) or 0)
+            total_co2  = energy * co2_factor
+            by_unit[gid].update({
+                "co2_factor_t_per_mwh": co2_factor,
+                "total_co2_t":          round(total_co2, 2),
+                "co2_cost_usd":         round(total_co2 * co2_price, 0),
             })
 
     # ── System summary ─────────────────────────────────────────────────
@@ -2493,7 +2598,11 @@ def build_result_store(hourly: list, assets: dict, inp: dict, solve_time: float,
             "total_fuel_cost":     round(sum(bu["fuel_cost"] for bu in by_unit.values()), 0),
             "total_startup_cost":  round(sum(bu["startup_cost"] for bu in by_unit.values()), 0),
             "hours_gas_used":      hours_gas_used,
-            "reserve_shortfall_mwh": res_shortfall
+            "reserve_shortfall_mwh": res_shortfall,
+            # v1.5 Thermal Stage 3 — system-wide CO₂ totals.
+            "total_co2_t":         round(sum(bu.get("total_co2_t", 0) for bu in by_unit.values()), 2),
+            "co2_price_usd_per_t": float(inp.get("co2_price_usd_per_t", 0) or 0),
+            "total_co2_cost_usd":  round(sum(bu.get("co2_cost_usd", 0) for bu in by_unit.values()), 0),
         },
         "hourly_system": [
             {
