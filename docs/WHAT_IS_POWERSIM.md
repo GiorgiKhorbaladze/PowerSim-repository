@@ -95,3 +95,9 @@ source data extracts.
 - `system_summary.total_cost_usd` remains production/gross cost for compatibility; `system_summary.total_objective_cost_usd` and `diagnostics.objective_breakdown` report the full objective and closure gap.
 - Stochastic summaries use full scenario result stores/objective costs and warn with `stochastic_profiles_not_switched` when no scenario-specific profiles or overrides are applied.
 - Limitations remain: not a full PLEXOS clone, simplified DC-OPF, no AC voltage/reactive power, and no reserve market settlement.
+
+## Adequacy & Expansion Stage 1
+
+PowerSim includes a Stage 1 adequacy screening layer for PASA-style planning questions. It computes LOLE, LOLP, EENS, peak shortfall, reserve margin, firm capacity, and an `adequacy_pass` flag from the same JSON inputs used by the UC/ED workflow. The module supports fast `deterministic_derated` screening and a seeded `monte_carlo` forced-outage mode.
+
+This is a transparent screening approximation, not a full PLEXOS PASA or long-term co-optimization. Thermal, hydro, and imports are derated by forced outage rate by default; wind and solar use availability profiles when supplied or capacity-credit assumptions otherwise; BESS firm capacity is limited to `min(power_mw, energy_mwh / required_storage_duration_h)`, defaulting to a 4-hour requirement. Recommended expansion builds should always be handed back to the UC/ED solver for chronological dispatch testing, and private GSE validation remains required before operational or investment decisions.

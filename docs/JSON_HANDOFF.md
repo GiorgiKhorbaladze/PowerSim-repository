@@ -229,3 +229,15 @@ A complete worked example: `samples/sample_results_168h.json`.
 - `system_summary.total_cost_usd` remains production/gross cost for compatibility; `system_summary.total_objective_cost_usd` and `diagnostics.objective_breakdown` report the full objective and closure gap.
 - Stochastic summaries use full scenario result stores/objective costs and warn with `stochastic_profiles_not_switched` when no scenario-specific profiles or overrides are applied.
 - Limitations remain: not a full PLEXOS clone, simplified DC-OPF, no AC voltage/reactive power, and no reserve market settlement.
+
+## Adequacy screening handoff
+
+Inputs may optionally include an `adequacy` block with `mode`, `samples`, `seed`, `lole_target_h`, `eens_target_mwh`, `reserve_margin_target_pct`, and `required_storage_duration_h`. Asset fields such as `for_rate`, `capacity_credit`, `firm_capacity_mw`, `outage_model`, and `adequacy_eligible` are optional and backward-compatible.
+
+Run adequacy from the command line:
+
+```bash
+python scripts/run_adequacy.py --input powersim_input.json --out-dir out/adequacy --mode deterministic_derated --write-expanded-input
+```
+
+The CLI writes `adequacy_summary.json`, optionally `adequacy_expansion_plan.json`, and, when requested, `expanded_input.json`. Expansion candidates under `expansion.mode = "adequacy_screening"` are added greedily by least annualized cost per firm MW until LOLE, EENS, and reserve margin targets pass or candidate limits are exhausted. The expanded input is a handoff artifact for later UC/ED testing; the adequacy workflow does not overwrite the source JSON.
