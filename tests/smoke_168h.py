@@ -4,9 +4,9 @@ PowerSim v4.0 — Stage 1 Smoke Test
 End-to-end verification that the full Stage 1 pipeline runs:
 
     dataio.build_input_from_project
-       └→ INPUT JSON validates against schema v1.1
+       └→ INPUT JSON validates against schema v1.5
     solver.main (UC/ED, 168h, 8 assets)
-       └→ RESULTS JSON validates against OUTPUT_SCHEMA v1.1
+       └→ RESULTS JSON validates against OUTPUT_SCHEMA v1.5
     simulated HTML importResults() structural check
        └→ pass
 
