@@ -122,6 +122,48 @@ Per-reservoir aggregates added to `by_unit_summary[hydro_reg_id]`:
 * `total_spill_mm3` — sum of `spill_mm3h * dt` over the horizon.
 * `total_hydro_release_mm3` — sum of `release_mm3h * dt` over the horizon.
 
+### v1.5 hydro Stage 2 additions
+
+Three optional fields close the most-impactful gaps versus PLEXOS-style
+hydro modeling. All default-safe — absence ⇒ unchanged behavior.
+
+```json
+"hydro": {
+  "min_release_mm3h":           0.090,
+  "storage_targets": {
+    "month_end":  [600,550,500,550,700,850,1000,1100,1050,950,850,750],
+    "penalty_usd_per_mm3":      50.0
+  },
+  "head_efficiency_curve": [
+    [reservoir_min,        260.0],
+    [reservoir_max * 0.4,  320.0],
+    [reservoir_max * 0.8,  370.0],
+    [reservoir_max,        400.0]
+  ]
+}
+```
+
+* **`min_release_mm3h`** — mandatory continuous flow (release + spill) per
+  hour for environmental / sanitary / downstream-water-rights compliance.
+  Default `0`. The constraint is `release_mm3h + spill_mm3h ≥ min_release_mm3h`
+  for every period. Both turbined release and bypass count toward the
+  ecological requirement.
+* **`storage_targets.month_end`** — list of 12 entries (Jan…Dec) giving
+  the desired reservoir level at the last hour of each calendar month
+  (`Mm³`). Any entry may be `null` to skip that month. The penalty
+  (`storage_targets.penalty_usd_per_mm3`) is applied per `Mm³` of
+  shortfall in the objective. Only month-ends that fall inside the
+  current window are enforced — full-year horizons see all 12, rolling
+  windows see whatever boundaries they cover.
+* **`head_efficiency_curve`** — list of `[stor_mm3, eff_mwh_per_mm3]`
+  breakpoints (strictly increasing in `stor_mm3`). The solver picks the
+  effective efficiency by piecewise-linear interpolation at the
+  reservoir's storage at the start of each window, then holds it
+  constant inside the window for LP-friendliness. Rolling-horizon runs
+  naturally refresh it every step, so seasonal head variation flows
+  through. When the curve is absent, the solver falls back to the
+  constant `hydro.efficiency`.
+
 ---
 
 ## Results JSON — `powersim_results.json`

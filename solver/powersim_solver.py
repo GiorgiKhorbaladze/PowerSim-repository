@@ -262,6 +262,38 @@ def load_input(path: str = "powersim_input.json") -> dict:
     return data
 
 
+def hydro_efficiency_at(ha: dict, stor_level: float) -> float:
+    """Return effective turbine efficiency (MWh/Mm³) at a given storage level.
+
+    If ``hydro.head_efficiency_curve`` is set — a list of ``[stor_mm3,
+    eff_mwh_per_mm3]`` breakpoints (any order; sorted internally) — the
+    return is the piecewise-linear interpolation at ``stor_level``,
+    clamped to the curve endpoints outside its domain. When the curve is
+    absent, falls back to ``hydro.efficiency`` (default 350).
+    """
+    curve = ha.get("head_efficiency_curve")
+    if not curve:
+        return float(ha.get("efficiency", 350))
+    pts = sorted(curve, key=lambda p: float(p[0]))
+    s = float(stor_level)
+    if s <= float(pts[0][0]):
+        return float(pts[0][1])
+    if s >= float(pts[-1][0]):
+        return float(pts[-1][1])
+    for i in range(1, len(pts)):
+        s0, e0 = float(pts[i - 1][0]), float(pts[i - 1][1])
+        s1, e1 = float(pts[i][0]),     float(pts[i][1])
+        if s <= s1:
+            frac = (s - s0) / max(s1 - s0, 1e-9)
+            return e0 + frac * (e1 - e0)
+    return float(ha.get("efficiency", 350))
+
+
+# Hour-of-year at the end of each calendar month (non-leap; 8760h total).
+_MONTH_END_HOURS = (744, 1416, 2160, 2880, 3624, 4344, 5088,
+                    5832, 6552, 7296, 8016, 8760)
+
+
 def normalize_hydro_inflow_profiles(inp: dict) -> dict:
     """Mutate ``inp`` so every hydro_reg ``inflow_profile`` is in Mm³/h.
 
@@ -601,6 +633,38 @@ def solve_window(
         m.BessEndTgt = pyo.Set(initialize=_bess_end_target)
         m.bess_end_short = pyo.Var(m.BessEndTgt, domain=pyo.NonNegativeReals)
 
+    # v1.5 Hydro Stage 2 — monthly reservoir storage targets.
+    # Targets are global-hour points; only month-ends falling inside the
+    # current window are enforceable. The shortfall var must exist before
+    # the objective so the rule sees it.
+    _window_end_h = offset_h + H * dt
+    _stor_target_specs = []   # list of (asset_id, month_idx, period_t, target_mm3, penalty)
+    for _h_id in hydro_reg:
+        _st = (assets[_h_id].get("hydro") or {}).get("storage_targets")
+        if not _st:
+            continue
+        _targets = _st.get("month_end") or []
+        _penalty = float(_st.get("penalty_usd_per_mm3", 50) or 0)
+        if _penalty <= 0 or len(_targets) != 12:
+            continue
+        for _m_idx, _target in enumerate(_targets):
+            if _target is None:
+                continue
+            _global_h = _MONTH_END_HOURS[_m_idx]
+            if _global_h <= offset_h or _global_h > _window_end_h:
+                continue
+            _t_at = int(round((_global_h - offset_h) / dt))
+            if 1 <= _t_at <= H:
+                _stor_target_specs.append(
+                    (_h_id, _m_idx, _t_at, float(_target), _penalty))
+    if _stor_target_specs:
+        m.StorTgt = pyo.Set(initialize=[(s[0], s[1]) for s in _stor_target_specs],
+                            dimen=2)
+        m.stor_target_short = pyo.Var(m.StorTgt, domain=pyo.NonNegativeReals)
+        m._stor_target_period   = {(s[0], s[1]): s[2] for s in _stor_target_specs}
+        m._stor_target_target   = {(s[0], s[1]): s[3] for s in _stor_target_specs}
+        m._stor_target_penalty  = {(s[0], s[1]): s[4] for s in _stor_target_specs}
+
     # ── Decision Variables ─────────────────────────────────────────────
     m.p  = pyo.Var(m.G,  m.T, domain=pyo.NonNegativeReals)  # dispatch MW
     m.u  = pyo.Var(m.GC, m.T, domain=pyo.Binary)            # commitment
@@ -782,8 +846,15 @@ def solve_window(
                 float(assets[b].get("soc_end_penalty_usd_mwh", 0) or 0) * m.bess_end_short[b]
                 for b in m.BessEndTgt
             )
+        stor_target_pen = 0
+        if hasattr(m, "stor_target_short"):
+            stor_target_pen = sum(
+                m._stor_target_penalty[(h, mo)] * m.stor_target_short[h, mo]
+                for (h, mo) in m._stor_target_penalty
+            )
         return fuel + start + noload + bess_cost + dr_cost + ph_cost \
-             + unserved_pen + res_pen + end_level_pen + bess_end_pen + spill_pen
+             + unserved_pen + res_pen + end_level_pen + bess_end_pen \
+             + spill_pen + stor_target_pen
     m.OBJ = pyo.Objective(rule=obj_rule, sense=pyo.minimize)
 
     # ── Network model — DC-OPF (v1.5) ────────────────────────────────
@@ -978,9 +1049,28 @@ def solve_window(
     if hydro_reg:
         # Periods per hour & upstream cascade delay in periods (was hours).
         _per_per_h = max(1, int(round(1 / dt)))
+        # v1.5 Hydro Stage 2 — head-dependent efficiency. Pre-compute a
+        # window-level effective efficiency per reservoir from the
+        # starting storage (init_state or reservoir_init). The efficiency
+        # is held constant inside the window for LP-friendliness and
+        # refreshes naturally each rolling window.
+        _hydro_eff = {}
+        # Include cascade upstreams (may be hydro_reg in any case) so the
+        # downstream balance uses the upstream's own effective curve.
+        _need = set(hydro_reg)
+        for h_id in hydro_reg:
+            up = (assets[h_id].get("hydro") or {}).get("cascade_upstream")
+            if up and up in assets:
+                _need.add(up)
+        for h_id in _need:
+            ha_id = assets[h_id].get("hydro") or {}
+            stor0 = init_state.get(h_id, {}).get(
+                "stor", float(ha_id.get("reservoir_init", 700)))
+            _hydro_eff[h_id] = hydro_efficiency_at(ha_id, stor0)
+
         def hydro_bal(m, h, t):
             ha   = assets[h]["hydro"]
-            eff  = float(ha.get("efficiency", 350))   # MWh/Mm³
+            eff  = _hydro_eff[h]                          # window-level
             infl_key = assets[h].get("inflow_profile")
             if infl_key and infl_key in profiles_w:
                 infl_rate = profiles_w[infl_key][t-1]     # Mm³/h rate
@@ -998,7 +1088,8 @@ def solve_window(
                 mode     = ha.get("cascade_flow_mode", "turbined_only")
                 t_upstream = t - delay_h * _per_per_h
                 if t_upstream >= 1:
-                    up_eff = float(assets[up_id].get("hydro", {}).get("efficiency", 350))
+                    up_eff = _hydro_eff.get(up_id,
+                        float((assets[up_id].get("hydro") or {}).get("efficiency", 350)))
                     up_turbined = m.p[up_id, t_upstream] / max(up_eff, 0.001)
                     if mode == "release_plus_spill":
                         cascade_in_rate = gain * (up_turbined + m.spill[up_id, t_upstream])
@@ -1013,6 +1104,28 @@ def solve_window(
             # Convert rates to per-period volumes by × dt.
             return m.stor[h, t] == stor_prev + (infl_rate_total - release_rate - m.spill[h, t]) * dt
         m.HydroBal = pyo.Constraint(m.GR, m.T, rule=hydro_bal)
+
+        # v1.5 Hydro Stage 2 — minimum environmental / sanitary release.
+        # Mandatory continuous flow (release + spill) for any plant with
+        # ``hydro.min_release_mm3h`` > 0. Both routes (turbined and bypass)
+        # reach the river, so either satisfies the ecological constraint.
+        def _min_release_rule(m, h, t):
+            mr = float((assets[h].get("hydro") or {}).get("min_release_mm3h", 0) or 0)
+            if mr <= 0:
+                return pyo.Constraint.Skip
+            eff = _hydro_eff[h]
+            return m.p[h, t] / max(eff, 0.001) + m.spill[h, t] >= mr
+        m.HydroMinRelease = pyo.Constraint(m.GR, m.T, rule=_min_release_rule)
+
+        # v1.5 Hydro Stage 2 — month-end storage target constraints. The
+        # short-fall vars + per-target metadata were declared up-front so
+        # the objective rule could see them; now wire the constraints.
+        if hasattr(m, "stor_target_short"):
+            def _stor_target_rule(m, h, mo):
+                t_at  = m._stor_target_period[(h, mo)]
+                tgt   = m._stor_target_target[(h, mo)]
+                return m.stor_target_short[h, mo] >= tgt - m.stor[h, t_at]
+            m.StorTargetShort = pyo.Constraint(m.StorTgt, rule=_stor_target_rule)
 
         def stor_lb(m, h, t):
             return m.stor[h,t] >= float(assets[h]["hydro"].get("reservoir_min",0))
@@ -1653,7 +1766,9 @@ def solve_window(
         if hydro_reg:
             for h_id in hydro_reg:
                 ha  = assets[h_id]["hydro"]
-                eff = float(ha.get("efficiency",350))
+                # Use the window's effective efficiency (head_efficiency_curve
+                # if set) so reported release matches what the LP balance saw.
+                eff = _hydro_eff.get(h_id, float(ha.get("efficiency", 350)))
                 rel = disp[h_id] / max(eff, 0.001)
                 infl_key = assets[h_id].get("inflow_profile")
                 infl = profiles_w.get(infl_key, [float(ha.get("inflow",0.05))]*(t))[t-1] if infl_key else float(ha.get("inflow",0.05))
