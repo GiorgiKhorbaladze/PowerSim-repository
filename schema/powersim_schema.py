@@ -434,6 +434,44 @@ def validate_input(inp: dict) -> tuple[bool, list[str], list[str]]:
                     warnings.append(
                         f"{atype} '{aid}': temp_derating_curve set but "
                         f"temp_profile_key missing — derating will be inert")
+            # v1.5 Wind Stage 5 — wind-only fields (wake / monthly mask /
+            # air-density correction). Validating here keeps a single
+            # wind+solar block; the solver checks atype before applying.
+            if atype == "wind":
+                wl = a.get("wake_loss_frac")
+                if wl is not None and not (isinstance(wl, (int, float))
+                                           and 0 <= wl <= 0.5):
+                    errors.append(
+                        f"wind '{aid}': wake_loss_frac must be in [0, 0.5] "
+                        f"(typical 0.05–0.15 for arrayed wind farms)")
+                mam = a.get("monthly_availability_factor")
+                if mam is not None:
+                    if not (isinstance(mam, list) and len(mam) == 12):
+                        errors.append(
+                            f"wind '{aid}': monthly_availability_factor "
+                            f"must be a list of 12 floats (Jan..Dec)")
+                    else:
+                        for j, v in enumerate(mam):
+                            if v is None:
+                                continue
+                            if not (isinstance(v, (int, float))
+                                    and 0 <= v <= 1.5):
+                                errors.append(
+                                    f"wind '{aid}': monthly_availability_factor[{j}] "
+                                    f"must be in [0, 1.5] or null")
+                adc = a.get("air_density_correction")
+                if adc is not None and not isinstance(adc, bool):
+                    errors.append(
+                        f"wind '{aid}': air_density_correction must be boolean")
+                rt = a.get("density_ref_temp_c")
+                if rt is not None and not (isinstance(rt, (int, float))
+                                           and -50 <= rt <= 60):
+                    errors.append(
+                        f"wind '{aid}': density_ref_temp_c must be in [-50, 60]")
+                if adc and not a.get("temp_profile_key"):
+                    warnings.append(
+                        f"wind '{aid}': air_density_correction=true but "
+                        f"temp_profile_key missing — correction will be inert")
         elif atype == "bess":
             for f in ("power_mw", "energy_mwh", "soc_init", "soc_min",
                       "soc_max", "eta_charge", "eta_discharge"):
