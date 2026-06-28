@@ -43,6 +43,7 @@ jobs:
               tests/test_hydro_stage2.py \
               tests/test_thermal_stage3.py \
               tests/test_solar_stage4.py \
+              tests/test_wind_stage5.py \
               tests/check_json_contract.py \
               tests/test_rolling_carryover.py \
               tests/test_subhourly_ramp.py
@@ -80,6 +81,10 @@ jobs:
         # Proves DC/AC ratio inverter clipping, inverter efficiency,
         # multi-year degradation factor, and temperature derating on solar.
         run: python tests/test_solar_stage4.py
+      - name: Wind Stage 5 test (deterministic)
+        # Proves wake_loss_frac, monthly_availability_factor mask, and
+        # air_density_correction (∝ 1/T_kelvin) — wind-only multipliers.
+        run: python tests/test_wind_stage5.py
       - name: JSON contract regression checks
         run: python tests/check_json_contract.py
       - name: Rolling-horizon carry-over deterministic tests

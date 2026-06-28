@@ -122,6 +122,52 @@ Per-reservoir aggregates added to `by_unit_summary[hydro_reg_id]`:
 * `total_spill_mm3` — sum of `spill_mm3h * dt` over the horizon.
 * `total_hydro_release_mm3` — sum of `release_mm3h * dt` over the horizon.
 
+### v1.5 wind Stage 5 additions
+
+Three optional wind-only fields layered on top of the generic VRE
+stack from Stage 4. All default-safe — absence ⇒ unchanged behavior.
+
+```json
+"wind_unit": {
+  "type":              "wind",
+  "pmax_installed":     200.0,
+  "availability_profile": "wind_cf",
+  "wake_loss_frac":      0.08,
+  "monthly_availability_factor":
+    [0.92, 0.95, 1.00, 1.00, 0.97, 0.95,
+     0.92, 0.93, 0.97, 1.00, 0.98, 0.93],
+  "air_density_correction": true,
+  "density_ref_temp_c":   15.0,
+  "temp_profile_key":     "tbilisi_amb_temp"
+}
+```
+
+Composed inside `_wind_extras_factor` and folded into `get_pmax_t` for
+wind units only:
+
+```
+factor = (1 − wake_loss_frac)
+       × monthly_availability_factor[month_of(t)]
+       × (273.15 + density_ref_temp_c) / (273.15 + amb_temp[t])
+```
+
+* **`wake_loss_frac`** — constant farm-level loss (typical 0.05–0.15
+  for arrayed farms). Default `0` ⇒ no derate.
+* **`monthly_availability_factor`** — 12 entries (Jan…Dec) captured
+  via the existing `_MONTH_END_HOURS` table. Useful for icing,
+  seasonal maintenance, or planned-outage patterns binned by month.
+  Any entry may be `null` to skip.
+* **`air_density_correction`** — boolean. When true, the existing
+  `temp_profile_key` is interpreted as ambient °C and wind power is
+  scaled by `(T_ref_K) / (T_amb_K)` (physically: cold air is denser,
+  so a turbine delivers more power; default reference 15 °C / 288.15 K
+  per IEC standard).
+
+Note: the full-horizon solver call now passes `study_horizon.start_hour`
+into `solve_window.offset_h` so the monthly mask, maintenance windows,
+and storage targets all use the correct global hour-of-year alignment
+when the study does not start at midnight on Jan 1.
+
 ### v1.5 solar / VRE Stage 4 additions
 
 Three optional `solar`/`wind` fields close the highest-impact PLEXOS PV
