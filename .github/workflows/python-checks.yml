@@ -40,6 +40,7 @@ jobs:
               tests/test_maintenance.py \
               tests/test_bess_plexos_parity.py \
               tests/test_hydro_inflow_units.py \
+              tests/test_hydro_stage2.py \
               tests/check_json_contract.py \
               tests/test_rolling_carryover.py \
               tests/test_subhourly_ramp.py
@@ -65,6 +66,10 @@ jobs:
         # Proves m³/s → Mm³/h inflow conversion, spill_cost penalty, and
         # cascade_flow_mode='release_plus_spill' downstream delivery.
         run: python tests/test_hydro_inflow_units.py
+      - name: Hydro Stage 2 test (deterministic)
+        # Proves min_release_mm3h, monthly storage_targets soft penalty,
+        # and head-dependent (window-level) efficiency curve.
+        run: python tests/test_hydro_stage2.py
       - name: JSON contract regression checks
         run: python tests/check_json_contract.py
       - name: Rolling-horizon carry-over deterministic tests

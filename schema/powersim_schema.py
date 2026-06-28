@@ -572,6 +572,58 @@ def validate_input(inp: dict) -> tuple[bool, list[str], list[str]]:
                 f"hydro '{aid}': cascade_flow_mode='release_plus_spill' set "
                 f"but no cascade_upstream — the mode will be inert.")
 
+        # v1.5 Hydro Stage 2 — min env release, storage targets, head curve.
+        mr = h.get("min_release_mm3h")
+        if mr is not None and not (isinstance(mr, (int, float)) and mr >= 0):
+            errors.append(f"hydro '{aid}': min_release_mm3h must be >= 0")
+        st = h.get("storage_targets")
+        if st is not None:
+            if not isinstance(st, dict):
+                errors.append(f"hydro '{aid}': storage_targets must be a dict")
+            else:
+                me = st.get("month_end")
+                if me is not None:
+                    if not (isinstance(me, list) and len(me) == 12):
+                        errors.append(
+                            f"hydro '{aid}': storage_targets.month_end "
+                            f"must be a list of 12 floats (Jan..Dec)")
+                    else:
+                        for i, v in enumerate(me):
+                            if v is None:
+                                continue
+                            if not (isinstance(v, (int, float)) and v >= 0):
+                                errors.append(
+                                    f"hydro '{aid}': storage_targets.month_end[{i}] "
+                                    f"must be >= 0 or null")
+                pen = st.get("penalty_usd_per_mm3")
+                if pen is not None and not (isinstance(pen, (int, float)) and pen >= 0):
+                    errors.append(
+                        f"hydro '{aid}': storage_targets.penalty_usd_per_mm3 "
+                        f"must be >= 0")
+        hec = h.get("head_efficiency_curve")
+        if hec is not None:
+            if not (isinstance(hec, list) and len(hec) >= 2):
+                errors.append(
+                    f"hydro '{aid}': head_efficiency_curve must be a list "
+                    f"of ≥2 [stor_mm3, eff_mwh_per_mm3] pairs")
+            else:
+                prev_s = -1.0
+                for j, pt in enumerate(hec):
+                    if not (isinstance(pt, (list, tuple)) and len(pt) == 2
+                            and isinstance(pt[0], (int, float))
+                            and isinstance(pt[1], (int, float))
+                            and pt[0] >= 0 and pt[1] > 0):
+                        errors.append(
+                            f"hydro '{aid}': head_efficiency_curve[{j}] "
+                            f"must be [stor>=0, eff>0]")
+                        break
+                    if pt[0] <= prev_s:
+                        errors.append(
+                            f"hydro '{aid}': head_efficiency_curve breakpoints "
+                            f"must strictly increase in stor_mm3")
+                        break
+                    prev_s = pt[0]
+
     # ── Stage 2: monthly gas_constraints validation ─────────────────
     gc = inp.get("gas_constraints") or {}
     if gc:

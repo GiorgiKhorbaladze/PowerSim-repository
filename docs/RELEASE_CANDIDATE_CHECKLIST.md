@@ -200,15 +200,20 @@ Expected artifacts:
   management or hydrological operations model. PR #11 added deterministic
   carry-over coverage for BESS SOC and reservoir/hydro state; PR #14 added the
   `Seasonal` → `hydro_ror` mapping and aggregate installed-capacity fixture.
-  Hydro Stage 1 (this RC iteration) adds a single inflow-unit normalization
-  layer (`profile_bundle.hydro_inflow_unit` → Mm³/h via
+  Hydro Stage 1 added a single inflow-unit normalization layer
+  (`profile_bundle.hydro_inflow_unit` → Mm³/h via
   `normalize_hydro_inflow_rate()`), an optional `spill_cost_usd_per_mm3`
   objective term, and an optional `cascade_flow_mode` (`"turbined_only"` |
-  `"release_plus_spill"`) for downstream reservoirs. Deterministic coverage
-  in `tests/test_hydro_inflow_units.py`. The model still does NOT include
-  head-dependent efficiency, evaporation, sedimentation, head-pond
-  bathymetry, or environmental flow constraints — those are out of scope
-  for v1.0 RC.
+  `"release_plus_spill"`) for downstream reservoirs. Hydro Stage 2 adds
+  optional `hydro.min_release_mm3h` (mandatory environmental flow
+  constraint), `hydro.storage_targets.month_end` (12-month soft penalty
+  trajectory), and `hydro.head_efficiency_curve` (piecewise-linear
+  efficiency-vs-storage, window-level scalar). Deterministic coverage in
+  `tests/test_hydro_inflow_units.py` (Stage 1) and
+  `tests/test_hydro_stage2.py` (Stage 2). The model still does NOT
+  include evaporation, sedimentation, head-pond bathymetry, tail-water
+  dynamics, or hydrological scenario ensembles — those remain out of
+  scope for v1.0 RC.
 * **Synthetic/demo registry readiness only.** PowerSim is demo-ready for the
   synthetic `project_data/` and public 2026 demo registry workflow, including the
   PR #15 validator for the committed 131-asset demo registry. This does not mean
