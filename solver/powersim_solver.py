@@ -478,6 +478,10 @@ def get_pmax_t(asset: dict, t_local: int, profiles: dict,
         cf_clipped = min(1.0, cf * dc_ac) * inv_eta
         deg = float(asset.get("_degradation_factor", 1.0) or 1.0)
         base = float(asset.get("pmax_installed", asset.get("pmax", 0))) * cf_clipped * deg
+        # v1.5 Wind Stage 5 — wind-only multipliers: wake losses, monthly
+        # availability mask, and air-density (∝ 1/T_kelvin) correction.
+        if atype == "wind":
+            base *= _wind_extras_factor(asset, profiles, t_local, offset_h, dt)
     elif atype == "hydro_ror":
         prof_key = asset.get("availability_profile")
         cf = profiles.get(prof_key, [asset.get("cf", 0.65)] * (t_local + 1))[t_local] if prof_key else asset.get("cf", 0.65)
@@ -522,6 +526,55 @@ def _temp_factor(asset: dict, profiles: dict, t_local: int) -> float:
             frac = (temp - t0) / max(t1 - t0, 1e-9)
             return max(0.0, f0 + frac * (f1 - f0))
     return 1.0
+
+
+def _wind_extras_factor(asset: dict, profiles: dict, t_local: int,
+                        offset_h: int = 0, dt: float = 1.0) -> float:
+    """Wind-only post-multipliers applied on top of the generic
+    wind/solar capacity factor inside :func:`get_pmax_t`.
+
+    Composes three multiplicative effects:
+
+    * **Wake loss** — constant farm-level loss factor
+      ``(1 − asset.wake_loss_frac)``. Default 0.
+    * **Monthly availability mask** — uses ``_MONTH_END_HOURS`` to map
+      the global hour at this period to a calendar month and multiplies
+      by ``asset.monthly_availability_factor[month]`` when supplied.
+      Captures icing, winter degradation, monthly-binned planned outages.
+    * **Air-density correction** — wind power ∝ density ∝ 1/T_kelvin
+      at constant pressure. When ``air_density_correction = true`` and
+      ``temp_profile_key`` is set, the factor is
+      ``(T_ref_K) / (273.15 + amb_temp[t])``. ``density_ref_temp_c``
+      defaults to 15 °C (288.15 K, IEC standard).
+
+    Returns 1.0 when no wind-specific field is set (full back-compat).
+    """
+    factor = 1.0
+    wl = float(asset.get("wake_loss_frac", 0) or 0)
+    if wl > 0:
+        factor *= max(0.0, 1.0 - wl)
+    mam = asset.get("monthly_availability_factor")
+    if isinstance(mam, list) and len(mam) == 12:
+        global_h = int(offset_h + round(t_local * dt))
+        m_idx = 0
+        for j, hh in enumerate(_MONTH_END_HOURS):
+            if global_h < hh:
+                m_idx = j
+                break
+        v = mam[m_idx]
+        if v is not None:
+            factor *= max(0.0, float(v))
+    if asset.get("air_density_correction"):
+        key = asset.get("temp_profile_key")
+        series = profiles.get(key) if key else None
+        if isinstance(series, list) and t_local < len(series):
+            ref_c = float(asset.get("density_ref_temp_c", 15.0) or 15.0)
+            amb_c = float(series[t_local])
+            ref_k = 273.15 + ref_c
+            amb_k = 273.15 + amb_c
+            if amb_k > 1e-3:
+                factor *= ref_k / amb_k
+    return factor
 
 
 def _maint_factor(asset: dict, global_h: int) -> float:
@@ -2013,6 +2066,7 @@ def solve_all(inp: dict, assets: dict, profiles: dict, gas_limits: dict) -> tupl
     """
     sh      = inp.get("study_horizon", {})
     H_total_h = int(sh.get("horizon_hours", len(profiles.get("demand", [])) or HOURS_PER_YEAR))
+    start_h   = int(sh.get("start_hour", 0))
     demand  = profiles["demand"]
     reserve_prods = inp.get("reserve_products", [])
     solver_cfg    = dict(inp.get("solver_settings", {}))
@@ -2044,7 +2098,7 @@ def solve_all(inp: dict, assets: dict, profiles: dict, gas_limits: dict) -> tupl
               f"({H_total_h}h @ {r_min}min)")
         hourly, fin_state, swall, obj_val = solve_window(
             assets, demand[:H_total_p], profiles, reserve_prods, gas_limits,
-            init_state={}, solver_cfg=solver_cfg, offset_h=0, dt=dt_h)
+            init_state={}, solver_cfg=solver_cfg, offset_h=start_h, dt=dt_h)
         if fin_state.get("_iis_report"):
             iis_reports.append(fin_state["_iis_report"])
         solve_all._iis_reports = iis_reports   # piggyback for build_result_store
