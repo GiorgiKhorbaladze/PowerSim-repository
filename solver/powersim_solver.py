@@ -79,6 +79,42 @@ MODEL_VERSION  = _MODEL_VER
 HOURS_PER_YEAR = 8760
 SOLVER_VERSION = "powersim_solver 1.3.0"   # v1.3: sub-hourly, Gurobi, warm-start, heat-rate curves
 
+_MONTH_ABBR_TO_NUM = {m.lower(): i for i, m in enumerate(("Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"), start=1)}
+
+def _month_key_to_num(k):
+    if isinstance(k, int):
+        return k if 1 <= k <= 12 else None
+    ks = str(k).strip()
+    if ks.isdigit():
+        v = int(ks); return v if 1 <= v <= 12 else None
+    return _MONTH_ABBR_TO_NUM.get(ks[:3].lower())
+
+def _monthly_value(mapping, month, default=0.0):
+    if not isinstance(mapping, dict):
+        return default
+    for k, v in mapping.items():
+        if _month_key_to_num(k) == month:
+            return float(v)
+    return default
+
+def _hydro_water_value_for_period(asset, profiles_w, t, offset_h=0, dt=1.0, study_year=2026):
+    h = asset.get("hydro") or {}
+    base = float(h.get("water_value", 0) or 0)
+    key = h.get("water_value_profile_key")
+    if key and key in profiles_w:
+        arr = profiles_w[key]
+        if isinstance(arr, list) and t - 1 < len(arr):
+            return max(base, float(arr[t-1] or 0))
+    prof = h.get("water_value_profile")
+    if isinstance(prof, dict):
+        month = (datetime(study_year, 1, 1) + timedelta(hours=offset_h + (t - 1) * dt)).month
+        return max(base, _monthly_value(prof, month, base))
+    return base
+
+def _head_efficiency_mode(hydro):
+    curve = (hydro or {}).get("head_efficiency_curve")
+    return "two_bin" if isinstance(curve, list) and len(curve) >= 2 else "fixed"
+
 
 # ══════════════════════════════════════════════════════════════════════
 #  RESOLUTION HELPERS  (v1.3 sub-hourly support)
@@ -502,6 +538,7 @@ def solve_window(
     Returns: (hourly_results, final_state, solve_time_s)
     """
     H   = len(demand_w)
+    study_year = int(solver_cfg.get("_study_year", 2026) or 2026)
     T   = list(range(1, H + 1))    # 1-indexed periods
     m   = pyo.ConcreteModel()
 
@@ -586,6 +623,9 @@ def solve_window(
     if hydro_reg:
         m.stor  = pyo.Var(m.GR, m.T, domain=pyo.NonNegativeReals)
         m.spill = pyo.Var(m.GR, m.T, domain=pyo.NonNegativeReals)
+        m.rc_min_slack = pyo.Var(m.GR, m.T, domain=pyo.NonNegativeReals)
+        m.rc_max_slack = pyo.Var(m.GR, m.T, domain=pyo.NonNegativeReals)
+        m.rc_target_short = pyo.Var(m.GR, m.T, domain=pyo.NonNegativeReals)
 
     # BESS charge/discharge/SOC
     if bess_ids:
@@ -639,6 +679,10 @@ def solve_window(
             return fp * 0.9478 * dt * sum(
                 m.hrc_lam[g, k, t] * pts[k][0] * pts[k][1]
                 for k in hrc_idx[g])
+        if assets[g].get("type") in ("hydro_reg", "hydro_ror"):
+            mc = max(float(assets[g].get("_dispMC", 0) or 0),
+                     _hydro_water_value_for_period(assets[g], profiles_w, t, offset_h, dt, study_year))
+            return (mc + assets[g].get("vom", 0)) * m.p[g, t] * dt
         return (assets[g]["_dispMC"] + assets[g].get("vom", 0)) * m.p[g, t] * dt
 
     def obj_rule(m):
@@ -687,6 +731,14 @@ def solve_window(
                 float(assets[h]["hydro"]["end_level_penalty"]) * m.end_short[h]
                 for h in m.GR_strat
             )
+        rule_curve_pen = 0
+        if hydro_reg and hasattr(m, "rc_min_slack"):
+            rule_curve_pen = sum(
+                float((assets[h]["hydro"].get("rule_curve") or {}).get("min_violation_penalty_usd_per_mm3", 10000.0)) * m.rc_min_slack[h, t]
+                + float((assets[h]["hydro"].get("rule_curve") or {}).get("max_violation_penalty_usd_per_mm3", 1000.0)) * m.rc_max_slack[h, t]
+                + float((assets[h]["hydro"].get("rule_curve") or {}).get("target_penalty_usd_per_mm3", 20.0)) * m.rc_target_short[h, t]
+                for h in m.GR for t in m.T
+            )
         bess_end_pen = 0
         if hasattr(m, "bess_end_short"):
             bess_end_pen = sum(
@@ -694,7 +746,7 @@ def solve_window(
                 for b in m.BessEndTgt
             )
         return fuel + start + noload + bess_cost + dr_cost + ph_cost \
-             + unserved_pen + res_pen + end_level_pen + bess_end_pen
+             + unserved_pen + res_pen + end_level_pen + rule_curve_pen + bess_end_pen
     m.OBJ = pyo.Objective(rule=obj_rule, sense=pyo.minimize)
 
     # ── Network model — DC-OPF (v1.5) ────────────────────────────────
@@ -925,6 +977,36 @@ def solve_window(
         m.StorLB  = pyo.Constraint(m.GR, m.T, rule=stor_lb)
         m.StorUB  = pyo.Constraint(m.GR, m.T, rule=stor_ub)
         m.StorEnd = pyo.Constraint(m.GR, rule=stor_end)
+
+        def _rc_month(t):
+            return (datetime(study_year, 1, 1) + timedelta(hours=offset_h + (t - 1) * dt)).month
+        def rc_min_c(m, h, t):
+            rc = assets[h]["hydro"].get("rule_curve") or {}
+            frac = _monthly_value(rc.get("monthly_min_frac"), _rc_month(t), 0.0)
+            return m.stor[h, t] + m.rc_min_slack[h, t] >= frac * float(assets[h]["hydro"].get("reservoir_max", 0) or 0)
+        def rc_max_c(m, h, t):
+            rc = assets[h]["hydro"].get("rule_curve") or {}
+            frac = _monthly_value(rc.get("monthly_max_frac"), _rc_month(t), 1.0)
+            return m.stor[h, t] - m.rc_max_slack[h, t] <= frac * float(assets[h]["hydro"].get("reservoir_max", 0) or 0)
+        def rc_target_c(m, h, t):
+            rc = assets[h]["hydro"].get("rule_curve") or {}
+            frac = _monthly_value(rc.get("monthly_target_frac"), _rc_month(t), 0.0)
+            return m.rc_target_short[h, t] >= frac * float(assets[h]["hydro"].get("reservoir_max", 0) or 0) - m.stor[h, t]
+        m.RuleCurveMin = pyo.Constraint(m.GR, m.T, rule=rc_min_c)
+        m.RuleCurveMax = pyo.Constraint(m.GR, m.T, rule=rc_max_c)
+        m.RuleCurveTarget = pyo.Constraint(m.GR, m.T, rule=rc_target_c)
+
+        def min_release_c(m, h, t):
+            ha = assets[h]["hydro"]
+            min_rel = float(ha.get("min_release_mm3_per_h", 0) or 0)
+            key = ha.get("min_release_profile")
+            if key and key in profiles_w and isinstance(profiles_w[key], list) and t - 1 < len(profiles_w[key]):
+                min_rel = float(profiles_w[key][t-1] or 0)
+            if min_rel <= 0:
+                return pyo.Constraint.Skip
+            eff = float(ha.get("efficiency", 350))
+            return m.p[h, t] / max(eff, 0.001) + m.spill[h, t] >= min_rel
+        m.HydroMinRelease = pyo.Constraint(m.GR, m.T, rule=min_release_c)
 
         # ── Stage 2: strategic end-of-horizon soft penalty ──────────
         # Purpose: discourage myopic depletion over the horizon when the
@@ -1505,7 +1587,12 @@ def solve_window(
                     "storage_mm3":  round(pv(m.stor, h_id, t), 3),
                     "release_mm3h": round(rel, 5),
                     "inflow_mm3h":  round(infl, 5),
-                    "spill_mm3h":   round(pv(m.spill, h_id, t), 5)
+                    "spill_mm3h":   round(pv(m.spill, h_id, t), 5),
+                    "rule_curve_min_violation_mm3": round(pv(m.rc_min_slack, h_id, t), 5),
+                    "rule_curve_target_shortfall_mm3": round(pv(m.rc_target_short, h_id, t), 5),
+                    "rule_curve_max_violation_mm3": round(pv(m.rc_max_slack, h_id, t), 5),
+                    "water_value_usd_per_mwh": round(_hydro_water_value_for_period(assets[h_id], profiles_w, t, offset_h, dt, study_year), 3),
+                    "head_efficiency_mode": _head_efficiency_mode(ha)
                 }
 
         # DR curtailment per period.
@@ -1655,6 +1742,8 @@ def solve_all(inp: dict, assets: dict, profiles: dict, gas_limits: dict) -> tupl
     window_p = window_h * periods_per_h
     step_p   = step_h   * periods_per_h
 
+    solver_cfg = dict(solver_cfg)
+    solver_cfg["_study_year"] = int((inp.get("metadata") or {}).get("study_year", 2026) or 2026)
     warm_start_enabled = bool(solver_cfg.get("warm_start", False))
 
     use_rolling = H_total_p > window_p
@@ -1953,6 +2042,20 @@ def build_result_store(hourly: list, assets: dict, inp: dict, solve_time: float,
             "curtailed_mwh": round(curt, 1)
         }
         # v1.5: BESS aging metrics — cycle counter + calendar life used.
+        if atype in ("hydro_reg", "hydro_ror"):
+            hrows = [(hr.get("hydro", {}).get(gid, {}) or {}) for hr in hourly]
+            if hrows:
+                by_unit[gid].update({
+                    "total_inflow_mm3": round(sum(r.get("inflow_mm3h", 0) for r in hrows) * dt_h, 4),
+                    "total_release_mm3": round(sum(r.get("release_mm3h", 0) for r in hrows) * dt_h, 4),
+                    "total_spill_mm3": round(sum(r.get("spill_mm3h", 0) for r in hrows) * dt_h, 4),
+                    "ending_storage_mm3": round(hrows[-1].get("storage_mm3", 0), 4),
+                    "rule_curve_min_violation_mm3": round(sum(r.get("rule_curve_min_violation_mm3", 0) for r in hrows), 4),
+                    "rule_curve_target_shortfall_mm3": round(sum(r.get("rule_curve_target_shortfall_mm3", 0) for r in hrows), 4),
+                    "rule_curve_max_violation_mm3": round(sum(r.get("rule_curve_max_violation_mm3", 0) for r in hrows), 4),
+                    "average_water_value_usd_per_mwh": round(sum(r.get("water_value_usd_per_mwh", 0) for r in hrows) / max(len(hrows), 1), 3),
+                    "head_efficiency_mode": hrows[-1].get("head_efficiency_mode", _head_efficiency_mode(a.get("hydro") or {})),
+                })
         if atype == "bess":
             cap = float(a.get("energy_mwh", 0) or 0)
             ch_total  = sum((h.get("bess", {}).get(gid, {}) or {}).get("charge_mw", 0)

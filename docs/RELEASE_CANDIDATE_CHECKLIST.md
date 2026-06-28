@@ -196,8 +196,9 @@ Expected artifacts:
   dispatch and scenario comparison; full nodal or zonal transmission constraints
   are not a v1.0 RC claim.
 * **Hydro simplifications.** Hydro is represented with practical reservoir,
-  cascade, water-value, and target-end-level assumptions, not a complete water
-  management or hydrological operations model. PR #11 added deterministic
+  cascade, water-value, target-end-level, optional seasonal rule-curve, minimum-release,
+  and simplified head-efficiency assumptions, not a complete water management or
+  hydrological operations model. PR #11 added deterministic
   carry-over coverage for BESS SOC and reservoir/hydro state; PR #14 added the
   `Seasonal` → `hydro_ror` mapping and aggregate installed-capacity fixture.
 * **Synthetic/demo registry readiness only.** PowerSim is demo-ready for the

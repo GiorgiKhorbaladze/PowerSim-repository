@@ -63,7 +63,23 @@ On any `hydro_reg`/`hydro_ror` asset, the `hydro` sub-dict may carry:
   "cascade_travel_delay_h":     2,
   "cascade_gain":            0.97,
   "target_end_level_frac":   0.85,
-  "end_level_penalty":      20.0
+  "end_level_penalty":      20.0,
+  "rule_curve": {
+    "monthly_min_frac": {"Jan": 0.40},
+    "monthly_max_frac": {"Jan": 1.00},
+    "monthly_target_frac": {"Apr": 0.60},
+    "target_penalty_usd_per_mm3": 20.0,
+    "min_violation_penalty_usd_per_mm3": 10000.0,
+    "max_violation_penalty_usd_per_mm3": 1000.0
+  },
+  "water_value_profile": {"Jan": 45.0, "May": 20.0},
+  "water_value_profile_key": "_water_value_enguri",
+  "min_release_mm3_per_h": 1.0,
+  "min_release_profile": "_enguri_min_release",
+  "head_efficiency_curve": [
+    {"storage_frac": 0.20, "efficiency": 280.0},
+    {"storage_frac": 1.00, "efficiency": 390.0}
+  ]
 }
 ```
 
@@ -72,6 +88,7 @@ Validation (`schema.validate_input`) enforces:
 * `cascade_upstream` references an existing asset; not self.
 * `cascade_travel_delay_h ∈ [0, 168]` integer.
 * `target_end_level_frac ∈ [0, 1]`; `end_level_penalty ≥ 0`.
+* Hydro Stage 2 fields are optional and backward-compatible: monthly rule-curve fractions are relative to `reservoir_max`; rule-curve violations use soft slacks and USD/Mm³ penalties; water value can be fixed, monthly, or profile-based; `min_release_*` enforces turbine release plus spill; `head_efficiency_curve` is currently reported as simplified `two_bin` diagnostics rather than full nonlinear head modeling.
 
 ---
 

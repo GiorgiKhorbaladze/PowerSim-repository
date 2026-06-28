@@ -42,7 +42,7 @@ PowerSim does not currently claim:
 * full nodal or zonal transmission-network optimization;
 * all market-clearing, ancillary-service, and settlement rules;
 * complete commercial-production validation against private GSE source data;
-* exhaustive hydro physics or water-management policy modeling;
+* exhaustive hydro physics or water-management policy modeling (Hydro Stage 2 adds optional soft seasonal rule curves, monthly/profile water values, minimum-release obligations, and simplified head-efficiency diagnostics, but it is not a full PLEXOS hydro module);
 * full replacement of licensed production planning tools.
 
 ## Primary personas

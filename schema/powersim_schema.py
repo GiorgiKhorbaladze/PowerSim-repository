@@ -23,6 +23,8 @@ Changes vs 1.1 (Stage 2):
   + hydro.end_level_penalty         — $/Mm³ penalty below target (soft constraint)
   + gas_constraints.monthly         — proper per-month caps {month_name: Mm³}
   + validate_input() gains cascade, strategic-reservoir, monthly-gas checks
+  + hydro.rule_curve, monthly/profile water values, minimum release, and
+    optional head_efficiency_curve validation (Hydro Stage 2)
 
 Changes vs 1.0 (Stage 1):
   + Top-level `profile_bundle`    — scenario id + unit metadata + file hashes
@@ -546,6 +548,70 @@ def validate_input(inp: dict) -> tuple[bool, list[str], list[str]]:
         if not (isinstance(gain, (int, float)) and 0 <= gain <= 1.1):
             warnings.append(
                 f"hydro '{aid}': cascade_gain {gain!r} outside typical (0, 1.0]")
+
+        # Hydro Stage 2 optional fields: seasonal rule curves, monthly/profile
+        # water values, simplified head-efficiency metadata, and mandatory release.
+        _MONTH_NAMES = ("Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec")
+        def _month_key_ok(k):
+            return (k in _MONTH_NAMES) or (isinstance(k, str) and k.isdigit() and 1 <= int(k) <= 12) or (isinstance(k, int) and 1 <= k <= 12)
+        def _check_monthly_dict(field, d, *, frac=False, nonneg=False, positive=False):
+            if d is None:
+                return
+            if not isinstance(d, dict):
+                errors.append(f"hydro '{aid}': {field} must be a dict")
+                return
+            for k, v in d.items():
+                if not _month_key_ok(k):
+                    errors.append(f"hydro '{aid}': {field} key '{k}' must be Jan..Dec or 1..12")
+                if frac and not (isinstance(v, (int, float)) and 0 <= v <= 1):
+                    errors.append(f"hydro '{aid}': {field}['{k}'] must be in [0, 1]")
+                if nonneg and not (isinstance(v, (int, float)) and v >= 0):
+                    errors.append(f"hydro '{aid}': {field}['{k}'] must be >= 0")
+                if positive and not (isinstance(v, (int, float)) and v > 0):
+                    errors.append(f"hydro '{aid}': {field}['{k}'] must be > 0")
+        rc = h.get("rule_curve")
+        if rc is not None:
+            if not isinstance(rc, dict):
+                errors.append(f"hydro '{aid}': rule_curve must be a dict")
+            else:
+                _check_monthly_dict("rule_curve.monthly_min_frac", rc.get("monthly_min_frac"), frac=True)
+                _check_monthly_dict("rule_curve.monthly_max_frac", rc.get("monthly_max_frac"), frac=True)
+                _check_monthly_dict("rule_curve.monthly_target_frac", rc.get("monthly_target_frac"), frac=True)
+                for pf in ("target_penalty_usd_per_mm3", "min_violation_penalty_usd_per_mm3", "max_violation_penalty_usd_per_mm3"):
+                    v = rc.get(pf)
+                    if v is not None and not (isinstance(v, (int, float)) and v >= 0):
+                        errors.append(f"hydro '{aid}': rule_curve.{pf} must be >= 0")
+        _check_monthly_dict("water_value_profile", h.get("water_value_profile"), nonneg=True)
+        wv_key = h.get("water_value_profile_key")
+        if wv_key is not None and wv_key not in profiles:
+            errors.append(f"hydro '{aid}': water_value_profile_key '{wv_key}' not in profiles")
+        mr = h.get("min_release_mm3_per_h")
+        if mr is not None and not (isinstance(mr, (int, float)) and mr >= 0):
+            errors.append(f"hydro '{aid}': min_release_mm3_per_h must be >= 0")
+        mr_key = h.get("min_release_profile")
+        if mr_key is not None and mr_key not in profiles:
+            errors.append(f"hydro '{aid}': min_release_profile '{mr_key}' not in profiles")
+        hec = h.get("head_efficiency_curve")
+        if hec is not None:
+            if not isinstance(hec, list) or len(hec) < 2:
+                errors.append(f"hydro '{aid}': head_efficiency_curve must be a list of at least 2 points")
+            else:
+                prev = -1.0
+                for pt in hec:
+                    if not isinstance(pt, dict):
+                        errors.append(f"hydro '{aid}': head_efficiency_curve points must be dicts")
+                        break
+                    sf = pt.get("storage_frac")
+                    eff = pt.get("efficiency")
+                    if not (isinstance(sf, (int, float)) and 0 <= sf <= 1):
+                        errors.append(f"hydro '{aid}': head_efficiency_curve.storage_frac must be in [0, 1]")
+                    elif sf < prev:
+                        warnings.append(f"hydro '{aid}': head_efficiency_curve is unsorted; solver treats it as metadata/two-bin mode")
+                    else:
+                        prev = sf
+                    if not (isinstance(eff, (int, float)) and eff > 0):
+                        errors.append(f"hydro '{aid}': head_efficiency_curve.efficiency must be > 0")
+
         # Strategic end-of-horizon reservoir fields
         tel = h.get("target_end_level_frac")
         if tel is not None and not (isinstance(tel, (int, float)) and 0 <= tel <= 1):
