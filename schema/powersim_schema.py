@@ -335,6 +335,49 @@ def validate_input(inp: dict) -> tuple[bool, list[str], list[str]]:
                     errors.append(f"thermal '{aid}' missing field '{f}'")
             if "pmin" in a and "pmax" in a and a["pmin"] > a["pmax"]:
                 errors.append(f"thermal '{aid}': pmin > pmax")
+            # v1.5 Thermal Stage 3 — additive, default-safe.
+            for f in ("co2_factor_t_per_mwh", "startup_cost_hot",
+                      "startup_cost_cold", "aux_load_frac"):
+                v = a.get(f)
+                if v is not None and not (isinstance(v, (int, float)) and v >= 0):
+                    errors.append(f"thermal '{aid}': {f} must be >= 0")
+            hth = a.get("hot_start_threshold_h")
+            if hth is not None and not (isinstance(hth, int) and hth > 0):
+                errors.append(f"thermal '{aid}': hot_start_threshold_h must be a positive integer")
+            if a.get("startup_cost_hot") is not None and a.get("startup_cost_cold") is not None:
+                if a["startup_cost_hot"] > a["startup_cost_cold"]:
+                    warnings.append(
+                        f"thermal '{aid}': startup_cost_hot {a['startup_cost_hot']} "
+                        f"> startup_cost_cold {a['startup_cost_cold']} — unusual "
+                        f"(hot should be cheaper than cold)")
+            tdc = a.get("temp_derating_curve")
+            tpk = a.get("temp_profile_key")
+            if tdc is not None:
+                if not (isinstance(tdc, list) and len(tdc) >= 2):
+                    errors.append(
+                        f"thermal '{aid}': temp_derating_curve must be a "
+                        f"list of ≥2 [temp_c, capacity_factor] pairs")
+                else:
+                    prev_t = -1e9
+                    for j, pt in enumerate(tdc):
+                        if not (isinstance(pt, (list, tuple)) and len(pt) == 2
+                                and isinstance(pt[0], (int, float))
+                                and isinstance(pt[1], (int, float))
+                                and 0 <= pt[1] <= 1.5):
+                            errors.append(
+                                f"thermal '{aid}': temp_derating_curve[{j}] "
+                                f"must be [temp_c, capacity_factor∈[0,1.5]]")
+                            break
+                        if pt[0] <= prev_t:
+                            errors.append(
+                                f"thermal '{aid}': temp_derating_curve breakpoints "
+                                f"must strictly increase in temp_c")
+                            break
+                        prev_t = pt[0]
+                if not tpk:
+                    warnings.append(
+                        f"thermal '{aid}': temp_derating_curve set but "
+                        f"temp_profile_key missing — derating will be inert")
         elif atype in ("wind", "solar"):
             if "pmax_installed" not in a:
                 errors.append(f"{atype} '{aid}' missing pmax_installed")
@@ -623,6 +666,11 @@ def validate_input(inp: dict) -> tuple[bool, list[str], list[str]]:
                             f"must strictly increase in stor_mm3")
                         break
                     prev_s = pt[0]
+
+    # ── v1.5 Thermal Stage 3: top-level CO₂ price (optional) ────────
+    cp = inp.get("co2_price_usd_per_t")
+    if cp is not None and not (isinstance(cp, (int, float)) and cp >= 0):
+        errors.append("co2_price_usd_per_t must be >= 0")
 
     # ── Stage 2: monthly gas_constraints validation ─────────────────
     gc = inp.get("gas_constraints") or {}

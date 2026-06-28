@@ -41,6 +41,7 @@ jobs:
               tests/test_bess_plexos_parity.py \
               tests/test_hydro_inflow_units.py \
               tests/test_hydro_stage2.py \
+              tests/test_thermal_stage3.py \
               tests/check_json_contract.py \
               tests/test_rolling_carryover.py \
               tests/test_subhourly_ramp.py
@@ -70,6 +71,10 @@ jobs:
         # Proves min_release_mm3h, monthly storage_targets soft penalty,
         # and head-dependent (window-level) efficiency curve.
         run: python tests/test_hydro_stage2.py
+      - name: Thermal Stage 3 test (deterministic)
+        # Proves CO₂ factor + price, multi-stage startup (hot/cold), and
+        # ambient temperature capacity derating.
+        run: python tests/test_thermal_stage3.py
       - name: JSON contract regression checks
         run: python tests/check_json_contract.py
       - name: Rolling-horizon carry-over deterministic tests

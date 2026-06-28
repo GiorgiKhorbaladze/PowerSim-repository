@@ -122,6 +122,46 @@ Per-reservoir aggregates added to `by_unit_summary[hydro_reg_id]`:
 * `total_spill_mm3` — sum of `spill_mm3h * dt` over the horizon.
 * `total_hydro_release_mm3` — sum of `release_mm3h * dt` over the horizon.
 
+### v1.5 thermal Stage 3 additions
+
+Three optional `thermal.*` fields close the highest-impact PLEXOS gaps
+for thermal modeling. All default-safe — absence ⇒ unchanged behavior.
+
+```json
+"thermal_unit": {
+  "co2_factor_t_per_mwh":     0.381,
+  "startup_cost_hot":         500.0,
+  "startup_cost_cold":       8000.0,
+  "hot_start_threshold_h":       3,
+  "temp_derating_curve":  [[15, 1.00], [25, 1.00], [35, 0.85], [45, 0.72]],
+  "temp_profile_key":     "tbilisi_amb_temp"
+}
+```
+
+Plus the top-level `co2_price_usd_per_t` (default `0`) which charges
+each thermal unit's emissions in the LP objective.
+
+* **`co2_factor_t_per_mwh`** — per-MWh CO₂ emissions of the unit
+  (typical CCGT on natural gas ≈ 0.38 t/MWh). Combined with the
+  system-wide `co2_price_usd_per_t` the objective adds
+  `co2_factor · p[g,t] · dt · price`. Output: `by_unit_summary[gid].total_co2_t`
+  / `co2_cost_usd` and `system_summary.total_co2_t` / `total_co2_cost_usd`.
+* **`startup_cost_hot` + `startup_cost_cold` + `hot_start_threshold_h`** —
+  two-bucket startup pricing. A new binary `y_hot[g,t]` is eligible only
+  if the unit was committed within the last `hot_start_threshold_h`
+  periods (window history plus init-state `periods_on` for rolling
+  boundaries). When all three fields are set the LP picks `hot` whenever
+  feasible; the residual `y - y_hot` pays `cold`. The legacy
+  `startup_cost` field still applies to units without the multi-stage
+  fields. `by_unit_summary[gid].startup_cost` reconstructs the cost
+  using the per-period `hourly_by_unit[gid].startup_hot` indicator.
+* **`temp_derating_curve` + `temp_profile_key`** — piecewise-linear
+  capacity multiplier vs ambient °C. The profile referenced by
+  `temp_profile_key` (an 8760-h profile in `profiles`) is interpolated
+  per period and the result multiplies `pmax` inside `get_pmax_t` —
+  alongside the maintenance derating — so it applies cleanly to the
+  LP upper bound on `m.p[g,t]`.
+
 ### v1.5 hydro Stage 2 additions
 
 Three optional fields close the most-impactful gaps versus PLEXOS-style
