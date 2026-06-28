@@ -321,3 +321,13 @@ PowerSim Solver v1.6.0 keeps `system_summary.total_cost_usd` as the backward-com
 Reserve products now support BESS provision with inverter headroom and SOC/empty-SOC duration limits. Unsupported eligible providers such as DR or pumped hydro are reported in diagnostics instead of being silently dropped. Rolling-horizon solves enforce first-period ramp limits from previous-window dispatch when carryover dispatch is available. Stochastic summaries are based on full scenario solve outputs and objective costs, with warnings when scenario profile overrides are not actually switched.
 
 Remaining limitations: PowerSim is not a full PLEXOS clone; DC-OPF is simplified; AC power flow, voltage, and reactive power are not modeled; reserve market settlement is not modeled.
+
+### Adequacy & Expansion Stage 1
+
+PowerSim now includes a screening-level adequacy workflow for LOLE/LOLP/EENS, reserve margin, duration-limited BESS firm capacity, and least-cost candidate expansion recommendations. Use:
+
+```bash
+python scripts/run_adequacy.py --input samples/sample_input_168h.json --out-dir out/adequacy_demo --mode deterministic_derated --write-expanded-input
+```
+
+The workflow writes adequacy summaries and optional expanded inputs for subsequent UC/ED dispatch testing. It is deterministic/reviewable by design and is not a full PLEXOS PASA or investment-grade optimization without further validation.

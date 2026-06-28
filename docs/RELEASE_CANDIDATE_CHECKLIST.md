@@ -268,3 +268,11 @@ or explicitly accepted as documented limitations by the release owner.
 - `system_summary.total_cost_usd` remains production/gross cost for compatibility; `system_summary.total_objective_cost_usd` and `diagnostics.objective_breakdown` report the full objective and closure gap.
 - Stochastic summaries use full scenario result stores/objective costs and warn with `stochastic_profiles_not_switched` when no scenario-specific profiles or overrides are applied.
 - Limitations remain: not a full PLEXOS clone, simplified DC-OPF, no AC voltage/reactive power, and no reserve market settlement.
+
+## Adequacy Stage 1 release checks
+
+- Run `python -m py_compile solver/powersim_adequacy.py scripts/run_adequacy.py`.
+- Run `python tests/test_adequacy_metrics.py` and `python tests/test_adequacy_expansion.py` with synthetic data only.
+- Run `python tests/check_json_contract.py` to confirm backward-compatible sample JSON contracts.
+- For demo handoff, run `python scripts/run_adequacy.py --input samples/sample_input_168h.json --out-dir out/adequacy_demo --mode deterministic_derated --write-expanded-input` and then test any recommended builds through UC/ED before describing investment decisions.
+- Confirm documentation states the module is screening-level and not full PLEXOS PASA.
