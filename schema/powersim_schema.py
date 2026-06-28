@@ -381,6 +381,59 @@ def validate_input(inp: dict) -> tuple[bool, list[str], list[str]]:
         elif atype in ("wind", "solar"):
             if "pmax_installed" not in a:
                 errors.append(f"{atype} '{aid}' missing pmax_installed")
+            # v1.5 Solar Stage 4 — VRE inverter / degradation / temp fields.
+            dcr = a.get("dc_ac_ratio")
+            if dcr is not None and not (isinstance(dcr, (int, float))
+                                        and 0.5 <= dcr <= 3.0):
+                errors.append(
+                    f"{atype} '{aid}': dc_ac_ratio must be in [0.5, 3.0] "
+                    f"(typical 1.0–1.4 for modern PV)")
+            ieff = a.get("inverter_efficiency")
+            if ieff is not None and not (isinstance(ieff, (int, float))
+                                         and 0 < ieff <= 1.0):
+                errors.append(
+                    f"{atype} '{aid}': inverter_efficiency must be in (0, 1.0]")
+            dr = a.get("degradation_rate_per_year")
+            if dr is not None and not (isinstance(dr, (int, float))
+                                       and 0 <= dr <= 0.20):
+                errors.append(
+                    f"{atype} '{aid}': degradation_rate_per_year must be "
+                    f"in [0, 0.20] (typical 0.004–0.008 for crystalline Si)")
+            cy = a.get("commissioning_year")
+            if cy is not None and not (isinstance(cy, int) and 1900 <= cy <= 2100):
+                errors.append(
+                    f"{atype} '{aid}': commissioning_year must be an "
+                    f"integer in [1900, 2100]")
+            # Temperature derating (already enforced in solver via _temp_factor
+            # for any asset type; we validate the schema for VRE units too).
+            tdc = a.get("temp_derating_curve")
+            tpk = a.get("temp_profile_key")
+            if tdc is not None:
+                if not (isinstance(tdc, list) and len(tdc) >= 2):
+                    errors.append(
+                        f"{atype} '{aid}': temp_derating_curve must be a "
+                        f"list of ≥2 [temp_c, capacity_factor] pairs")
+                else:
+                    prev_t = -1e9
+                    for j, pt in enumerate(tdc):
+                        if not (isinstance(pt, (list, tuple)) and len(pt) == 2
+                                and isinstance(pt[0], (int, float))
+                                and isinstance(pt[1], (int, float))
+                                and 0 <= pt[1] <= 1.5):
+                            errors.append(
+                                f"{atype} '{aid}': temp_derating_curve[{j}] "
+                                f"must be [temp_c, capacity_factor∈[0,1.5]]")
+                            break
+                        if pt[0] <= prev_t:
+                            errors.append(
+                                f"{atype} '{aid}': temp_derating_curve "
+                                f"breakpoints must strictly increase in temp_c")
+                            break
+                        prev_t = pt[0]
+                if not tpk:
+                    warnings.append(
+                        f"{atype} '{aid}': temp_derating_curve set but "
+                        f"temp_profile_key missing — derating will be inert")
         elif atype == "bess":
             for f in ("power_mw", "energy_mwh", "soc_init", "soc_min",
                       "soc_max", "eta_charge", "eta_discharge"):
