@@ -122,6 +122,52 @@ Per-reservoir aggregates added to `by_unit_summary[hydro_reg_id]`:
 * `total_spill_mm3` — sum of `spill_mm3h * dt` over the horizon.
 * `total_hydro_release_mm3` — sum of `release_mm3h * dt` over the horizon.
 
+### v1.5 solar / VRE Stage 4 additions
+
+Three optional `solar`/`wind` fields close the highest-impact PLEXOS PV
+gaps. All default-safe — absence ⇒ unchanged behavior.
+
+```json
+"solar_unit": {
+  "type":               "solar",
+  "pmax_installed":      100.0,
+  "availability_profile": "solar_cf",
+  "dc_ac_ratio":           1.35,
+  "inverter_efficiency":   0.97,
+  "degradation_rate_per_year": 0.005,
+  "commissioning_year":   2026,
+  "temp_derating_curve":  [[25, 1.0], [45, 0.90]],
+  "temp_profile_key":     "tbilisi_amb_temp"
+}
+```
+
+The LP upper bound on `m.p[g,t]` for a wind/solar unit becomes:
+
+```
+pmax_installed
+  · min(cf[t] · dc_ac_ratio, 1.0)             ← clipping at AC rating
+  · inverter_efficiency                        ← AC-side losses
+  · (1 − degradation_rate)^(study_year − commissioning_year)  ← multi-year aging
+  · temp_derating(amb_temp[t])                 ← ambient °C derating
+  · maint_factor(t)                            ← maintenance windows
+```
+
+* **`dc_ac_ratio`** — DC array MW divided by AC inverter MW (typical
+  modern PV 1.2–1.4). The availability profile is interpreted as DC
+  capacity factor and the product is clipped at the AC rating; default
+  `1.0` ⇒ no clipping (legacy semantics).
+* **`inverter_efficiency`** — AC-side multiplier; default `1.0`.
+* **`degradation_rate_per_year`** — annual capacity loss (typical
+  0.004–0.008 for crystalline Si). Compounded once in `build_asset_map`
+  using `metadata.study_year − commissioning_year` and stored on the
+  asset as `_degradation_factor` so `get_pmax_t` stays O(1).
+* **`commissioning_year`** — integer year for the degradation start;
+  defaults to `metadata.study_year` (no degradation applied).
+* **`temp_derating_curve` + `temp_profile_key`** — same shape as the
+  thermal Stage 3 fields. The solver helper `_temp_factor` already
+  worked for any asset type; schema validation is now extended to
+  wind/solar too.
+
 ### v1.5 thermal Stage 3 additions
 
 Three optional `thermal.*` fields close the highest-impact PLEXOS gaps
