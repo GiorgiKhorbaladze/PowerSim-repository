@@ -408,6 +408,11 @@ def build_asset_map(inp: dict) -> dict:
             continue
         maint_by_asset.setdefault(aid, []).append(ev)
 
+    # v1.5 Solar Stage 4 — multi-year VRE degradation precompute. Compounds
+    # ``(1 - rate)^(study_year - commissioning_year)`` once at load time and
+    # stores as ``_degradation_factor`` so ``get_pmax_t`` stays O(1).
+    study_year = int((inp.get("metadata") or {}).get("study_year") or 0)
+
     amap = {}
     for a in inp.get("assets", []):
         a2 = dict(a)
@@ -436,6 +441,14 @@ def build_asset_map(inp: dict) -> dict:
             and a.get("type") not in ("dr", "pumped_hydro")
         # Gas usage rate [Mm³/MWh]
         a2["_gas_rate"] = hr / 35_000.0 if hr > 0 and a.get("fuel_type","gas")=="gas" else 0.0
+        # v1.5 Solar Stage 4 — VRE annual degradation factor (default 1.0).
+        a2["_degradation_factor"] = 1.0
+        if a.get("type") in ("wind", "solar"):
+            rate = float(a.get("degradation_rate_per_year", 0) or 0)
+            if rate > 0:
+                comm_year = int(a.get("commissioning_year", study_year) or study_year)
+                years = max(0, study_year - comm_year) if study_year else 0
+                a2["_degradation_factor"] = max(0.0, (1.0 - rate) ** years)
         # Maintenance windows: per-asset field + top-level maintenance events.
         mw = list(a.get("maint_windows", []) or [])
         mw.extend(maint_by_asset.get(a2["id"], []))
@@ -457,7 +470,14 @@ def get_pmax_t(asset: dict, t_local: int, profiles: dict,
     if atype in ("wind", "solar"):
         prof_key = asset.get("availability_profile")
         cf = profiles.get(prof_key, [1.0] * (t_local + 1))[t_local] if prof_key else 1.0
-        base = float(asset.get("pmax_installed", asset.get("pmax", 0))) * max(0.0, min(1.0, cf))
+        # v1.5 Solar Stage 4 — DC/AC ratio with inverter clipping at 1.0 AC,
+        # inverter efficiency, and pre-computed annual degradation factor.
+        cf = max(0.0, float(cf))
+        dc_ac    = float(asset.get("dc_ac_ratio", 1.0) or 1.0)
+        inv_eta  = float(asset.get("inverter_efficiency", 1.0) or 1.0)
+        cf_clipped = min(1.0, cf * dc_ac) * inv_eta
+        deg = float(asset.get("_degradation_factor", 1.0) or 1.0)
+        base = float(asset.get("pmax_installed", asset.get("pmax", 0))) * cf_clipped * deg
     elif atype == "hydro_ror":
         prof_key = asset.get("availability_profile")
         cf = profiles.get(prof_key, [asset.get("cf", 0.65)] * (t_local + 1))[t_local] if prof_key else asset.get("cf", 0.65)
