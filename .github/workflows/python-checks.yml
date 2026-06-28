@@ -21,6 +21,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt
+          python -m pip install pytest
       - name: Compile check (schema + solver + scripts + tests)
         run: |
           python -m py_compile schema/powersim_schema.py \
@@ -30,6 +31,7 @@ jobs:
               solver/powersim_kpi.py \
               solver/powersim_stochastic.py \
               solver/powersim_expansion.py \
+              solver/bess_sizing.py \
               scripts/build_demo_project.py \
               scripts/run_horizon.py \
               scripts/run_mc_sweep.py \
@@ -39,12 +41,21 @@ jobs:
               tests/smoke_168h.py \
               tests/test_maintenance.py \
               tests/test_bess_plexos_parity.py \
+              tests/test_bess_sizing.py \
               tests/test_hydro_inflow_units.py \
               tests/test_hydro_stage2.py \
               tests/test_thermal_stage3.py \
               tests/test_solar_stage4.py \
               tests/test_wind_stage5.py \
+              tests/test_adequacy_expansion.py \
+              tests/test_adequacy_metrics.py \
+              tests/test_objective_closure.py \
+              tests/test_reserve_storage_provision.py \
+              tests/test_rolling_boundary_ramp.py \
+              tests/test_stochastic_summary.py \
+              tests/test_gse_2026_registry_mapping.py \
               tests/check_json_contract.py \
+              tests/check_demo_asset_registry.py \
               tests/test_rolling_carryover.py \
               tests/test_subhourly_ramp.py
       - name: Dependency sanity
@@ -87,6 +98,9 @@ jobs:
         run: python tests/test_wind_stage5.py
       - name: JSON contract regression checks
         run: python tests/check_json_contract.py
+      - name: Demo asset registry validator
+        # Validates samples/demo_asset_registry_2026.json against schema.
+        run: python tests/check_demo_asset_registry.py
       - name: Rolling-horizon carry-over deterministic tests
         # Proves cross-window invariants (gas annual / monthly, DR
         # annual hours, UC min_up / min_down boundary state, BESS SOC,
@@ -95,6 +109,28 @@ jobs:
       - name: Sub-hourly ramp-rate deterministic tests
         # Proves ramp_up and ramp_down both scale MW/h limits by period dt.
         run: python tests/test_subhourly_ramp.py
+      - name: Rolling boundary ramp deterministic tests
+        # Proves ramp limits are enforced across rolling-window boundaries.
+        run: python tests/test_rolling_boundary_ramp.py
+      - name: Reserve storage provision deterministic tests
+        # Proves BESS and pumped-hydro can provide spinning / non-spinning reserve.
+        run: python tests/test_reserve_storage_provision.py
+      - name: Objective closure deterministic tests
+        # Proves the reconstructed objective matches the solver's reported value.
+        run: python tests/test_objective_closure.py
+      - name: Stochastic summary deterministic tests
+        # Proves stochastic scenario weights and summary aggregation are correct.
+        run: python tests/test_stochastic_summary.py
+      - name: Adequacy metrics deterministic tests
+        # Proves LOLE / EENS / reserve-margin calculation against synthetic input.
+        run: python tests/test_adequacy_metrics.py
+      - name: Adequacy + expansion deterministic tests
+        # Proves the Stage 1 adequacy screening and expansion candidate workflow.
+        run: python tests/test_adequacy_expansion.py
+      - name: Pytest-style suites (BESS sizing + GSE 2026 registry mapping)
+        # tests/test_bess_sizing.py and tests/test_gse_2026_registry_mapping.py are
+        # pytest-style; running them directly via python silently no-ops.
+        run: python -m pytest tests/test_bess_sizing.py tests/test_gse_2026_registry_mapping.py
       - name: Smoke test (synthetic project_data → solver → validate)
         run: |
           python scripts/build_demo_project.py --out project_data

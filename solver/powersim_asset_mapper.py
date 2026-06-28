@@ -3,7 +3,7 @@ PowerSim v4.0 — Asset Mapping Layer
 ====================================
 Data-driven transformation from the GSE installed-capacity workbook
 "დადგმული სიმძლავრე - 2026.xlsx" → list of assets compatible with
-powersim_schema v1.1.
+powersim_schema v1.5.
 
 This module is the single place that understands the workbook layout.
 It is pure data-shaping: no solver calls, no HTML coupling, no schema
