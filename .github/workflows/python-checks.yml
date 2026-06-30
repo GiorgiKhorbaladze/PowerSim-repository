@@ -47,6 +47,10 @@ jobs:
               tests/test_thermal_stage3.py \
               tests/test_solar_stage4.py \
               tests/test_wind_stage5.py \
+              tests/test_cost_database.py \
+              solver/cost_database.py \
+              scripts/cost_lookup.py \
+              scripts/refresh_cost_database.py \
               tests/test_adequacy_expansion.py \
               tests/test_adequacy_metrics.py \
               tests/test_objective_closure.py \
@@ -96,6 +100,11 @@ jobs:
         # Proves wake_loss_frac, monthly_availability_factor mask, and
         # air_density_correction (∝ 1/T_kelvin) — wind-only multipliers.
         run: python tests/test_wind_stage5.py
+      - name: PyPSA-Eur cost database test (deterministic)
+        # Verifies the committed cost snapshot loads, covers core
+        # technologies (CCGT/OCGT/onwind/solar/battery), the annuity
+        # math matches the closed-form CRF, and missing-key paths raise.
+        run: python tests/test_cost_database.py
       - name: JSON contract regression checks
         run: python tests/check_json_contract.py
       - name: Demo asset registry validator
