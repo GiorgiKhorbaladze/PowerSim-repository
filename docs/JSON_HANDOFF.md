@@ -122,6 +122,52 @@ Per-reservoir aggregates added to `by_unit_summary[hydro_reg_id]`:
 * `total_spill_mm3` — sum of `spill_mm3h * dt` over the horizon.
 * `total_hydro_release_mm3` — sum of `release_mm3h * dt` over the horizon.
 
+### PyPSA-Eur cost / efficiency database
+
+A curated snapshot of validated technology costs from
+[PyPSA technology-data](https://github.com/PyPSA/technology-data) is
+committed at `data/cost_database_pypsa_eur.json` (~120 KiB, CC-BY 4.0,
+4 snapshot years × 41 technologies × {investment / FOM / VOM /
+efficiency / lifetime / fuel / CO₂ intensity / electricity-input}).
+
+This is reference data, not optimizer input — use it to fill the
+HTML asset-editor or solver JSON with realistic numbers instead of
+guessing.
+
+```python
+from solver.cost_database import (
+    available_technologies, get, annualized_capex_usd_per_mw_yr,
+)
+
+# Browse what's in the snapshot for 2030
+techs = available_technologies(2030)
+
+# Per-parameter lookup
+ccgt_inv_eur_per_kw = get("CCGT", 2030, "investment")
+ccgt_efficiency    = get("CCGT", 2030, "efficiency")
+ccgt_lifetime_yrs  = get("CCGT", 2030, "lifetime")
+
+# Annualized CAPEX for BESS sizing inputs
+bess_usd_per_mw_yr = annualized_capex_usd_per_mw_yr(
+    "battery storage", 2030, eur_to_usd=1.08, discount_rate=0.07,
+)
+```
+
+CLI:
+
+```bash
+python scripts/cost_lookup.py --list
+python scripts/cost_lookup.py --tech CCGT --year 2030
+python scripts/cost_lookup.py --tech "battery storage" --annualize
+```
+
+Refresh from upstream (fetches all four CSVs, ~5 s):
+
+```bash
+python scripts/refresh_cost_database.py
+python scripts/refresh_cost_database.py --years 2025 2030 2035 2040 2045
+```
+
 ### v1.5 wind Stage 5 additions
 
 Three optional wind-only fields layered on top of the generic VRE

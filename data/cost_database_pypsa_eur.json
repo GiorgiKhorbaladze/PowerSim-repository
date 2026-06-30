@@ -1,0 +1,3573 @@
+{
+  "meta": {
+    "version": "1.0",
+    "source": "PyPSA technology-data (https://github.com/PyPSA/technology-data)",
+    "license": "CC-BY 4.0 (data) / GPL-3.0 (scripts)",
+    "snapshot_years": [
+      2025,
+      2030,
+      2035,
+      2040
+    ],
+    "currency": "EUR (mixed reference years — see per-row source)",
+    "note": "Curated subset for PowerSim use. Refresh by re-running scripts/refresh_cost_database.py."
+  },
+  "costs_by_year": {
+    "2025": {
+      "CCGT": {
+        "FOM": {
+          "value": 3.3392,
+          "unit": "%/year",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "VOM": {
+          "value": 5.744,
+          "unit": "EUR/MWh",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "efficiency": {
+          "value": 0.57,
+          "unit": "per unit",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "investment": {
+          "value": 1142.1117,
+          "unit": "EUR/kW",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "lifetime": {
+          "value": 25.0,
+          "unit": "years",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        }
+      },
+      "OCGT": {
+        "FOM": {
+          "value": 1.7784,
+          "unit": "%/year",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "VOM": {
+          "value": 6.0111,
+          "unit": "EUR/MWh",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "efficiency": {
+          "value": 0.405,
+          "unit": "per unit",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "investment": {
+          "value": 593.8981,
+          "unit": "EUR/kW",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "lifetime": {
+          "value": 25.0,
+          "unit": "years",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        }
+      },
+      "coal": {
+        "CO2 intensity": {
+          "value": 0.3361,
+          "unit": "tCO2/MWh_th",
+          "source": "Entwicklung der spezifischen Kohlendioxid-Emissionen des deutschen Strommix in den Jahren 1990 - 2018"
+        },
+        "FOM": {
+          "value": 1.31,
+          "unit": "%/year",
+          "source": "Lazard's levelized cost of energy analysis - version 16.0 (2023): https://www.lazard.com/media/typdgxmm/lazards-lcoeplus"
+        },
+        "VOM": {
+          "value": 4.1005,
+          "unit": "EUR/MWh_e",
+          "source": "Lazard's levelized cost of energy analysis - version 16.0 (2023): https://www.lazard.com/media/typdgxmm/lazards-lcoeplus"
+        },
+        "efficiency": {
+          "value": 0.356,
+          "unit": "p.u.",
+          "source": "Lazard's levelized cost of energy analysis - version 16.0 (2023): https://www.lazard.com/media/typdgxmm/lazards-lcoeplus"
+        },
+        "fuel": {
+          "value": 7.8202,
+          "unit": "EUR/MWh_th",
+          "source": "ENTSO-E & ENTSOG TYNDP 2024 Scenarios Inputs Commodity Prices, https://2024-data.entsos-tyndp-scenarios.eu/files/scenari"
+        },
+        "investment": {
+          "value": 4812.0244,
+          "unit": "EUR/kW_e",
+          "source": "Lazard's levelized cost of energy analysis - version 16.0 (2023): https://www.lazard.com/media/typdgxmm/lazards-lcoeplus"
+        },
+        "lifetime": {
+          "value": 40.0,
+          "unit": "years",
+          "source": "Lazard's levelized cost of energy analysis - version 16.0 (2023): https://www.lazard.com/media/typdgxmm/lazards-lcoeplus"
+        }
+      },
+      "nuclear": {
+        "FOM": {
+          "value": 1.27,
+          "unit": "%/year",
+          "source": "Lazard's levelized cost of energy analysis - version 16.0 (2023): https://www.lazard.com/media/typdgxmm/lazards-lcoeplus"
+        },
+        "VOM": {
+          "value": 4.459,
+          "unit": "EUR/MWh_e",
+          "source": "Lazard's levelized cost of energy analysis - version 16.0 (2023): https://www.lazard.com/media/typdgxmm/lazards-lcoeplus"
+        },
+        "efficiency": {
+          "value": 0.326,
+          "unit": "p.u.",
+          "source": "Lazard's levelized cost of energy analysis - version 16.0 (2023): https://www.lazard.com/media/typdgxmm/lazards-lcoeplus"
+        },
+        "fuel": {
+          "value": 7.4536,
+          "unit": "EUR/MWh_th",
+          "source": "ENTSO-E & ENTSOG TYNDP 2024 Scenarios Inputs Commodity Prices, https://2024-data.entsos-tyndp-scenarios.eu/files/scenari"
+        },
+        "investment": {
+          "value": 10805.7038,
+          "unit": "EUR/kW_e",
+          "source": "Lazard's levelized cost of energy analysis - version 16.0 (2023): https://www.lazard.com/media/typdgxmm/lazards-lcoeplus"
+        },
+        "lifetime": {
+          "value": 40.0,
+          "unit": "years",
+          "source": "Lazard's levelized cost of energy analysis - version 16.0 (2023): https://www.lazard.com/media/typdgxmm/lazards-lcoeplus"
+        }
+      },
+      "biomass": {
+        "FOM": {
+          "value": 4.5269,
+          "unit": "%/year",
+          "source": "DIW DataDoc http://hdl.handle.net/10419/80348"
+        },
+        "efficiency": {
+          "value": 0.468,
+          "unit": "per unit",
+          "source": "DIW DataDoc http://hdl.handle.net/10419/80348"
+        },
+        "fuel": {
+          "value": 9.3506,
+          "unit": "EUR/MWhth",
+          "source": "IEA2011b"
+        },
+        "investment": {
+          "value": 2950.7891,
+          "unit": "EUR/kWel",
+          "source": "DIW DataDoc http://hdl.handle.net/10419/80348"
+        },
+        "lifetime": {
+          "value": 30.0,
+          "unit": "years",
+          "source": "ECF2010 in DIW DataDoc http://hdl.handle.net/10419/80348"
+        }
+      },
+      "biomass CHP": {
+        "FOM": {
+          "value": 3.5955,
+          "unit": "%/year",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "VOM": {
+          "value": 2.8093,
+          "unit": "EUR/MWh_e",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "efficiency": {
+          "value": 0.2998,
+          "unit": "per unit",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "efficiency-heat": {
+          "value": 0.7088,
+          "unit": "per unit",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "investment": {
+          "value": 4402.5067,
+          "unit": "EUR/kW_e",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "lifetime": {
+          "value": 25.0,
+          "unit": "years",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        }
+      },
+      "biogas": {
+        "FOM": {
+          "value": 7.7769,
+          "unit": "%/year",
+          "source": "Danish Energy Agency, inputs/data_sheets_for_renewable_fuels.xlsx"
+        },
+        "efficiency": {
+          "value": 1.0,
+          "unit": "per unit",
+          "source": "Assuming input biomass is already given in biogas output"
+        },
+        "fuel": {
+          "value": 78.8124,
+          "unit": "EUR/MWhth",
+          "source": "JRC and Zappa"
+        },
+        "investment": {
+          "value": 1380.4471,
+          "unit": "EUR/kW",
+          "source": "Danish Energy Agency, inputs/data_sheets_for_renewable_fuels.xlsx"
+        },
+        "lifetime": {
+          "value": 20.0,
+          "unit": "years",
+          "source": "Danish Energy Agency, inputs/data_sheets_for_renewable_fuels.xlsx"
+        }
+      },
+      "geothermal": {
+        "CO2 intensity": {
+          "value": 0.12,
+          "unit": "tCO2/MWh_th",
+          "source": "Aghahosseini, Breyer 2020: From hot rock to useful energy: A global estimate of enhanced geothermal systems potential, h"
+        },
+        "FOM": {
+          "value": 2.0,
+          "unit": "%/year",
+          "source": "Aghahosseini, Breyer 2020: From hot rock to useful energy: A global estimate of enhanced geothermal systems potential, h"
+        },
+        "lifetime": {
+          "value": 30.0,
+          "unit": "years",
+          "source": "Aghahosseini, Breyer 2020: From hot rock to useful energy: A global estimate of enhanced geothermal systems potential, h"
+        }
+      },
+      "onwind": {
+        "FOM": {
+          "value": 1.2347,
+          "unit": "%/year",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "VOM": {
+          "value": 1.9035,
+          "unit": "EUR/MWh",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "investment": {
+          "value": 1438.8845,
+          "unit": "EUR/kW",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "lifetime": {
+          "value": 28.5,
+          "unit": "years",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        }
+      },
+      "offwind": {
+        "FOM": {
+          "value": 2.3741,
+          "unit": "%/year",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "VOM": {
+          "value": 0.0267,
+          "unit": "EUR/MWhel",
+          "source": "RES costs made up to fix curtailment order"
+        },
+        "investment": {
+          "value": 2224.3721,
+          "unit": "EUR/kW_e, 2020",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "lifetime": {
+          "value": 30.0,
+          "unit": "years",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        }
+      },
+      "offwind-float": {
+        "FOM": {
+          "value": 1.15,
+          "unit": "%/year",
+          "source": "https://doi.org/10.1016/j.adapen.2021.100067"
+        },
+        "investment": {
+          "value": 2954.7363,
+          "unit": "EUR/kWel",
+          "source": "https://doi.org/10.1016/j.adapen.2021.100067"
+        },
+        "lifetime": {
+          "value": 20.0,
+          "unit": "years",
+          "source": "C. Maienza 2020 A life cycle cost model for floating offshore wind farms"
+        }
+      },
+      "solar": {
+        "FOM": {
+          "value": 1.7275,
+          "unit": "%/year",
+          "source": "Calculated. See 'further description'."
+        },
+        "VOM": {
+          "value": 0.0134,
+          "unit": "EUR/MWhel",
+          "source": "RES costs made up to fix curtailment order"
+        },
+        "investment": {
+          "value": 850.6753,
+          "unit": "EUR/kW_e",
+          "source": "Calculated. See 'further description'."
+        },
+        "lifetime": {
+          "value": 37.5,
+          "unit": "years",
+          "source": "Calculated. See 'further description'."
+        }
+      },
+      "solar-utility": {
+        "FOM": {
+          "value": 2.1982,
+          "unit": "%/year",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "investment": {
+          "value": 594.8646,
+          "unit": "EUR/kW_e",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "lifetime": {
+          "value": 37.5,
+          "unit": "years",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        }
+      },
+      "solar-utility single-axis tracking": {
+        "FOM": {
+          "value": 2.0365,
+          "unit": "%/year",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "investment": {
+          "value": 694.5658,
+          "unit": "EUR/kW_e",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "lifetime": {
+          "value": 37.5,
+          "unit": "years",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        }
+      },
+      "solar-rooftop": {
+        "FOM": {
+          "value": 1.2567,
+          "unit": "%/year",
+          "source": "Calculated. See 'further description'."
+        },
+        "discount rate": {
+          "value": 0.04,
+          "unit": "per unit",
+          "source": "standard for decentral"
+        },
+        "investment": {
+          "value": 1106.486,
+          "unit": "EUR/kW_e",
+          "source": "Calculated. See 'further description'."
+        },
+        "lifetime": {
+          "value": 37.5,
+          "unit": "years",
+          "source": "Calculated. See 'further description'."
+        }
+      },
+      "battery storage": {
+        "investment": {
+          "value": 250.0283,
+          "unit": "EUR/kWh",
+          "source": "Danish Energy Agency, inputs/technology_data_catalogue_for_energy_storage.xlsx"
+        },
+        "lifetime": {
+          "value": 22.5,
+          "unit": "years",
+          "source": "Danish Energy Agency, inputs/technology_data_catalogue_for_energy_storage.xlsx"
+        }
+      },
+      "battery inverter": {
+        "FOM": {
+          "value": 0.2512,
+          "unit": "%/year",
+          "source": "Danish Energy Agency, inputs/technology_data_catalogue_for_energy_storage.xlsx"
+        },
+        "efficiency": {
+          "value": 0.955,
+          "unit": "per unit",
+          "source": "Danish Energy Agency, inputs/technology_data_catalogue_for_energy_storage.xlsx"
+        },
+        "investment": {
+          "value": 287.4657,
+          "unit": "EUR/kW",
+          "source": "Danish Energy Agency, inputs/technology_data_catalogue_for_energy_storage.xlsx"
+        },
+        "lifetime": {
+          "value": 10.0,
+          "unit": "years",
+          "source": "Danish Energy Agency, inputs/technology_data_catalogue_for_energy_storage.xlsx, Note K."
+        }
+      },
+      "home battery storage": {
+        "investment": {
+          "value": 354.0137,
+          "unit": "EUR/kWh",
+          "source": "Global Energy System based on 100% Renewable Energy, Energywatchgroup/LTU University, 2019, Danish Energy Agency, inputs"
+        },
+        "lifetime": {
+          "value": 22.5,
+          "unit": "years",
+          "source": "Global Energy System based on 100% Renewable Energy, Energywatchgroup/LTU University, 2019, Danish Energy Agency, inputs"
+        }
+      },
+      "home battery inverter": {
+        "FOM": {
+          "value": 0.2512,
+          "unit": "%/year",
+          "source": "Global Energy System based on 100% Renewable Energy, Energywatchgroup/LTU University, 2019, Danish Energy Agency, inputs"
+        },
+        "efficiency": {
+          "value": 0.955,
+          "unit": "per unit",
+          "source": "Global Energy System based on 100% Renewable Energy, Energywatchgroup/LTU University, 2019, Danish Energy Agency, inputs"
+        },
+        "investment": {
+          "value": 405.9268,
+          "unit": "EUR/kW",
+          "source": "Global Energy System based on 100% Renewable Energy, Energywatchgroup/LTU University, 2019, Danish Energy Agency, inputs"
+        },
+        "lifetime": {
+          "value": 10.0,
+          "unit": "years",
+          "source": "Global Energy System based on 100% Renewable Energy, Energywatchgroup/LTU University, 2019, Danish Energy Agency, inputs"
+        }
+      },
+      "Pumped-Storage-Hydro-bicharger": {
+        "FOM": {
+          "value": 0.9951,
+          "unit": "%/year",
+          "source": "Viswanathan_2022, Figure 4.16"
+        },
+        "efficiency": {
+          "value": 0.8944,
+          "unit": "per unit",
+          "source": "Viswanathan_2022, p.68 (p.90)"
+        },
+        "investment": {
+          "value": 1756657.9565,
+          "unit": "EUR/MW",
+          "source": "Viswanathan_2022, p.68 (p.90)"
+        },
+        "lifetime": {
+          "value": 60.0,
+          "unit": "years",
+          "source": "Viswanathan_2022, p.68 (p.90)"
+        }
+      },
+      "Pumped-Storage-Hydro-store": {
+        "FOM": {
+          "value": 0.43,
+          "unit": "%/year",
+          "source": "Viswanathan_2022, 0.43 % of SB"
+        },
+        "investment": {
+          "value": 71761.1936,
+          "unit": "EUR/MWh",
+          "source": "Viswanathan_2022, p.68 (p.90)"
+        },
+        "lifetime": {
+          "value": 60.0,
+          "unit": "years",
+          "source": "Viswanathan_2022, p.68 (p.90)"
+        }
+      },
+      "hydro": {
+        "FOM": {
+          "value": 1.0,
+          "unit": "%/year",
+          "source": "DIW DataDoc http://hdl.handle.net/10419/80348"
+        },
+        "efficiency": {
+          "value": 0.9,
+          "unit": "per unit",
+          "source": "DIW DataDoc http://hdl.handle.net/10419/80348"
+        },
+        "investment": {
+          "value": 2888.5279,
+          "unit": "EUR/kWel",
+          "source": "DIW DataDoc http://hdl.handle.net/10419/80348"
+        },
+        "lifetime": {
+          "value": 80.0,
+          "unit": "years",
+          "source": "IEA2010"
+        }
+      },
+      "ror": {
+        "FOM": {
+          "value": 2.0,
+          "unit": "%/year",
+          "source": "DIW DataDoc http://hdl.handle.net/10419/80348"
+        },
+        "efficiency": {
+          "value": 0.9,
+          "unit": "per unit",
+          "source": "DIW DataDoc http://hdl.handle.net/10419/80348"
+        },
+        "investment": {
+          "value": 4332.7919,
+          "unit": "EUR/kWel",
+          "source": "DIW DataDoc http://hdl.handle.net/10419/80348"
+        },
+        "lifetime": {
+          "value": 80.0,
+          "unit": "years",
+          "source": "IEA2010"
+        }
+      },
+      "Alkaline electrolyzer large size": {
+        "FOM": {
+          "value": 4.6,
+          "unit": "%/year",
+          "source": "JRC, 01_JRC-EU-TIMES Full model, https://zenodo.org/records/3544900, file `SubRES_15_TECHS_HYDROGEN.xlsx`  (SELCH2EC01, "
+        },
+        "VOM": {
+          "value": 0.3033,
+          "unit": "EUR/MWh_H2",
+          "source": "JRC, 01_JRC-EU-TIMES Full model, https://zenodo.org/records/3544900, file `SubRES_15_TECHS_HYDROGEN.xlsx`  (SELCH2EC01, "
+        },
+        "electricity-input": {
+          "value": 1.38,
+          "unit": "MWh_el/MWh_H2",
+          "source": "JRC, 01_JRC-EU-TIMES Full model, https://zenodo.org/records/3544900, file `SubRES_15_TECHS_HYDROGEN.xlsx`  (SELCH2EC01, "
+        },
+        "investment": {
+          "value": 544.7764,
+          "unit": "EUR/kW",
+          "source": "JRC, 01_JRC-EU-TIMES Full model, https://zenodo.org/records/3544900, file `SubRES_15_TECHS_HYDROGEN.xlsx`  (SELCH2EC01, "
+        },
+        "lifetime": {
+          "value": 40.0,
+          "unit": "years",
+          "source": "JRC, 01_JRC-EU-TIMES Full model, https://zenodo.org/records/3544900, file `SubRES_15_TECHS_HYDROGEN.xlsx`  (SELCH2EC01, "
+        }
+      },
+      "Alkaline electrolyzer medium size": {
+        "FOM": {
+          "value": 18.1,
+          "unit": "%/year",
+          "source": "JRC, 01_JRC-EU-TIMES Full model, https://zenodo.org/records/3544900, file `SubRES_15_TECHS_HYDROGEN.xlsx`  (SELCH2EC02, "
+        },
+        "VOM": {
+          "value": 0.3033,
+          "unit": "EUR/MWh_H2",
+          "source": "JRC, 01_JRC-EU-TIMES Full model, https://zenodo.org/records/3544900, file `SubRES_15_TECHS_HYDROGEN.xlsx`  (SELCH2EC02, "
+        },
+        "electricity-input": {
+          "value": 1.416,
+          "unit": "MWh_el/MWh_H2",
+          "source": "JRC, 01_JRC-EU-TIMES Full model, https://zenodo.org/records/3544900, file `SubRES_15_TECHS_HYDROGEN.xlsx`  (SELCH2EC02, "
+        },
+        "investment": {
+          "value": 718.8102,
+          "unit": "EUR/kW",
+          "source": "JRC, 01_JRC-EU-TIMES Full model, https://zenodo.org/records/3544900, file `SubRES_15_TECHS_HYDROGEN.xlsx`  (SELCH2EC02, "
+        },
+        "lifetime": {
+          "value": 20.0,
+          "unit": "years",
+          "source": "JRC, 01_JRC-EU-TIMES Full model, https://zenodo.org/records/3544900, file `SubRES_15_TECHS_HYDROGEN.xlsx`  (SELCH2EC02, "
+        }
+      },
+      "PEM electrolyzer small size": {
+        "FOM": {
+          "value": 3.0,
+          "unit": "%/year",
+          "source": "JRC, 01_JRC-EU-TIMES Full model, https://zenodo.org/records/3544900, file `SubRES_15_TECHS_HYDROGEN.xlsx`  (SELCH2PEM01,"
+        },
+        "electricity-input": {
+          "value": 1.38,
+          "unit": "MWh_el/MWh_H2",
+          "source": "JRC, 01_JRC-EU-TIMES Full model, https://zenodo.org/records/3544900, file `SubRES_15_TECHS_HYDROGEN.xlsx`  (SELCH2PEM01,"
+        },
+        "investment": {
+          "value": 1552.5838,
+          "unit": "EUR/kW",
+          "source": "JRC, 01_JRC-EU-TIMES Full model, https://zenodo.org/records/3544900, file `SubRES_15_TECHS_HYDROGEN.xlsx`  (SELCH2PEM01,"
+        },
+        "lifetime": {
+          "value": 6.5,
+          "unit": "years",
+          "source": "JRC, 01_JRC-EU-TIMES Full model, https://zenodo.org/records/3544900, file `SubRES_15_TECHS_HYDROGEN.xlsx`  (SELCH2PEM01,"
+        }
+      },
+      "electrolysis": {
+        "FOM": {
+          "value": 4.0,
+          "unit": "%/year",
+          "source": "Danish Energy Agency, inputs/data_sheets_for_renewable_fuels.xlsx"
+        },
+        "efficiency": {
+          "value": 0.5874,
+          "unit": "per unit",
+          "source": "Danish Energy Agency, inputs/data_sheets_for_renewable_fuels.xlsx"
+        },
+        "efficiency-heat": {
+          "value": 0.264,
+          "unit": "per unit",
+          "source": "Danish Energy Agency, inputs/data_sheets_for_renewable_fuels.xlsx"
+        },
+        "investment": {
+          "value": 2263.2023,
+          "unit": "EUR/kW_e",
+          "source": "private communications; IEA https://iea.blob.core.windows.net/assets/9e0c82d4-06d2-496b-9542-f184ba803645/TheRoleofE-fue"
+        },
+        "lifetime": {
+          "value": 25.0,
+          "unit": "years",
+          "source": "Danish Energy Agency, inputs/data_sheets_for_renewable_fuels.xlsx"
+        }
+      },
+      "fuel cell": {
+        "FOM": {
+          "value": 5.0,
+          "unit": "%/year",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "efficiency": {
+          "value": 0.5,
+          "unit": "per unit",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "investment": {
+          "value": 1602.9637,
+          "unit": "EUR/kW_e",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "lifetime": {
+          "value": 10.0,
+          "unit": "years",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        }
+      },
+      "hydrogen storage tank type 1 including compressor": {
+        "FOM": {
+          "value": 1.0794,
+          "unit": "%/year",
+          "source": "Danish Energy Agency, inputs/technology_data_catalogue_for_energy_storage.xlsx"
+        },
+        "investment": {
+          "value": 68.1294,
+          "unit": "EUR/kWh",
+          "source": "Danish Energy Agency, inputs/technology_data_catalogue_for_energy_storage.xlsx"
+        },
+        "lifetime": {
+          "value": 27.5,
+          "unit": "years",
+          "source": "Danish Energy Agency, inputs/technology_data_catalogue_for_energy_storage.xlsx"
+        }
+      },
+      "hydrogen storage tank type 1": {
+        "FOM": {
+          "value": 2.0,
+          "unit": "%/year",
+          "source": "Based on Stöckl et al (2021): https://doi.org/10.48550/arXiv.2005.03464, table SI.9."
+        },
+        "investment": {
+          "value": 16.974,
+          "unit": "EUR/kWh_H2",
+          "source": "Based on Stöckl et al (2021): https://doi.org/10.48550/arXiv.2005.03464, table SI.9."
+        },
+        "lifetime": {
+          "value": 20.0,
+          "unit": "years",
+          "source": "Based on Stöckl et al (2021): https://doi.org/10.48550/arXiv.2005.03464, table SI.9."
+        }
+      },
+      "hydrogen storage underground": {
+        "FOM": {
+          "value": 0.0,
+          "unit": "%/year",
+          "source": "Danish Energy Agency, inputs/technology_data_catalogue_for_energy_storage.xlsx"
+        },
+        "VOM": {
+          "value": 0.0,
+          "unit": "EUR/MWh",
+          "source": "Danish Energy Agency, inputs/technology_data_catalogue_for_energy_storage.xlsx"
+        },
+        "investment": {
+          "value": 3.3426,
+          "unit": "EUR/kWh",
+          "source": "Danish Energy Agency, inputs/technology_data_catalogue_for_energy_storage.xlsx"
+        },
+        "lifetime": {
+          "value": 100.0,
+          "unit": "years",
+          "source": "Danish Energy Agency, inputs/technology_data_catalogue_for_energy_storage.xlsx"
+        }
+      },
+      "SMR": {
+        "FOM": {
+          "value": 5.0,
+          "unit": "%/year",
+          "source": "Danish Energy Agency"
+        },
+        "efficiency": {
+          "value": 0.76,
+          "unit": "per unit (in LHV)",
+          "source": "IEA Global average levelised cost of hydrogen production by energy source and technology, 2019 and 2050 (2020), https://"
+        },
+        "investment": {
+          "value": 659179.2942,
+          "unit": "EUR/MW_CH4",
+          "source": "Danish Energy Agency"
+        },
+        "lifetime": {
+          "value": 30.0,
+          "unit": "years",
+          "source": "IEA Global average levelised cost of hydrogen production by energy source and technology, 2019 and 2050 (2020), https://"
+        }
+      },
+      "SMR CC": {
+        "FOM": {
+          "value": 5.0,
+          "unit": "%/year",
+          "source": "Danish Energy Agency"
+        },
+        "efficiency": {
+          "value": 0.69,
+          "unit": "per unit (in LHV)",
+          "source": "IEA Global average levelised cost of hydrogen production by energy source and technology, 2019 and 2050 (2020), https://"
+        },
+        "investment": {
+          "value": 764647.9813,
+          "unit": "EUR/MW_CH4",
+          "source": "Danish Energy Agency"
+        },
+        "lifetime": {
+          "value": 30.0,
+          "unit": "years",
+          "source": "IEA Global average levelised cost of hydrogen production by energy source and technology, 2019 and 2050 (2020), https://"
+        }
+      },
+      "HVDC inverter pair": {
+        "FOM": {
+          "value": 1.5,
+          "unit": "%/year",
+          "source": "Danish Energy Agency, Technology Data for Energy Transport (July 2025), https://ens.dk/en/analyses-and-statistics/techno"
+        },
+        "investment": {
+          "value": 640.0,
+          "unit": "EUR/kW",
+          "source": "Danish Energy Agency, Technology Data for Energy Transport (July 2025), https://ens.dk/en/analyses-and-statistics/techno"
+        },
+        "lifetime": {
+          "value": 40.0,
+          "unit": "years",
+          "source": "Danish Energy Agency, Technology Data for Energy Transport (July 2025), https://ens.dk/en/analyses-and-statistics/techno"
+        }
+      },
+      "HVDC overhead": {
+        "FOM": {
+          "value": 1.5,
+          "unit": "%/year",
+          "source": "Danish Energy Agency, Technology Data for Energy Transport (July 2025), https://ens.dk/en/analyses-and-statistics/techno"
+        },
+        "investment": {
+          "value": 600.0,
+          "unit": "EUR/MW/km",
+          "source": "Danish Energy Agency, Technology Data for Energy Transport (July 2025), https://ens.dk/en/analyses-and-statistics/techno"
+        },
+        "lifetime": {
+          "value": 40.0,
+          "unit": "years",
+          "source": "Danish Energy Agency, Technology Data for Energy Transport (July 2025), https://ens.dk/en/analyses-and-statistics/techno"
+        }
+      },
+      "HVDC submarine": {
+        "FOM": {
+          "value": 2.5,
+          "unit": "%/year",
+          "source": "Danish Energy Agency, Technology Data for Energy Transport (July 2025), https://ens.dk/en/analyses-and-statistics/techno"
+        },
+        "investment": {
+          "value": 3220.0,
+          "unit": "EUR/MW/km",
+          "source": "Danish Energy Agency, Technology Data for Energy Transport (July 2025), https://ens.dk/en/analyses-and-statistics/techno"
+        },
+        "lifetime": {
+          "value": 40.0,
+          "unit": "years",
+          "source": "Danish Energy Agency, Technology Data for Energy Transport (July 2025), https://ens.dk/en/analyses-and-statistics/techno"
+        }
+      },
+      "HVDC underground": {
+        "FOM": {
+          "value": 2.5,
+          "unit": "%/year",
+          "source": "Danish Energy Agency, Technology Data for Energy Transport (July 2025), https://ens.dk/en/analyses-and-statistics/techno"
+        },
+        "investment": {
+          "value": 4070.0,
+          "unit": "EUR/MW/km",
+          "source": "Danish Energy Agency, Technology Data for Energy Transport (July 2025), https://ens.dk/en/analyses-and-statistics/techno"
+        },
+        "lifetime": {
+          "value": 40.0,
+          "unit": "years",
+          "source": "Danish Energy Agency, Technology Data for Energy Transport (July 2025), https://ens.dk/en/analyses-and-statistics/techno"
+        }
+      },
+      "HVAC overhead": {
+        "FOM": {
+          "value": 1.5,
+          "unit": "%",
+          "source": "Danish Energy Agency, Technology Data for Energy Transport (July 2025), https://ens.dk/en/analyses-and-statistics/techno"
+        },
+        "investment": {
+          "value": 750.0,
+          "unit": "EUR/MW/km",
+          "source": "Danish Energy Agency, Technology Data for Energy Transport (July 2025), https://ens.dk/en/analyses-and-statistics/techno"
+        },
+        "lifetime": {
+          "value": 40.0,
+          "unit": "years",
+          "source": "Danish Energy Agency, Technology Data for Energy Transport (July 2025), https://ens.dk/en/analyses-and-statistics/techno"
+        }
+      },
+      "HVAC submarine": {
+        "FOM": {
+          "value": 2.5,
+          "unit": "%/year",
+          "source": "Danish Energy Agency, Technology Data for Energy Transport (July 2025), https://ens.dk/en/analyses-and-statistics/techno"
+        },
+        "investment": {
+          "value": 4510.0,
+          "unit": "EUR/MW/km",
+          "source": "Danish Energy Agency, Technology Data for Energy Transport (July 2025), https://ens.dk/en/analyses-and-statistics/techno"
+        },
+        "lifetime": {
+          "value": 40.0,
+          "unit": "years",
+          "source": "Danish Energy Agency, Technology Data for Energy Transport (July 2025), https://ens.dk/en/analyses-and-statistics/techno"
+        }
+      },
+      "HVAC underground": {
+        "FOM": {
+          "value": 2.5,
+          "unit": "%/year",
+          "source": "Danish Energy Agency, Technology Data for Energy Transport (July 2025), https://ens.dk/en/analyses-and-statistics/techno"
+        },
+        "investment": {
+          "value": 4510.0,
+          "unit": "EUR/MW/km",
+          "source": "Danish Energy Agency, Technology Data for Energy Transport (July 2025), https://ens.dk/en/analyses-and-statistics/techno"
+        },
+        "lifetime": {
+          "value": 40.0,
+          "unit": "years",
+          "source": "Danish Energy Agency, Technology Data for Energy Transport (July 2025), https://ens.dk/en/analyses-and-statistics/techno"
+        }
+      },
+      "central air-sourced heat pump": {
+        "FOM": {
+          "value": 0.2102,
+          "unit": "%/year",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "VOM": {
+          "value": 2.9254,
+          "unit": "EUR/MWh_th",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "efficiency": {
+          "value": 3.15,
+          "unit": "per unit",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "investment": {
+          "value": 1270.8634,
+          "unit": "EUR/kW_th",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "lifetime": {
+          "value": 25.0,
+          "unit": "years",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        }
+      }
+    },
+    "2030": {
+      "CCGT": {
+        "FOM": {
+          "value": 3.3494,
+          "unit": "%/year",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "VOM": {
+          "value": 5.6104,
+          "unit": "EUR/MWh",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "efficiency": {
+          "value": 0.58,
+          "unit": "per unit",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "investment": {
+          "value": 1108.7166,
+          "unit": "EUR/kW",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "lifetime": {
+          "value": 25.0,
+          "unit": "years",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        }
+      },
+      "OCGT": {
+        "FOM": {
+          "value": 1.7795,
+          "unit": "%/year",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "VOM": {
+          "value": 6.0111,
+          "unit": "EUR/MWh",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "efficiency": {
+          "value": 0.41,
+          "unit": "per unit",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "investment": {
+          "value": 581.3949,
+          "unit": "EUR/kW",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "lifetime": {
+          "value": 25.0,
+          "unit": "years",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        }
+      },
+      "coal": {
+        "CO2 intensity": {
+          "value": 0.3361,
+          "unit": "tCO2/MWh_th",
+          "source": "Entwicklung der spezifischen Kohlendioxid-Emissionen des deutschen Strommix in den Jahren 1990 - 2018"
+        },
+        "FOM": {
+          "value": 1.31,
+          "unit": "%/year",
+          "source": "Lazard's levelized cost of energy analysis - version 16.0 (2023): https://www.lazard.com/media/typdgxmm/lazards-lcoeplus"
+        },
+        "VOM": {
+          "value": 4.1005,
+          "unit": "EUR/MWh_e",
+          "source": "Lazard's levelized cost of energy analysis - version 16.0 (2023): https://www.lazard.com/media/typdgxmm/lazards-lcoeplus"
+        },
+        "efficiency": {
+          "value": 0.356,
+          "unit": "p.u.",
+          "source": "Lazard's levelized cost of energy analysis - version 16.0 (2023): https://www.lazard.com/media/typdgxmm/lazards-lcoeplus"
+        },
+        "fuel": {
+          "value": 7.8202,
+          "unit": "EUR/MWh_th",
+          "source": "ENTSO-E & ENTSOG TYNDP 2024 Scenarios Inputs Commodity Prices, https://2024-data.entsos-tyndp-scenarios.eu/files/scenari"
+        },
+        "investment": {
+          "value": 4812.0244,
+          "unit": "EUR/kW_e",
+          "source": "Lazard's levelized cost of energy analysis - version 16.0 (2023): https://www.lazard.com/media/typdgxmm/lazards-lcoeplus"
+        },
+        "lifetime": {
+          "value": 40.0,
+          "unit": "years",
+          "source": "Lazard's levelized cost of energy analysis - version 16.0 (2023): https://www.lazard.com/media/typdgxmm/lazards-lcoeplus"
+        }
+      },
+      "nuclear": {
+        "FOM": {
+          "value": 1.27,
+          "unit": "%/year",
+          "source": "Lazard's levelized cost of energy analysis - version 16.0 (2023): https://www.lazard.com/media/typdgxmm/lazards-lcoeplus"
+        },
+        "VOM": {
+          "value": 4.459,
+          "unit": "EUR/MWh_e",
+          "source": "Lazard's levelized cost of energy analysis - version 16.0 (2023): https://www.lazard.com/media/typdgxmm/lazards-lcoeplus"
+        },
+        "efficiency": {
+          "value": 0.326,
+          "unit": "p.u.",
+          "source": "Lazard's levelized cost of energy analysis - version 16.0 (2023): https://www.lazard.com/media/typdgxmm/lazards-lcoeplus"
+        },
+        "fuel": {
+          "value": 7.4536,
+          "unit": "EUR/MWh_th",
+          "source": "ENTSO-E & ENTSOG TYNDP 2024 Scenarios Inputs Commodity Prices, https://2024-data.entsos-tyndp-scenarios.eu/files/scenari"
+        },
+        "investment": {
+          "value": 10805.7038,
+          "unit": "EUR/kW_e",
+          "source": "Lazard's levelized cost of energy analysis - version 16.0 (2023): https://www.lazard.com/media/typdgxmm/lazards-lcoeplus"
+        },
+        "lifetime": {
+          "value": 40.0,
+          "unit": "years",
+          "source": "Lazard's levelized cost of energy analysis - version 16.0 (2023): https://www.lazard.com/media/typdgxmm/lazards-lcoeplus"
+        }
+      },
+      "biomass": {
+        "FOM": {
+          "value": 4.5269,
+          "unit": "%/year",
+          "source": "DIW DataDoc http://hdl.handle.net/10419/80348"
+        },
+        "efficiency": {
+          "value": 0.468,
+          "unit": "per unit",
+          "source": "DIW DataDoc http://hdl.handle.net/10419/80348"
+        },
+        "fuel": {
+          "value": 9.3506,
+          "unit": "EUR/MWhth",
+          "source": "IEA2011b"
+        },
+        "investment": {
+          "value": 2950.7891,
+          "unit": "EUR/kWel",
+          "source": "DIW DataDoc http://hdl.handle.net/10419/80348"
+        },
+        "lifetime": {
+          "value": 30.0,
+          "unit": "years",
+          "source": "ECF2010 in DIW DataDoc http://hdl.handle.net/10419/80348"
+        }
+      },
+      "biomass CHP": {
+        "FOM": {
+          "value": 3.5822,
+          "unit": "%/year",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "VOM": {
+          "value": 2.8049,
+          "unit": "EUR/MWh_e",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "efficiency": {
+          "value": 0.3003,
+          "unit": "per unit",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "efficiency-heat": {
+          "value": 0.7083,
+          "unit": "per unit",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "investment": {
+          "value": 4288.3001,
+          "unit": "EUR/kW_e",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "lifetime": {
+          "value": 25.0,
+          "unit": "years",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        }
+      },
+      "biogas": {
+        "FOM": {
+          "value": 7.7769,
+          "unit": "%/year",
+          "source": "Danish Energy Agency, inputs/data_sheets_for_renewable_fuels.xlsx"
+        },
+        "efficiency": {
+          "value": 1.0,
+          "unit": "per unit",
+          "source": "Assuming input biomass is already given in biogas output"
+        },
+        "fuel": {
+          "value": 78.8124,
+          "unit": "EUR/MWhth",
+          "source": "JRC and Zappa"
+        },
+        "investment": {
+          "value": 1200.989,
+          "unit": "EUR/kW",
+          "source": "Danish Energy Agency, inputs/data_sheets_for_renewable_fuels.xlsx"
+        },
+        "lifetime": {
+          "value": 20.0,
+          "unit": "years",
+          "source": "Danish Energy Agency, inputs/data_sheets_for_renewable_fuels.xlsx"
+        }
+      },
+      "geothermal": {
+        "CO2 intensity": {
+          "value": 0.12,
+          "unit": "tCO2/MWh_th",
+          "source": "Aghahosseini, Breyer 2020: From hot rock to useful energy: A global estimate of enhanced geothermal systems potential, h"
+        },
+        "FOM": {
+          "value": 2.0,
+          "unit": "%/year",
+          "source": "Aghahosseini, Breyer 2020: From hot rock to useful energy: A global estimate of enhanced geothermal systems potential, h"
+        },
+        "lifetime": {
+          "value": 30.0,
+          "unit": "years",
+          "source": "Aghahosseini, Breyer 2020: From hot rock to useful energy: A global estimate of enhanced geothermal systems potential, h"
+        }
+      },
+      "onwind": {
+        "FOM": {
+          "value": 1.2167,
+          "unit": "%/year",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "VOM": {
+          "value": 1.8033,
+          "unit": "EUR/MWh",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "investment": {
+          "value": 1383.3059,
+          "unit": "EUR/kW",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "lifetime": {
+          "value": 30.0,
+          "unit": "years",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        }
+      },
+      "offwind": {
+        "FOM": {
+          "value": 2.3185,
+          "unit": "%/year",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "VOM": {
+          "value": 0.0267,
+          "unit": "EUR/MWhel",
+          "source": "RES costs made up to fix curtailment order"
+        },
+        "investment": {
+          "value": 2114.991,
+          "unit": "EUR/kW_e, 2020",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "lifetime": {
+          "value": 30.0,
+          "unit": "years",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        }
+      },
+      "offwind-float": {
+        "FOM": {
+          "value": 1.15,
+          "unit": "%/year",
+          "source": "https://doi.org/10.1016/j.adapen.2021.100067"
+        },
+        "investment": {
+          "value": 2954.7363,
+          "unit": "EUR/kWel",
+          "source": "https://doi.org/10.1016/j.adapen.2021.100067"
+        },
+        "lifetime": {
+          "value": 20.0,
+          "unit": "years",
+          "source": "C. Maienza 2020 A life cycle cost model for floating offshore wind farms"
+        }
+      },
+      "solar": {
+        "FOM": {
+          "value": 1.9495,
+          "unit": "%/year",
+          "source": "Calculated. See 'further description'."
+        },
+        "VOM": {
+          "value": 0.0134,
+          "unit": "EUR/MWhel",
+          "source": "RES costs made up to fix curtailment order"
+        },
+        "investment": {
+          "value": 683.1462,
+          "unit": "EUR/kW_e",
+          "source": "Calculated. See 'further description'."
+        },
+        "lifetime": {
+          "value": 40.0,
+          "unit": "years",
+          "source": "Calculated. See 'further description'."
+        }
+      },
+      "solar-utility": {
+        "FOM": {
+          "value": 2.4757,
+          "unit": "%/year",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "investment": {
+          "value": 482.4785,
+          "unit": "EUR/kW_e",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "lifetime": {
+          "value": 40.0,
+          "unit": "years",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        }
+      },
+      "solar-utility single-axis tracking": {
+        "FOM": {
+          "value": 2.2884,
+          "unit": "%/year",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "investment": {
+          "value": 571.4213,
+          "unit": "EUR/kW_e",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "lifetime": {
+          "value": 40.0,
+          "unit": "years",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        }
+      },
+      "solar-rooftop": {
+        "FOM": {
+          "value": 1.4234,
+          "unit": "%/year",
+          "source": "Calculated. See 'further description'."
+        },
+        "discount rate": {
+          "value": 0.04,
+          "unit": "per unit",
+          "source": "standard for decentral"
+        },
+        "investment": {
+          "value": 883.8138,
+          "unit": "EUR/kW_e",
+          "source": "Calculated. See 'further description'."
+        },
+        "lifetime": {
+          "value": 40.0,
+          "unit": "years",
+          "source": "Calculated. See 'further description'."
+        }
+      },
+      "battery storage": {
+        "investment": {
+          "value": 189.861,
+          "unit": "EUR/kWh",
+          "source": "Danish Energy Agency, inputs/technology_data_catalogue_for_energy_storage.xlsx"
+        },
+        "lifetime": {
+          "value": 25.0,
+          "unit": "years",
+          "source": "Danish Energy Agency, inputs/technology_data_catalogue_for_energy_storage.xlsx"
+        }
+      },
+      "battery inverter": {
+        "FOM": {
+          "value": 0.3375,
+          "unit": "%/year",
+          "source": "Danish Energy Agency, inputs/technology_data_catalogue_for_energy_storage.xlsx"
+        },
+        "efficiency": {
+          "value": 0.96,
+          "unit": "per unit",
+          "source": "Danish Energy Agency, inputs/technology_data_catalogue_for_energy_storage.xlsx"
+        },
+        "investment": {
+          "value": 213.9279,
+          "unit": "EUR/kW",
+          "source": "Danish Energy Agency, inputs/technology_data_catalogue_for_energy_storage.xlsx"
+        },
+        "lifetime": {
+          "value": 10.0,
+          "unit": "years",
+          "source": "Danish Energy Agency, inputs/technology_data_catalogue_for_energy_storage.xlsx, Note K."
+        }
+      },
+      "home battery storage": {
+        "investment": {
+          "value": 271.2908,
+          "unit": "EUR/kWh",
+          "source": "Global Energy System based on 100% Renewable Energy, Energywatchgroup/LTU University, 2019, Danish Energy Agency, inputs"
+        },
+        "lifetime": {
+          "value": 25.0,
+          "unit": "years",
+          "source": "Global Energy System based on 100% Renewable Energy, Energywatchgroup/LTU University, 2019, Danish Energy Agency, inputs"
+        }
+      },
+      "home battery inverter": {
+        "FOM": {
+          "value": 0.3375,
+          "unit": "%/year",
+          "source": "Global Energy System based on 100% Renewable Energy, Energywatchgroup/LTU University, 2019, Danish Energy Agency, inputs"
+        },
+        "efficiency": {
+          "value": 0.96,
+          "unit": "per unit",
+          "source": "Global Energy System based on 100% Renewable Energy, Energywatchgroup/LTU University, 2019, Danish Energy Agency, inputs"
+        },
+        "investment": {
+          "value": 304.9271,
+          "unit": "EUR/kW",
+          "source": "Global Energy System based on 100% Renewable Energy, Energywatchgroup/LTU University, 2019, Danish Energy Agency, inputs"
+        },
+        "lifetime": {
+          "value": 10.0,
+          "unit": "years",
+          "source": "Global Energy System based on 100% Renewable Energy, Energywatchgroup/LTU University, 2019, Danish Energy Agency, inputs"
+        }
+      },
+      "Pumped-Storage-Hydro-bicharger": {
+        "FOM": {
+          "value": 0.9951,
+          "unit": "%/year",
+          "source": "Viswanathan_2022, Figure 4.16"
+        },
+        "efficiency": {
+          "value": 0.8944,
+          "unit": "per unit",
+          "source": "Viswanathan_2022, p.68 (p.90)"
+        },
+        "investment": {
+          "value": 1756657.9565,
+          "unit": "EUR/MW",
+          "source": "Viswanathan_2022, p.68 (p.90)"
+        },
+        "lifetime": {
+          "value": 60.0,
+          "unit": "years",
+          "source": "Viswanathan_2022, p.68 (p.90)"
+        }
+      },
+      "Pumped-Storage-Hydro-store": {
+        "FOM": {
+          "value": 0.43,
+          "unit": "%/year",
+          "source": "Viswanathan_2022, 0.43 % of SB"
+        },
+        "investment": {
+          "value": 71761.1936,
+          "unit": "EUR/MWh",
+          "source": "Viswanathan_2022, p.68 (p.90)"
+        },
+        "lifetime": {
+          "value": 60.0,
+          "unit": "years",
+          "source": "Viswanathan_2022, p.68 (p.90)"
+        }
+      },
+      "hydro": {
+        "FOM": {
+          "value": 1.0,
+          "unit": "%/year",
+          "source": "DIW DataDoc http://hdl.handle.net/10419/80348"
+        },
+        "efficiency": {
+          "value": 0.9,
+          "unit": "per unit",
+          "source": "DIW DataDoc http://hdl.handle.net/10419/80348"
+        },
+        "investment": {
+          "value": 2888.5279,
+          "unit": "EUR/kWel",
+          "source": "DIW DataDoc http://hdl.handle.net/10419/80348"
+        },
+        "lifetime": {
+          "value": 80.0,
+          "unit": "years",
+          "source": "IEA2010"
+        }
+      },
+      "ror": {
+        "FOM": {
+          "value": 2.0,
+          "unit": "%/year",
+          "source": "DIW DataDoc http://hdl.handle.net/10419/80348"
+        },
+        "efficiency": {
+          "value": 0.9,
+          "unit": "per unit",
+          "source": "DIW DataDoc http://hdl.handle.net/10419/80348"
+        },
+        "investment": {
+          "value": 4332.7919,
+          "unit": "EUR/kWel",
+          "source": "DIW DataDoc http://hdl.handle.net/10419/80348"
+        },
+        "lifetime": {
+          "value": 80.0,
+          "unit": "years",
+          "source": "IEA2010"
+        }
+      },
+      "Alkaline electrolyzer large size": {
+        "FOM": {
+          "value": 2.8,
+          "unit": "%/year",
+          "source": "JRC, 01_JRC-EU-TIMES Full model, https://zenodo.org/records/3544900, file `SubRES_15_TECHS_HYDROGEN.xlsx`  (SELCH2EC01, "
+        },
+        "VOM": {
+          "value": 0.3033,
+          "unit": "EUR/MWh_H2",
+          "source": "JRC, 01_JRC-EU-TIMES Full model, https://zenodo.org/records/3544900, file `SubRES_15_TECHS_HYDROGEN.xlsx`  (SELCH2EC01, "
+        },
+        "electricity-input": {
+          "value": 1.38,
+          "unit": "MWh_el/MWh_H2",
+          "source": "JRC, 01_JRC-EU-TIMES Full model, https://zenodo.org/records/3544900, file `SubRES_15_TECHS_HYDROGEN.xlsx`  (SELCH2EC01, "
+        },
+        "investment": {
+          "value": 544.7764,
+          "unit": "EUR/kW",
+          "source": "JRC, 01_JRC-EU-TIMES Full model, https://zenodo.org/records/3544900, file `SubRES_15_TECHS_HYDROGEN.xlsx`  (SELCH2EC01, "
+        },
+        "lifetime": {
+          "value": 40.0,
+          "unit": "years",
+          "source": "JRC, 01_JRC-EU-TIMES Full model, https://zenodo.org/records/3544900, file `SubRES_15_TECHS_HYDROGEN.xlsx`  (SELCH2EC01, "
+        }
+      },
+      "Alkaline electrolyzer medium size": {
+        "FOM": {
+          "value": 2.3,
+          "unit": "%/year",
+          "source": "JRC, 01_JRC-EU-TIMES Full model, https://zenodo.org/records/3544900, file `SubRES_15_TECHS_HYDROGEN.xlsx`  (SELCH2EC02, "
+        },
+        "VOM": {
+          "value": 0.3033,
+          "unit": "EUR/MWh_H2",
+          "source": "JRC, 01_JRC-EU-TIMES Full model, https://zenodo.org/records/3544900, file `SubRES_15_TECHS_HYDROGEN.xlsx`  (SELCH2EC02, "
+        },
+        "electricity-input": {
+          "value": 1.416,
+          "unit": "MWh_el/MWh_H2",
+          "source": "JRC, 01_JRC-EU-TIMES Full model, https://zenodo.org/records/3544900, file `SubRES_15_TECHS_HYDROGEN.xlsx`  (SELCH2EC02, "
+        },
+        "investment": {
+          "value": 642.553,
+          "unit": "EUR/kW",
+          "source": "JRC, 01_JRC-EU-TIMES Full model, https://zenodo.org/records/3544900, file `SubRES_15_TECHS_HYDROGEN.xlsx`  (SELCH2EC02, "
+        },
+        "lifetime": {
+          "value": 20.0,
+          "unit": "years",
+          "source": "JRC, 01_JRC-EU-TIMES Full model, https://zenodo.org/records/3544900, file `SubRES_15_TECHS_HYDROGEN.xlsx`  (SELCH2EC02, "
+        }
+      },
+      "PEM electrolyzer small size": {
+        "FOM": {
+          "value": 3.0,
+          "unit": "%/year",
+          "source": "JRC, 01_JRC-EU-TIMES Full model, https://zenodo.org/records/3544900, file `SubRES_15_TECHS_HYDROGEN.xlsx`  (SELCH2PEM01,"
+        },
+        "electricity-input": {
+          "value": 1.33,
+          "unit": "MWh_el/MWh_H2",
+          "source": "JRC, 01_JRC-EU-TIMES Full model, https://zenodo.org/records/3544900, file `SubRES_15_TECHS_HYDROGEN.xlsx`  (SELCH2PEM01,"
+        },
+        "investment": {
+          "value": 1372.0508,
+          "unit": "EUR/kW",
+          "source": "JRC, 01_JRC-EU-TIMES Full model, https://zenodo.org/records/3544900, file `SubRES_15_TECHS_HYDROGEN.xlsx`  (SELCH2PEM01,"
+        },
+        "lifetime": {
+          "value": 7.0,
+          "unit": "years",
+          "source": "JRC, 01_JRC-EU-TIMES Full model, https://zenodo.org/records/3544900, file `SubRES_15_TECHS_HYDROGEN.xlsx`  (SELCH2PEM01,"
+        }
+      },
+      "electrolysis": {
+        "FOM": {
+          "value": 4.0,
+          "unit": "%/year",
+          "source": "Danish Energy Agency, inputs/data_sheets_for_renewable_fuels.xlsx"
+        },
+        "efficiency": {
+          "value": 0.6217,
+          "unit": "per unit",
+          "source": "Danish Energy Agency, inputs/data_sheets_for_renewable_fuels.xlsx"
+        },
+        "efficiency-heat": {
+          "value": 0.2228,
+          "unit": "per unit",
+          "source": "Danish Energy Agency, inputs/data_sheets_for_renewable_fuels.xlsx"
+        },
+        "investment": {
+          "value": 1886.0019,
+          "unit": "EUR/kW_e",
+          "source": "private communications; IEA https://iea.blob.core.windows.net/assets/9e0c82d4-06d2-496b-9542-f184ba803645/TheRoleofE-fue"
+        },
+        "lifetime": {
+          "value": 25.0,
+          "unit": "years",
+          "source": "Danish Energy Agency, inputs/data_sheets_for_renewable_fuels.xlsx"
+        }
+      },
+      "fuel cell": {
+        "FOM": {
+          "value": 5.0,
+          "unit": "%/year",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "efficiency": {
+          "value": 0.5,
+          "unit": "per unit",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "investment": {
+          "value": 1469.3834,
+          "unit": "EUR/kW_e",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "lifetime": {
+          "value": 10.0,
+          "unit": "years",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        }
+      },
+      "hydrogen storage tank type 1 including compressor": {
+        "FOM": {
+          "value": 1.1133,
+          "unit": "%/year",
+          "source": "Danish Energy Agency, inputs/technology_data_catalogue_for_energy_storage.xlsx"
+        },
+        "investment": {
+          "value": 60.0469,
+          "unit": "EUR/kWh",
+          "source": "Danish Energy Agency, inputs/technology_data_catalogue_for_energy_storage.xlsx"
+        },
+        "lifetime": {
+          "value": 30.0,
+          "unit": "years",
+          "source": "Danish Energy Agency, inputs/technology_data_catalogue_for_energy_storage.xlsx"
+        }
+      },
+      "hydrogen storage tank type 1": {
+        "FOM": {
+          "value": 2.0,
+          "unit": "%/year",
+          "source": "Based on Stöckl et al (2021): https://doi.org/10.48550/arXiv.2005.03464, table SI.9."
+        },
+        "investment": {
+          "value": 16.974,
+          "unit": "EUR/kWh_H2",
+          "source": "Based on Stöckl et al (2021): https://doi.org/10.48550/arXiv.2005.03464, table SI.9."
+        },
+        "lifetime": {
+          "value": 20.0,
+          "unit": "years",
+          "source": "Based on Stöckl et al (2021): https://doi.org/10.48550/arXiv.2005.03464, table SI.9."
+        }
+      },
+      "hydrogen storage underground": {
+        "FOM": {
+          "value": 0.0,
+          "unit": "%/year",
+          "source": "Danish Energy Agency, inputs/technology_data_catalogue_for_energy_storage.xlsx"
+        },
+        "VOM": {
+          "value": 0.0,
+          "unit": "EUR/MWh",
+          "source": "Danish Energy Agency, inputs/technology_data_catalogue_for_energy_storage.xlsx"
+        },
+        "investment": {
+          "value": 2.6741,
+          "unit": "EUR/kWh",
+          "source": "Danish Energy Agency, inputs/technology_data_catalogue_for_energy_storage.xlsx"
+        },
+        "lifetime": {
+          "value": 100.0,
+          "unit": "years",
+          "source": "Danish Energy Agency, inputs/technology_data_catalogue_for_energy_storage.xlsx"
+        }
+      },
+      "SMR": {
+        "FOM": {
+          "value": 5.0,
+          "unit": "%/year",
+          "source": "Danish Energy Agency"
+        },
+        "efficiency": {
+          "value": 0.76,
+          "unit": "per unit (in LHV)",
+          "source": "IEA Global average levelised cost of hydrogen production by energy source and technology, 2019 and 2050 (2020), https://"
+        },
+        "investment": {
+          "value": 659179.2942,
+          "unit": "EUR/MW_CH4",
+          "source": "Danish Energy Agency"
+        },
+        "lifetime": {
+          "value": 30.0,
+          "unit": "years",
+          "source": "IEA Global average levelised cost of hydrogen production by energy source and technology, 2019 and 2050 (2020), https://"
+        }
+      },
+      "SMR CC": {
+        "FOM": {
+          "value": 5.0,
+          "unit": "%/year",
+          "source": "Danish Energy Agency"
+        },
+        "efficiency": {
+          "value": 0.69,
+          "unit": "per unit (in LHV)",
+          "source": "IEA Global average levelised cost of hydrogen production by energy source and technology, 2019 and 2050 (2020), https://"
+        },
+        "investment": {
+          "value": 764647.9813,
+          "unit": "EUR/MW_CH4",
+          "source": "Danish Energy Agency"
+        },
+        "lifetime": {
+          "value": 30.0,
+          "unit": "years",
+          "source": "IEA Global average levelised cost of hydrogen production by energy source and technology, 2019 and 2050 (2020), https://"
+        }
+      },
+      "HVDC inverter pair": {
+        "FOM": {
+          "value": 1.5,
+          "unit": "%/year",
+          "source": "Danish Energy Agency, Technology Data for Energy Transport (July 2025), https://ens.dk/en/analyses-and-statistics/techno"
+        },
+        "investment": {
+          "value": 640.0,
+          "unit": "EUR/kW",
+          "source": "Danish Energy Agency, Technology Data for Energy Transport (July 2025), https://ens.dk/en/analyses-and-statistics/techno"
+        },
+        "lifetime": {
+          "value": 40.0,
+          "unit": "years",
+          "source": "Danish Energy Agency, Technology Data for Energy Transport (July 2025), https://ens.dk/en/analyses-and-statistics/techno"
+        }
+      },
+      "HVDC overhead": {
+        "FOM": {
+          "value": 1.5,
+          "unit": "%/year",
+          "source": "Danish Energy Agency, Technology Data for Energy Transport (July 2025), https://ens.dk/en/analyses-and-statistics/techno"
+        },
+        "investment": {
+          "value": 600.0,
+          "unit": "EUR/MW/km",
+          "source": "Danish Energy Agency, Technology Data for Energy Transport (July 2025), https://ens.dk/en/analyses-and-statistics/techno"
+        },
+        "lifetime": {
+          "value": 40.0,
+          "unit": "years",
+          "source": "Danish Energy Agency, Technology Data for Energy Transport (July 2025), https://ens.dk/en/analyses-and-statistics/techno"
+        }
+      },
+      "HVDC submarine": {
+        "FOM": {
+          "value": 2.5,
+          "unit": "%/year",
+          "source": "Danish Energy Agency, Technology Data for Energy Transport (July 2025), https://ens.dk/en/analyses-and-statistics/techno"
+        },
+        "investment": {
+          "value": 3220.0,
+          "unit": "EUR/MW/km",
+          "source": "Danish Energy Agency, Technology Data for Energy Transport (July 2025), https://ens.dk/en/analyses-and-statistics/techno"
+        },
+        "lifetime": {
+          "value": 40.0,
+          "unit": "years",
+          "source": "Danish Energy Agency, Technology Data for Energy Transport (July 2025), https://ens.dk/en/analyses-and-statistics/techno"
+        }
+      },
+      "HVDC underground": {
+        "FOM": {
+          "value": 2.5,
+          "unit": "%/year",
+          "source": "Danish Energy Agency, Technology Data for Energy Transport (July 2025), https://ens.dk/en/analyses-and-statistics/techno"
+        },
+        "investment": {
+          "value": 4070.0,
+          "unit": "EUR/MW/km",
+          "source": "Danish Energy Agency, Technology Data for Energy Transport (July 2025), https://ens.dk/en/analyses-and-statistics/techno"
+        },
+        "lifetime": {
+          "value": 40.0,
+          "unit": "years",
+          "source": "Danish Energy Agency, Technology Data for Energy Transport (July 2025), https://ens.dk/en/analyses-and-statistics/techno"
+        }
+      },
+      "HVAC overhead": {
+        "FOM": {
+          "value": 1.5,
+          "unit": "%",
+          "source": "Danish Energy Agency, Technology Data for Energy Transport (July 2025), https://ens.dk/en/analyses-and-statistics/techno"
+        },
+        "investment": {
+          "value": 750.0,
+          "unit": "EUR/MW/km",
+          "source": "Danish Energy Agency, Technology Data for Energy Transport (July 2025), https://ens.dk/en/analyses-and-statistics/techno"
+        },
+        "lifetime": {
+          "value": 40.0,
+          "unit": "years",
+          "source": "Danish Energy Agency, Technology Data for Energy Transport (July 2025), https://ens.dk/en/analyses-and-statistics/techno"
+        }
+      },
+      "HVAC submarine": {
+        "FOM": {
+          "value": 2.5,
+          "unit": "%/year",
+          "source": "Danish Energy Agency, Technology Data for Energy Transport (July 2025), https://ens.dk/en/analyses-and-statistics/techno"
+        },
+        "investment": {
+          "value": 4510.0,
+          "unit": "EUR/MW/km",
+          "source": "Danish Energy Agency, Technology Data for Energy Transport (July 2025), https://ens.dk/en/analyses-and-statistics/techno"
+        },
+        "lifetime": {
+          "value": 40.0,
+          "unit": "years",
+          "source": "Danish Energy Agency, Technology Data for Energy Transport (July 2025), https://ens.dk/en/analyses-and-statistics/techno"
+        }
+      },
+      "HVAC underground": {
+        "FOM": {
+          "value": 2.5,
+          "unit": "%/year",
+          "source": "Danish Energy Agency, Technology Data for Energy Transport (July 2025), https://ens.dk/en/analyses-and-statistics/techno"
+        },
+        "investment": {
+          "value": 4510.0,
+          "unit": "EUR/MW/km",
+          "source": "Danish Energy Agency, Technology Data for Energy Transport (July 2025), https://ens.dk/en/analyses-and-statistics/techno"
+        },
+        "lifetime": {
+          "value": 40.0,
+          "unit": "years",
+          "source": "Danish Energy Agency, Technology Data for Energy Transport (July 2025), https://ens.dk/en/analyses-and-statistics/techno"
+        }
+      },
+      "central air-sourced heat pump": {
+        "FOM": {
+          "value": 0.2336,
+          "unit": "%/year",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "VOM": {
+          "value": 3.3529,
+          "unit": "EUR/MWh_th",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "efficiency": {
+          "value": 3.2,
+          "unit": "per unit",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "investment": {
+          "value": 1143.7771,
+          "unit": "EUR/kW_th",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "lifetime": {
+          "value": 25.0,
+          "unit": "years",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        }
+      }
+    },
+    "2035": {
+      "CCGT": {
+        "FOM": {
+          "value": 3.3252,
+          "unit": "%/year",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "VOM": {
+          "value": 5.5436,
+          "unit": "EUR/MWh",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "efficiency": {
+          "value": 0.585,
+          "unit": "per unit",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "investment": {
+          "value": 1098.6981,
+          "unit": "EUR/kW",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "lifetime": {
+          "value": 25.0,
+          "unit": "years",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        }
+      },
+      "OCGT": {
+        "FOM": {
+          "value": 1.785,
+          "unit": "%/year",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "VOM": {
+          "value": 6.0111,
+          "unit": "EUR/MWh",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "efficiency": {
+          "value": 0.415,
+          "unit": "per unit",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "investment": {
+          "value": 573.5805,
+          "unit": "EUR/kW",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "lifetime": {
+          "value": 25.0,
+          "unit": "years",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        }
+      },
+      "coal": {
+        "CO2 intensity": {
+          "value": 0.3361,
+          "unit": "tCO2/MWh_th",
+          "source": "Entwicklung der spezifischen Kohlendioxid-Emissionen des deutschen Strommix in den Jahren 1990 - 2018"
+        },
+        "FOM": {
+          "value": 1.31,
+          "unit": "%/year",
+          "source": "Lazard's levelized cost of energy analysis - version 16.0 (2023): https://www.lazard.com/media/typdgxmm/lazards-lcoeplus"
+        },
+        "VOM": {
+          "value": 4.1005,
+          "unit": "EUR/MWh_e",
+          "source": "Lazard's levelized cost of energy analysis - version 16.0 (2023): https://www.lazard.com/media/typdgxmm/lazards-lcoeplus"
+        },
+        "efficiency": {
+          "value": 0.356,
+          "unit": "p.u.",
+          "source": "Lazard's levelized cost of energy analysis - version 16.0 (2023): https://www.lazard.com/media/typdgxmm/lazards-lcoeplus"
+        },
+        "fuel": {
+          "value": 7.5147,
+          "unit": "EUR/MWh_th",
+          "source": "ENTSO-E & ENTSOG TYNDP 2024 Scenarios Inputs Commodity Prices, https://2024-data.entsos-tyndp-scenarios.eu/files/scenari"
+        },
+        "investment": {
+          "value": 4812.0244,
+          "unit": "EUR/kW_e",
+          "source": "Lazard's levelized cost of energy analysis - version 16.0 (2023): https://www.lazard.com/media/typdgxmm/lazards-lcoeplus"
+        },
+        "lifetime": {
+          "value": 40.0,
+          "unit": "years",
+          "source": "Lazard's levelized cost of energy analysis - version 16.0 (2023): https://www.lazard.com/media/typdgxmm/lazards-lcoeplus"
+        }
+      },
+      "nuclear": {
+        "FOM": {
+          "value": 1.27,
+          "unit": "%/year",
+          "source": "Lazard's levelized cost of energy analysis - version 16.0 (2023): https://www.lazard.com/media/typdgxmm/lazards-lcoeplus"
+        },
+        "VOM": {
+          "value": 4.459,
+          "unit": "EUR/MWh_e",
+          "source": "Lazard's levelized cost of energy analysis - version 16.0 (2023): https://www.lazard.com/media/typdgxmm/lazards-lcoeplus"
+        },
+        "efficiency": {
+          "value": 0.326,
+          "unit": "p.u.",
+          "source": "Lazard's levelized cost of energy analysis - version 16.0 (2023): https://www.lazard.com/media/typdgxmm/lazards-lcoeplus"
+        },
+        "fuel": {
+          "value": 7.4536,
+          "unit": "EUR/MWh_th",
+          "source": "ENTSO-E & ENTSOG TYNDP 2024 Scenarios Inputs Commodity Prices, https://2024-data.entsos-tyndp-scenarios.eu/files/scenari"
+        },
+        "investment": {
+          "value": 10805.7038,
+          "unit": "EUR/kW_e",
+          "source": "Lazard's levelized cost of energy analysis - version 16.0 (2023): https://www.lazard.com/media/typdgxmm/lazards-lcoeplus"
+        },
+        "lifetime": {
+          "value": 40.0,
+          "unit": "years",
+          "source": "Lazard's levelized cost of energy analysis - version 16.0 (2023): https://www.lazard.com/media/typdgxmm/lazards-lcoeplus"
+        }
+      },
+      "biomass": {
+        "FOM": {
+          "value": 4.5269,
+          "unit": "%/year",
+          "source": "DIW DataDoc http://hdl.handle.net/10419/80348"
+        },
+        "efficiency": {
+          "value": 0.468,
+          "unit": "per unit",
+          "source": "DIW DataDoc http://hdl.handle.net/10419/80348"
+        },
+        "fuel": {
+          "value": 9.3506,
+          "unit": "EUR/MWhth",
+          "source": "IEA2011b"
+        },
+        "investment": {
+          "value": 2950.7891,
+          "unit": "EUR/kWel",
+          "source": "DIW DataDoc http://hdl.handle.net/10419/80348"
+        },
+        "lifetime": {
+          "value": 30.0,
+          "unit": "years",
+          "source": "ECF2010 in DIW DataDoc http://hdl.handle.net/10419/80348"
+        }
+      },
+      "biomass CHP": {
+        "FOM": {
+          "value": 3.5717,
+          "unit": "%/year",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "VOM": {
+          "value": 2.8049,
+          "unit": "EUR/MWh_e",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "efficiency": {
+          "value": 0.3003,
+          "unit": "per unit",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "efficiency-heat": {
+          "value": 0.7083,
+          "unit": "per unit",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "investment": {
+          "value": 4188.7707,
+          "unit": "EUR/kW_e",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "lifetime": {
+          "value": 25.0,
+          "unit": "years",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        }
+      },
+      "biogas": {
+        "FOM": {
+          "value": 7.7769,
+          "unit": "%/year",
+          "source": "Danish Energy Agency, inputs/data_sheets_for_renewable_fuels.xlsx"
+        },
+        "efficiency": {
+          "value": 1.0,
+          "unit": "per unit",
+          "source": "Assuming input biomass is already given in biogas output"
+        },
+        "fuel": {
+          "value": 78.8124,
+          "unit": "EUR/MWhth",
+          "source": "JRC and Zappa"
+        },
+        "investment": {
+          "value": 1180.2823,
+          "unit": "EUR/kW",
+          "source": "Danish Energy Agency, inputs/data_sheets_for_renewable_fuels.xlsx"
+        },
+        "lifetime": {
+          "value": 20.0,
+          "unit": "years",
+          "source": "Danish Energy Agency, inputs/data_sheets_for_renewable_fuels.xlsx"
+        }
+      },
+      "geothermal": {
+        "CO2 intensity": {
+          "value": 0.12,
+          "unit": "tCO2/MWh_th",
+          "source": "Aghahosseini, Breyer 2020: From hot rock to useful energy: A global estimate of enhanced geothermal systems potential, h"
+        },
+        "FOM": {
+          "value": 2.0,
+          "unit": "%/year",
+          "source": "Aghahosseini, Breyer 2020: From hot rock to useful energy: A global estimate of enhanced geothermal systems potential, h"
+        },
+        "lifetime": {
+          "value": 30.0,
+          "unit": "years",
+          "source": "Aghahosseini, Breyer 2020: From hot rock to useful energy: A global estimate of enhanced geothermal systems potential, h"
+        }
+      },
+      "onwind": {
+        "FOM": {
+          "value": 1.2017,
+          "unit": "%/year",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "VOM": {
+          "value": 1.7312,
+          "unit": "EUR/MWh",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "investment": {
+          "value": 1344.5703,
+          "unit": "EUR/kW",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "lifetime": {
+          "value": 30.0,
+          "unit": "years",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        }
+      },
+      "offwind": {
+        "FOM": {
+          "value": 2.25,
+          "unit": "%/year",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "VOM": {
+          "value": 0.0267,
+          "unit": "EUR/MWhel",
+          "source": "RES costs made up to fix curtailment order"
+        },
+        "investment": {
+          "value": 2039.704,
+          "unit": "EUR/kW_e, 2020",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "lifetime": {
+          "value": 30.0,
+          "unit": "years",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        }
+      },
+      "offwind-float": {
+        "FOM": {
+          "value": 1.185,
+          "unit": "%/year",
+          "source": "https://doi.org/10.1016/j.adapen.2021.100067"
+        },
+        "investment": {
+          "value": 2709.5561,
+          "unit": "EUR/kWel",
+          "source": "https://doi.org/10.1016/j.adapen.2021.100067"
+        },
+        "lifetime": {
+          "value": 20.0,
+          "unit": "years",
+          "source": "C. Maienza 2020 A life cycle cost model for floating offshore wind farms"
+        }
+      },
+      "solar": {
+        "FOM": {
+          "value": 1.9904,
+          "unit": "%/year",
+          "source": "Calculated. See 'further description'."
+        },
+        "VOM": {
+          "value": 0.0134,
+          "unit": "EUR/MWhel",
+          "source": "RES costs made up to fix curtailment order"
+        },
+        "investment": {
+          "value": 624.6759,
+          "unit": "EUR/kW_e",
+          "source": "Calculated. See 'further description'."
+        },
+        "lifetime": {
+          "value": 40.0,
+          "unit": "years",
+          "source": "Calculated. See 'further description'."
+        }
+      },
+      "solar-utility": {
+        "FOM": {
+          "value": 2.498,
+          "unit": "%/year",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "investment": {
+          "value": 442.9312,
+          "unit": "EUR/kW_e",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "lifetime": {
+          "value": 40.0,
+          "unit": "years",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        }
+      },
+      "solar-utility single-axis tracking": {
+        "FOM": {
+          "value": 2.3606,
+          "unit": "%/year",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "investment": {
+          "value": 527.3145,
+          "unit": "EUR/kW_e",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "lifetime": {
+          "value": 40.0,
+          "unit": "years",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        }
+      },
+      "solar-rooftop": {
+        "FOM": {
+          "value": 1.4828,
+          "unit": "%/year",
+          "source": "Calculated. See 'further description'."
+        },
+        "discount rate": {
+          "value": 0.04,
+          "unit": "per unit",
+          "source": "standard for decentral"
+        },
+        "investment": {
+          "value": 806.4205,
+          "unit": "EUR/kW_e",
+          "source": "Calculated. See 'further description'."
+        },
+        "lifetime": {
+          "value": 40.0,
+          "unit": "years",
+          "source": "Calculated. See 'further description'."
+        }
+      },
+      "battery storage": {
+        "investment": {
+          "value": 157.7719,
+          "unit": "EUR/kWh",
+          "source": "Danish Energy Agency, inputs/technology_data_catalogue_for_energy_storage.xlsx"
+        },
+        "lifetime": {
+          "value": 27.5,
+          "unit": "years",
+          "source": "Danish Energy Agency, inputs/technology_data_catalogue_for_energy_storage.xlsx"
+        }
+      },
+      "battery inverter": {
+        "FOM": {
+          "value": 0.4154,
+          "unit": "%/year",
+          "source": "Danish Energy Agency, inputs/technology_data_catalogue_for_energy_storage.xlsx"
+        },
+        "efficiency": {
+          "value": 0.96,
+          "unit": "per unit",
+          "source": "Danish Energy Agency, inputs/technology_data_catalogue_for_energy_storage.xlsx"
+        },
+        "investment": {
+          "value": 173.8164,
+          "unit": "EUR/kW",
+          "source": "Danish Energy Agency, inputs/technology_data_catalogue_for_energy_storage.xlsx"
+        },
+        "lifetime": {
+          "value": 10.0,
+          "unit": "years",
+          "source": "Danish Energy Agency, inputs/technology_data_catalogue_for_energy_storage.xlsx, Note K."
+        }
+      },
+      "home battery storage": {
+        "investment": {
+          "value": 226.8747,
+          "unit": "EUR/kWh",
+          "source": "Global Energy System based on 100% Renewable Energy, Energywatchgroup/LTU University, 2019, Danish Energy Agency, inputs"
+        },
+        "lifetime": {
+          "value": 27.5,
+          "unit": "years",
+          "source": "Global Energy System based on 100% Renewable Energy, Energywatchgroup/LTU University, 2019, Danish Energy Agency, inputs"
+        }
+      },
+      "home battery inverter": {
+        "FOM": {
+          "value": 0.4154,
+          "unit": "%/year",
+          "source": "Global Energy System based on 100% Renewable Energy, Energywatchgroup/LTU University, 2019, Danish Energy Agency, inputs"
+        },
+        "efficiency": {
+          "value": 0.96,
+          "unit": "per unit",
+          "source": "Global Energy System based on 100% Renewable Energy, Energywatchgroup/LTU University, 2019, Danish Energy Agency, inputs"
+        },
+        "investment": {
+          "value": 249.4588,
+          "unit": "EUR/kW",
+          "source": "Global Energy System based on 100% Renewable Energy, Energywatchgroup/LTU University, 2019, Danish Energy Agency, inputs"
+        },
+        "lifetime": {
+          "value": 10.0,
+          "unit": "years",
+          "source": "Global Energy System based on 100% Renewable Energy, Energywatchgroup/LTU University, 2019, Danish Energy Agency, inputs"
+        }
+      },
+      "Pumped-Storage-Hydro-bicharger": {
+        "FOM": {
+          "value": 0.9951,
+          "unit": "%/year",
+          "source": "Viswanathan_2022, Figure 4.16"
+        },
+        "efficiency": {
+          "value": 0.8944,
+          "unit": "per unit",
+          "source": "Viswanathan_2022, p.68 (p.90)"
+        },
+        "investment": {
+          "value": 1756657.9565,
+          "unit": "EUR/MW",
+          "source": "Viswanathan_2022, p.68 (p.90)"
+        },
+        "lifetime": {
+          "value": 60.0,
+          "unit": "years",
+          "source": "Viswanathan_2022, p.68 (p.90)"
+        }
+      },
+      "Pumped-Storage-Hydro-store": {
+        "FOM": {
+          "value": 0.43,
+          "unit": "%/year",
+          "source": "Viswanathan_2022, 0.43 % of SB"
+        },
+        "investment": {
+          "value": 71761.1936,
+          "unit": "EUR/MWh",
+          "source": "Viswanathan_2022, p.68 (p.90)"
+        },
+        "lifetime": {
+          "value": 60.0,
+          "unit": "years",
+          "source": "Viswanathan_2022, p.68 (p.90)"
+        }
+      },
+      "hydro": {
+        "FOM": {
+          "value": 1.0,
+          "unit": "%/year",
+          "source": "DIW DataDoc http://hdl.handle.net/10419/80348"
+        },
+        "efficiency": {
+          "value": 0.9,
+          "unit": "per unit",
+          "source": "DIW DataDoc http://hdl.handle.net/10419/80348"
+        },
+        "investment": {
+          "value": 2888.5279,
+          "unit": "EUR/kWel",
+          "source": "DIW DataDoc http://hdl.handle.net/10419/80348"
+        },
+        "lifetime": {
+          "value": 80.0,
+          "unit": "years",
+          "source": "IEA2010"
+        }
+      },
+      "ror": {
+        "FOM": {
+          "value": 2.0,
+          "unit": "%/year",
+          "source": "DIW DataDoc http://hdl.handle.net/10419/80348"
+        },
+        "efficiency": {
+          "value": 0.9,
+          "unit": "per unit",
+          "source": "DIW DataDoc http://hdl.handle.net/10419/80348"
+        },
+        "investment": {
+          "value": 4332.7919,
+          "unit": "EUR/kWel",
+          "source": "DIW DataDoc http://hdl.handle.net/10419/80348"
+        },
+        "lifetime": {
+          "value": 80.0,
+          "unit": "years",
+          "source": "IEA2010"
+        }
+      },
+      "Alkaline electrolyzer large size": {
+        "FOM": {
+          "value": 2.8,
+          "unit": "%/year",
+          "source": "JRC, 01_JRC-EU-TIMES Full model, https://zenodo.org/records/3544900, file `SubRES_15_TECHS_HYDROGEN.xlsx`  (SELCH2EC01, "
+        },
+        "VOM": {
+          "value": 0.3033,
+          "unit": "EUR/MWh_H2",
+          "source": "JRC, 01_JRC-EU-TIMES Full model, https://zenodo.org/records/3544900, file `SubRES_15_TECHS_HYDROGEN.xlsx`  (SELCH2EC01, "
+        },
+        "electricity-input": {
+          "value": 1.38,
+          "unit": "MWh_el/MWh_H2",
+          "source": "JRC, 01_JRC-EU-TIMES Full model, https://zenodo.org/records/3544900, file `SubRES_15_TECHS_HYDROGEN.xlsx`  (SELCH2EC01, "
+        },
+        "investment": {
+          "value": 544.7764,
+          "unit": "EUR/kW",
+          "source": "JRC, 01_JRC-EU-TIMES Full model, https://zenodo.org/records/3544900, file `SubRES_15_TECHS_HYDROGEN.xlsx`  (SELCH2EC01, "
+        },
+        "lifetime": {
+          "value": 40.0,
+          "unit": "years",
+          "source": "JRC, 01_JRC-EU-TIMES Full model, https://zenodo.org/records/3544900, file `SubRES_15_TECHS_HYDROGEN.xlsx`  (SELCH2EC01, "
+        }
+      },
+      "Alkaline electrolyzer medium size": {
+        "FOM": {
+          "value": 2.3,
+          "unit": "%/year",
+          "source": "JRC, 01_JRC-EU-TIMES Full model, https://zenodo.org/records/3544900, file `SubRES_15_TECHS_HYDROGEN.xlsx`  (SELCH2EC02, "
+        },
+        "VOM": {
+          "value": 0.3033,
+          "unit": "EUR/MWh_H2",
+          "source": "JRC, 01_JRC-EU-TIMES Full model, https://zenodo.org/records/3544900, file `SubRES_15_TECHS_HYDROGEN.xlsx`  (SELCH2EC02, "
+        },
+        "electricity-input": {
+          "value": 1.416,
+          "unit": "MWh_el/MWh_H2",
+          "source": "JRC, 01_JRC-EU-TIMES Full model, https://zenodo.org/records/3544900, file `SubRES_15_TECHS_HYDROGEN.xlsx`  (SELCH2EC02, "
+        },
+        "investment": {
+          "value": 642.553,
+          "unit": "EUR/kW",
+          "source": "JRC, 01_JRC-EU-TIMES Full model, https://zenodo.org/records/3544900, file `SubRES_15_TECHS_HYDROGEN.xlsx`  (SELCH2EC02, "
+        },
+        "lifetime": {
+          "value": 20.0,
+          "unit": "years",
+          "source": "JRC, 01_JRC-EU-TIMES Full model, https://zenodo.org/records/3544900, file `SubRES_15_TECHS_HYDROGEN.xlsx`  (SELCH2EC02, "
+        }
+      },
+      "PEM electrolyzer small size": {
+        "FOM": {
+          "value": 3.0,
+          "unit": "%/year",
+          "source": "JRC, 01_JRC-EU-TIMES Full model, https://zenodo.org/records/3544900, file `SubRES_15_TECHS_HYDROGEN.xlsx`  (SELCH2PEM01,"
+        },
+        "electricity-input": {
+          "value": 1.31,
+          "unit": "MWh_el/MWh_H2",
+          "source": "JRC, 01_JRC-EU-TIMES Full model, https://zenodo.org/records/3544900, file `SubRES_15_TECHS_HYDROGEN.xlsx`  (SELCH2PEM01,"
+        },
+        "investment": {
+          "value": 1372.0508,
+          "unit": "EUR/kW",
+          "source": "JRC, 01_JRC-EU-TIMES Full model, https://zenodo.org/records/3544900, file `SubRES_15_TECHS_HYDROGEN.xlsx`  (SELCH2PEM01,"
+        },
+        "lifetime": {
+          "value": 7.5,
+          "unit": "years",
+          "source": "JRC, 01_JRC-EU-TIMES Full model, https://zenodo.org/records/3544900, file `SubRES_15_TECHS_HYDROGEN.xlsx`  (SELCH2PEM01,"
+        }
+      },
+      "electrolysis": {
+        "FOM": {
+          "value": 4.0,
+          "unit": "%/year",
+          "source": "Danish Energy Agency, inputs/data_sheets_for_renewable_fuels.xlsx"
+        },
+        "efficiency": {
+          "value": 0.6374,
+          "unit": "per unit",
+          "source": "Danish Energy Agency, inputs/data_sheets_for_renewable_fuels.xlsx"
+        },
+        "efficiency-heat": {
+          "value": 0.2039,
+          "unit": "per unit",
+          "source": "Danish Energy Agency, inputs/data_sheets_for_renewable_fuels.xlsx"
+        },
+        "investment": {
+          "value": 1697.4017,
+          "unit": "EUR/kW_e",
+          "source": "private communications; IEA https://iea.blob.core.windows.net/assets/9e0c82d4-06d2-496b-9542-f184ba803645/TheRoleofE-fue"
+        },
+        "lifetime": {
+          "value": 25.0,
+          "unit": "years",
+          "source": "Danish Energy Agency, inputs/data_sheets_for_renewable_fuels.xlsx"
+        }
+      },
+      "fuel cell": {
+        "FOM": {
+          "value": 5.0,
+          "unit": "%/year",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "efficiency": {
+          "value": 0.5,
+          "unit": "per unit",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "investment": {
+          "value": 1369.1982,
+          "unit": "EUR/kW_e",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "lifetime": {
+          "value": 10.0,
+          "unit": "years",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        }
+      },
+      "hydrogen storage tank type 1 including compressor": {
+        "FOM": {
+          "value": 1.3897,
+          "unit": "%/year",
+          "source": "Danish Energy Agency, inputs/technology_data_catalogue_for_energy_storage.xlsx"
+        },
+        "investment": {
+          "value": 48.1073,
+          "unit": "EUR/kWh",
+          "source": "Danish Energy Agency, inputs/technology_data_catalogue_for_energy_storage.xlsx"
+        },
+        "lifetime": {
+          "value": 30.0,
+          "unit": "years",
+          "source": "Danish Energy Agency, inputs/technology_data_catalogue_for_energy_storage.xlsx"
+        }
+      },
+      "hydrogen storage tank type 1": {
+        "FOM": {
+          "value": 2.0,
+          "unit": "%/year",
+          "source": "Based on Stöckl et al (2021): https://doi.org/10.48550/arXiv.2005.03464, table SI.9."
+        },
+        "investment": {
+          "value": 16.974,
+          "unit": "EUR/kWh_H2",
+          "source": "Based on Stöckl et al (2021): https://doi.org/10.48550/arXiv.2005.03464, table SI.9."
+        },
+        "lifetime": {
+          "value": 20.0,
+          "unit": "years",
+          "source": "Based on Stöckl et al (2021): https://doi.org/10.48550/arXiv.2005.03464, table SI.9."
+        }
+      },
+      "hydrogen storage underground": {
+        "FOM": {
+          "value": 0.0,
+          "unit": "%/year",
+          "source": "Danish Energy Agency, inputs/technology_data_catalogue_for_energy_storage.xlsx"
+        },
+        "VOM": {
+          "value": 0.0,
+          "unit": "EUR/MWh",
+          "source": "Danish Energy Agency, inputs/technology_data_catalogue_for_energy_storage.xlsx"
+        },
+        "investment": {
+          "value": 2.3398,
+          "unit": "EUR/kWh",
+          "source": "Danish Energy Agency, inputs/technology_data_catalogue_for_energy_storage.xlsx"
+        },
+        "lifetime": {
+          "value": 100.0,
+          "unit": "years",
+          "source": "Danish Energy Agency, inputs/technology_data_catalogue_for_energy_storage.xlsx"
+        }
+      },
+      "SMR": {
+        "FOM": {
+          "value": 5.0,
+          "unit": "%/year",
+          "source": "Danish Energy Agency"
+        },
+        "efficiency": {
+          "value": 0.76,
+          "unit": "per unit (in LHV)",
+          "source": "IEA Global average levelised cost of hydrogen production by energy source and technology, 2019 and 2050 (2020), https://"
+        },
+        "investment": {
+          "value": 659179.2942,
+          "unit": "EUR/MW_CH4",
+          "source": "Danish Energy Agency"
+        },
+        "lifetime": {
+          "value": 30.0,
+          "unit": "years",
+          "source": "IEA Global average levelised cost of hydrogen production by energy source and technology, 2019 and 2050 (2020), https://"
+        }
+      },
+      "SMR CC": {
+        "FOM": {
+          "value": 5.0,
+          "unit": "%/year",
+          "source": "Danish Energy Agency"
+        },
+        "efficiency": {
+          "value": 0.69,
+          "unit": "per unit (in LHV)",
+          "source": "IEA Global average levelised cost of hydrogen production by energy source and technology, 2019 and 2050 (2020), https://"
+        },
+        "investment": {
+          "value": 764647.9813,
+          "unit": "EUR/MW_CH4",
+          "source": "Danish Energy Agency"
+        },
+        "lifetime": {
+          "value": 30.0,
+          "unit": "years",
+          "source": "IEA Global average levelised cost of hydrogen production by energy source and technology, 2019 and 2050 (2020), https://"
+        }
+      },
+      "HVDC inverter pair": {
+        "FOM": {
+          "value": 1.5,
+          "unit": "%/year",
+          "source": "Danish Energy Agency, Technology Data for Energy Transport (July 2025), https://ens.dk/en/analyses-and-statistics/techno"
+        },
+        "investment": {
+          "value": 600.0,
+          "unit": "EUR/kW",
+          "source": "Danish Energy Agency, Technology Data for Energy Transport (July 2025), https://ens.dk/en/analyses-and-statistics/techno"
+        },
+        "lifetime": {
+          "value": 40.0,
+          "unit": "years",
+          "source": "Danish Energy Agency, Technology Data for Energy Transport (July 2025), https://ens.dk/en/analyses-and-statistics/techno"
+        }
+      },
+      "HVDC overhead": {
+        "FOM": {
+          "value": 1.5,
+          "unit": "%/year",
+          "source": "Danish Energy Agency, Technology Data for Energy Transport (July 2025), https://ens.dk/en/analyses-and-statistics/techno"
+        },
+        "investment": {
+          "value": 580.0,
+          "unit": "EUR/MW/km",
+          "source": "Danish Energy Agency, Technology Data for Energy Transport (July 2025), https://ens.dk/en/analyses-and-statistics/techno"
+        },
+        "lifetime": {
+          "value": 40.0,
+          "unit": "years",
+          "source": "Danish Energy Agency, Technology Data for Energy Transport (July 2025), https://ens.dk/en/analyses-and-statistics/techno"
+        }
+      },
+      "HVDC submarine": {
+        "FOM": {
+          "value": 2.5,
+          "unit": "%/year",
+          "source": "Danish Energy Agency, Technology Data for Energy Transport (July 2025), https://ens.dk/en/analyses-and-statistics/techno"
+        },
+        "investment": {
+          "value": 3090.0,
+          "unit": "EUR/MW/km",
+          "source": "Danish Energy Agency, Technology Data for Energy Transport (July 2025), https://ens.dk/en/analyses-and-statistics/techno"
+        },
+        "lifetime": {
+          "value": 40.0,
+          "unit": "years",
+          "source": "Danish Energy Agency, Technology Data for Energy Transport (July 2025), https://ens.dk/en/analyses-and-statistics/techno"
+        }
+      },
+      "HVDC underground": {
+        "FOM": {
+          "value": 2.5,
+          "unit": "%/year",
+          "source": "Danish Energy Agency, Technology Data for Energy Transport (July 2025), https://ens.dk/en/analyses-and-statistics/techno"
+        },
+        "investment": {
+          "value": 3910.0,
+          "unit": "EUR/MW/km",
+          "source": "Danish Energy Agency, Technology Data for Energy Transport (July 2025), https://ens.dk/en/analyses-and-statistics/techno"
+        },
+        "lifetime": {
+          "value": 40.0,
+          "unit": "years",
+          "source": "Danish Energy Agency, Technology Data for Energy Transport (July 2025), https://ens.dk/en/analyses-and-statistics/techno"
+        }
+      },
+      "HVAC overhead": {
+        "FOM": {
+          "value": 1.5,
+          "unit": "%",
+          "source": "Danish Energy Agency, Technology Data for Energy Transport (July 2025), https://ens.dk/en/analyses-and-statistics/techno"
+        },
+        "investment": {
+          "value": 720.0,
+          "unit": "EUR/MW/km",
+          "source": "Danish Energy Agency, Technology Data for Energy Transport (July 2025), https://ens.dk/en/analyses-and-statistics/techno"
+        },
+        "lifetime": {
+          "value": 40.0,
+          "unit": "years",
+          "source": "Danish Energy Agency, Technology Data for Energy Transport (July 2025), https://ens.dk/en/analyses-and-statistics/techno"
+        }
+      },
+      "HVAC submarine": {
+        "FOM": {
+          "value": 2.5,
+          "unit": "%/year",
+          "source": "Danish Energy Agency, Technology Data for Energy Transport (July 2025), https://ens.dk/en/analyses-and-statistics/techno"
+        },
+        "investment": {
+          "value": 4320.0,
+          "unit": "EUR/MW/km",
+          "source": "Danish Energy Agency, Technology Data for Energy Transport (July 2025), https://ens.dk/en/analyses-and-statistics/techno"
+        },
+        "lifetime": {
+          "value": 40.0,
+          "unit": "years",
+          "source": "Danish Energy Agency, Technology Data for Energy Transport (July 2025), https://ens.dk/en/analyses-and-statistics/techno"
+        }
+      },
+      "HVAC underground": {
+        "FOM": {
+          "value": 2.5,
+          "unit": "%/year",
+          "source": "Danish Energy Agency, Technology Data for Energy Transport (July 2025), https://ens.dk/en/analyses-and-statistics/techno"
+        },
+        "investment": {
+          "value": 4320.0,
+          "unit": "EUR/MW/km",
+          "source": "Danish Energy Agency, Technology Data for Energy Transport (July 2025), https://ens.dk/en/analyses-and-statistics/techno"
+        },
+        "lifetime": {
+          "value": 40.0,
+          "unit": "years",
+          "source": "Danish Energy Agency, Technology Data for Energy Transport (July 2025), https://ens.dk/en/analyses-and-statistics/techno"
+        }
+      },
+      "central air-sourced heat pump": {
+        "FOM": {
+          "value": 0.2336,
+          "unit": "%/year",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "VOM": {
+          "value": 3.1391,
+          "unit": "EUR/MWh_th",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "efficiency": {
+          "value": 3.25,
+          "unit": "per unit",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "investment": {
+          "value": 1143.7771,
+          "unit": "EUR/kW_th",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "lifetime": {
+          "value": 25.0,
+          "unit": "years",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        }
+      }
+    },
+    "2040": {
+      "CCGT": {
+        "FOM": {
+          "value": 3.3006,
+          "unit": "%/year",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "VOM": {
+          "value": 5.4768,
+          "unit": "EUR/MWh",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "efficiency": {
+          "value": 0.59,
+          "unit": "per unit",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "investment": {
+          "value": 1088.6795,
+          "unit": "EUR/kW",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "lifetime": {
+          "value": 25.0,
+          "unit": "years",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        }
+      },
+      "OCGT": {
+        "FOM": {
+          "value": 1.7906,
+          "unit": "%/year",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "VOM": {
+          "value": 6.0111,
+          "unit": "EUR/MWh",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "efficiency": {
+          "value": 0.42,
+          "unit": "per unit",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "investment": {
+          "value": 565.766,
+          "unit": "EUR/kW",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "lifetime": {
+          "value": 25.0,
+          "unit": "years",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        }
+      },
+      "coal": {
+        "CO2 intensity": {
+          "value": 0.3361,
+          "unit": "tCO2/MWh_th",
+          "source": "Entwicklung der spezifischen Kohlendioxid-Emissionen des deutschen Strommix in den Jahren 1990 - 2018"
+        },
+        "FOM": {
+          "value": 1.31,
+          "unit": "%/year",
+          "source": "Lazard's levelized cost of energy analysis - version 16.0 (2023): https://www.lazard.com/media/typdgxmm/lazards-lcoeplus"
+        },
+        "VOM": {
+          "value": 4.1005,
+          "unit": "EUR/MWh_e",
+          "source": "Lazard's levelized cost of energy analysis - version 16.0 (2023): https://www.lazard.com/media/typdgxmm/lazards-lcoeplus"
+        },
+        "efficiency": {
+          "value": 0.356,
+          "unit": "p.u.",
+          "source": "Lazard's levelized cost of energy analysis - version 16.0 (2023): https://www.lazard.com/media/typdgxmm/lazards-lcoeplus"
+        },
+        "fuel": {
+          "value": 7.2092,
+          "unit": "EUR/MWh_th",
+          "source": "ENTSO-E & ENTSOG TYNDP 2024 Scenarios Inputs Commodity Prices, https://2024-data.entsos-tyndp-scenarios.eu/files/scenari"
+        },
+        "investment": {
+          "value": 4812.0244,
+          "unit": "EUR/kW_e",
+          "source": "Lazard's levelized cost of energy analysis - version 16.0 (2023): https://www.lazard.com/media/typdgxmm/lazards-lcoeplus"
+        },
+        "lifetime": {
+          "value": 40.0,
+          "unit": "years",
+          "source": "Lazard's levelized cost of energy analysis - version 16.0 (2023): https://www.lazard.com/media/typdgxmm/lazards-lcoeplus"
+        }
+      },
+      "nuclear": {
+        "FOM": {
+          "value": 1.27,
+          "unit": "%/year",
+          "source": "Lazard's levelized cost of energy analysis - version 16.0 (2023): https://www.lazard.com/media/typdgxmm/lazards-lcoeplus"
+        },
+        "VOM": {
+          "value": 4.459,
+          "unit": "EUR/MWh_e",
+          "source": "Lazard's levelized cost of energy analysis - version 16.0 (2023): https://www.lazard.com/media/typdgxmm/lazards-lcoeplus"
+        },
+        "efficiency": {
+          "value": 0.326,
+          "unit": "p.u.",
+          "source": "Lazard's levelized cost of energy analysis - version 16.0 (2023): https://www.lazard.com/media/typdgxmm/lazards-lcoeplus"
+        },
+        "fuel": {
+          "value": 7.4536,
+          "unit": "EUR/MWh_th",
+          "source": "ENTSO-E & ENTSOG TYNDP 2024 Scenarios Inputs Commodity Prices, https://2024-data.entsos-tyndp-scenarios.eu/files/scenari"
+        },
+        "investment": {
+          "value": 10805.7038,
+          "unit": "EUR/kW_e",
+          "source": "Lazard's levelized cost of energy analysis - version 16.0 (2023): https://www.lazard.com/media/typdgxmm/lazards-lcoeplus"
+        },
+        "lifetime": {
+          "value": 40.0,
+          "unit": "years",
+          "source": "Lazard's levelized cost of energy analysis - version 16.0 (2023): https://www.lazard.com/media/typdgxmm/lazards-lcoeplus"
+        }
+      },
+      "biomass": {
+        "FOM": {
+          "value": 4.5269,
+          "unit": "%/year",
+          "source": "DIW DataDoc http://hdl.handle.net/10419/80348"
+        },
+        "efficiency": {
+          "value": 0.468,
+          "unit": "per unit",
+          "source": "DIW DataDoc http://hdl.handle.net/10419/80348"
+        },
+        "fuel": {
+          "value": 9.3506,
+          "unit": "EUR/MWhth",
+          "source": "IEA2011b"
+        },
+        "investment": {
+          "value": 2950.7891,
+          "unit": "EUR/kWel",
+          "source": "DIW DataDoc http://hdl.handle.net/10419/80348"
+        },
+        "lifetime": {
+          "value": 30.0,
+          "unit": "years",
+          "source": "ECF2010 in DIW DataDoc http://hdl.handle.net/10419/80348"
+        }
+      },
+      "biomass CHP": {
+        "FOM": {
+          "value": 3.5606,
+          "unit": "%/year",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "VOM": {
+          "value": 2.8049,
+          "unit": "EUR/MWh_e",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "efficiency": {
+          "value": 0.3003,
+          "unit": "per unit",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "efficiency-heat": {
+          "value": 0.7083,
+          "unit": "per unit",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "investment": {
+          "value": 4089.2412,
+          "unit": "EUR/kW_e",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "lifetime": {
+          "value": 25.0,
+          "unit": "years",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        }
+      },
+      "biogas": {
+        "FOM": {
+          "value": 7.7769,
+          "unit": "%/year",
+          "source": "Danish Energy Agency, inputs/data_sheets_for_renewable_fuels.xlsx"
+        },
+        "efficiency": {
+          "value": 1.0,
+          "unit": "per unit",
+          "source": "Assuming input biomass is already given in biogas output"
+        },
+        "fuel": {
+          "value": 78.8124,
+          "unit": "EUR/MWhth",
+          "source": "JRC and Zappa"
+        },
+        "investment": {
+          "value": 1159.5756,
+          "unit": "EUR/kW",
+          "source": "Danish Energy Agency, inputs/data_sheets_for_renewable_fuels.xlsx"
+        },
+        "lifetime": {
+          "value": 20.0,
+          "unit": "years",
+          "source": "Danish Energy Agency, inputs/data_sheets_for_renewable_fuels.xlsx"
+        }
+      },
+      "geothermal": {
+        "CO2 intensity": {
+          "value": 0.12,
+          "unit": "tCO2/MWh_th",
+          "source": "Aghahosseini, Breyer 2020: From hot rock to useful energy: A global estimate of enhanced geothermal systems potential, h"
+        },
+        "FOM": {
+          "value": 2.0,
+          "unit": "%/year",
+          "source": "Aghahosseini, Breyer 2020: From hot rock to useful energy: A global estimate of enhanced geothermal systems potential, h"
+        },
+        "lifetime": {
+          "value": 30.0,
+          "unit": "years",
+          "source": "Aghahosseini, Breyer 2020: From hot rock to useful energy: A global estimate of enhanced geothermal systems potential, h"
+        }
+      },
+      "onwind": {
+        "FOM": {
+          "value": 1.1858,
+          "unit": "%/year",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "VOM": {
+          "value": 1.6591,
+          "unit": "EUR/MWh",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "investment": {
+          "value": 1305.8347,
+          "unit": "EUR/kW",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "lifetime": {
+          "value": 30.0,
+          "unit": "years",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        }
+      },
+      "offwind": {
+        "FOM": {
+          "value": 2.1762,
+          "unit": "%/year",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "VOM": {
+          "value": 0.0267,
+          "unit": "EUR/MWhel",
+          "source": "RES costs made up to fix curtailment order"
+        },
+        "investment": {
+          "value": 1964.4169,
+          "unit": "EUR/kW_e, 2020",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "lifetime": {
+          "value": 30.0,
+          "unit": "years",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        }
+      },
+      "offwind-float": {
+        "FOM": {
+          "value": 1.22,
+          "unit": "%/year",
+          "source": "https://doi.org/10.1016/j.adapen.2021.100067"
+        },
+        "investment": {
+          "value": 2464.3758,
+          "unit": "EUR/kWel",
+          "source": "https://doi.org/10.1016/j.adapen.2021.100067"
+        },
+        "lifetime": {
+          "value": 20.0,
+          "unit": "years",
+          "source": "C. Maienza 2020 A life cycle cost model for floating offshore wind farms"
+        }
+      },
+      "solar": {
+        "FOM": {
+          "value": 2.04,
+          "unit": "%/year",
+          "source": "Calculated. See 'further description'."
+        },
+        "VOM": {
+          "value": 0.0134,
+          "unit": "EUR/MWhel",
+          "source": "RES costs made up to fix curtailment order"
+        },
+        "investment": {
+          "value": 566.2056,
+          "unit": "EUR/kW_e",
+          "source": "Calculated. See 'further description'."
+        },
+        "lifetime": {
+          "value": 40.0,
+          "unit": "years",
+          "source": "Calculated. See 'further description'."
+        }
+      },
+      "solar-utility": {
+        "FOM": {
+          "value": 2.5247,
+          "unit": "%/year",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "investment": {
+          "value": 403.3839,
+          "unit": "EUR/kW_e",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "lifetime": {
+          "value": 40.0,
+          "unit": "years",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        }
+      },
+      "solar-utility single-axis tracking": {
+        "FOM": {
+          "value": 2.4459,
+          "unit": "%/year",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "investment": {
+          "value": 483.2078,
+          "unit": "EUR/kW_e",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "lifetime": {
+          "value": 40.0,
+          "unit": "years",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        }
+      },
+      "solar-rooftop": {
+        "FOM": {
+          "value": 1.5552,
+          "unit": "%/year",
+          "source": "Calculated. See 'further description'."
+        },
+        "discount rate": {
+          "value": 0.04,
+          "unit": "per unit",
+          "source": "standard for decentral"
+        },
+        "investment": {
+          "value": 729.0272,
+          "unit": "EUR/kW_e",
+          "source": "Calculated. See 'further description'."
+        },
+        "lifetime": {
+          "value": 40.0,
+          "unit": "years",
+          "source": "Calculated. See 'further description'."
+        }
+      },
+      "battery storage": {
+        "investment": {
+          "value": 125.6827,
+          "unit": "EUR/kWh",
+          "source": "Danish Energy Agency, inputs/technology_data_catalogue_for_energy_storage.xlsx"
+        },
+        "lifetime": {
+          "value": 30.0,
+          "unit": "years",
+          "source": "Danish Energy Agency, inputs/technology_data_catalogue_for_energy_storage.xlsx"
+        }
+      },
+      "battery inverter": {
+        "FOM": {
+          "value": 0.54,
+          "unit": "%/year",
+          "source": "Danish Energy Agency, inputs/technology_data_catalogue_for_energy_storage.xlsx"
+        },
+        "efficiency": {
+          "value": 0.96,
+          "unit": "per unit",
+          "source": "Danish Energy Agency, inputs/technology_data_catalogue_for_energy_storage.xlsx"
+        },
+        "investment": {
+          "value": 133.705,
+          "unit": "EUR/kW",
+          "source": "Danish Energy Agency, inputs/technology_data_catalogue_for_energy_storage.xlsx"
+        },
+        "lifetime": {
+          "value": 10.0,
+          "unit": "years",
+          "source": "Danish Energy Agency, inputs/technology_data_catalogue_for_energy_storage.xlsx, Note K."
+        }
+      },
+      "home battery storage": {
+        "investment": {
+          "value": 182.0597,
+          "unit": "EUR/kWh",
+          "source": "Global Energy System based on 100% Renewable Energy, Energywatchgroup/LTU University, 2019, Danish Energy Agency, inputs"
+        },
+        "lifetime": {
+          "value": 30.0,
+          "unit": "years",
+          "source": "Global Energy System based on 100% Renewable Energy, Energywatchgroup/LTU University, 2019, Danish Energy Agency, inputs"
+        }
+      },
+      "home battery inverter": {
+        "FOM": {
+          "value": 0.54,
+          "unit": "%/year",
+          "source": "Global Energy System based on 100% Renewable Energy, Energywatchgroup/LTU University, 2019, Danish Energy Agency, inputs"
+        },
+        "efficiency": {
+          "value": 0.96,
+          "unit": "per unit",
+          "source": "Global Energy System based on 100% Renewable Energy, Energywatchgroup/LTU University, 2019, Danish Energy Agency, inputs"
+        },
+        "investment": {
+          "value": 193.2909,
+          "unit": "EUR/kW",
+          "source": "Global Energy System based on 100% Renewable Energy, Energywatchgroup/LTU University, 2019, Danish Energy Agency, inputs"
+        },
+        "lifetime": {
+          "value": 10.0,
+          "unit": "years",
+          "source": "Global Energy System based on 100% Renewable Energy, Energywatchgroup/LTU University, 2019, Danish Energy Agency, inputs"
+        }
+      },
+      "Pumped-Storage-Hydro-bicharger": {
+        "FOM": {
+          "value": 0.9951,
+          "unit": "%/year",
+          "source": "Viswanathan_2022, Figure 4.16"
+        },
+        "efficiency": {
+          "value": 0.8944,
+          "unit": "per unit",
+          "source": "Viswanathan_2022, p.68 (p.90)"
+        },
+        "investment": {
+          "value": 1756657.9565,
+          "unit": "EUR/MW",
+          "source": "Viswanathan_2022, p.68 (p.90)"
+        },
+        "lifetime": {
+          "value": 60.0,
+          "unit": "years",
+          "source": "Viswanathan_2022, p.68 (p.90)"
+        }
+      },
+      "Pumped-Storage-Hydro-store": {
+        "FOM": {
+          "value": 0.43,
+          "unit": "%/year",
+          "source": "Viswanathan_2022, 0.43 % of SB"
+        },
+        "investment": {
+          "value": 71761.1936,
+          "unit": "EUR/MWh",
+          "source": "Viswanathan_2022, p.68 (p.90)"
+        },
+        "lifetime": {
+          "value": 60.0,
+          "unit": "years",
+          "source": "Viswanathan_2022, p.68 (p.90)"
+        }
+      },
+      "hydro": {
+        "FOM": {
+          "value": 1.0,
+          "unit": "%/year",
+          "source": "DIW DataDoc http://hdl.handle.net/10419/80348"
+        },
+        "efficiency": {
+          "value": 0.9,
+          "unit": "per unit",
+          "source": "DIW DataDoc http://hdl.handle.net/10419/80348"
+        },
+        "investment": {
+          "value": 2888.5279,
+          "unit": "EUR/kWel",
+          "source": "DIW DataDoc http://hdl.handle.net/10419/80348"
+        },
+        "lifetime": {
+          "value": 80.0,
+          "unit": "years",
+          "source": "IEA2010"
+        }
+      },
+      "ror": {
+        "FOM": {
+          "value": 2.0,
+          "unit": "%/year",
+          "source": "DIW DataDoc http://hdl.handle.net/10419/80348"
+        },
+        "efficiency": {
+          "value": 0.9,
+          "unit": "per unit",
+          "source": "DIW DataDoc http://hdl.handle.net/10419/80348"
+        },
+        "investment": {
+          "value": 4332.7919,
+          "unit": "EUR/kWel",
+          "source": "DIW DataDoc http://hdl.handle.net/10419/80348"
+        },
+        "lifetime": {
+          "value": 80.0,
+          "unit": "years",
+          "source": "IEA2010"
+        }
+      },
+      "Alkaline electrolyzer large size": {
+        "FOM": {
+          "value": 2.8,
+          "unit": "%/year",
+          "source": "JRC, 01_JRC-EU-TIMES Full model, https://zenodo.org/records/3544900, file `SubRES_15_TECHS_HYDROGEN.xlsx`  (SELCH2EC01, "
+        },
+        "VOM": {
+          "value": 0.3033,
+          "unit": "EUR/MWh_H2",
+          "source": "JRC, 01_JRC-EU-TIMES Full model, https://zenodo.org/records/3544900, file `SubRES_15_TECHS_HYDROGEN.xlsx`  (SELCH2EC01, "
+        },
+        "electricity-input": {
+          "value": 1.38,
+          "unit": "MWh_el/MWh_H2",
+          "source": "JRC, 01_JRC-EU-TIMES Full model, https://zenodo.org/records/3544900, file `SubRES_15_TECHS_HYDROGEN.xlsx`  (SELCH2EC01, "
+        },
+        "investment": {
+          "value": 544.7764,
+          "unit": "EUR/kW",
+          "source": "JRC, 01_JRC-EU-TIMES Full model, https://zenodo.org/records/3544900, file `SubRES_15_TECHS_HYDROGEN.xlsx`  (SELCH2EC01, "
+        },
+        "lifetime": {
+          "value": 40.0,
+          "unit": "years",
+          "source": "JRC, 01_JRC-EU-TIMES Full model, https://zenodo.org/records/3544900, file `SubRES_15_TECHS_HYDROGEN.xlsx`  (SELCH2EC01, "
+        }
+      },
+      "Alkaline electrolyzer medium size": {
+        "FOM": {
+          "value": 2.3,
+          "unit": "%/year",
+          "source": "JRC, 01_JRC-EU-TIMES Full model, https://zenodo.org/records/3544900, file `SubRES_15_TECHS_HYDROGEN.xlsx`  (SELCH2EC02, "
+        },
+        "VOM": {
+          "value": 0.3033,
+          "unit": "EUR/MWh_H2",
+          "source": "JRC, 01_JRC-EU-TIMES Full model, https://zenodo.org/records/3544900, file `SubRES_15_TECHS_HYDROGEN.xlsx`  (SELCH2EC02, "
+        },
+        "electricity-input": {
+          "value": 1.416,
+          "unit": "MWh_el/MWh_H2",
+          "source": "JRC, 01_JRC-EU-TIMES Full model, https://zenodo.org/records/3544900, file `SubRES_15_TECHS_HYDROGEN.xlsx`  (SELCH2EC02, "
+        },
+        "investment": {
+          "value": 642.553,
+          "unit": "EUR/kW",
+          "source": "JRC, 01_JRC-EU-TIMES Full model, https://zenodo.org/records/3544900, file `SubRES_15_TECHS_HYDROGEN.xlsx`  (SELCH2EC02, "
+        },
+        "lifetime": {
+          "value": 20.0,
+          "unit": "years",
+          "source": "JRC, 01_JRC-EU-TIMES Full model, https://zenodo.org/records/3544900, file `SubRES_15_TECHS_HYDROGEN.xlsx`  (SELCH2EC02, "
+        }
+      },
+      "PEM electrolyzer small size": {
+        "FOM": {
+          "value": 3.0,
+          "unit": "%/year",
+          "source": "JRC, 01_JRC-EU-TIMES Full model, https://zenodo.org/records/3544900, file `SubRES_15_TECHS_HYDROGEN.xlsx`  (SELCH2PEM01,"
+        },
+        "electricity-input": {
+          "value": 1.29,
+          "unit": "MWh_el/MWh_H2",
+          "source": "JRC, 01_JRC-EU-TIMES Full model, https://zenodo.org/records/3544900, file `SubRES_15_TECHS_HYDROGEN.xlsx`  (SELCH2PEM01,"
+        },
+        "investment": {
+          "value": 1372.0508,
+          "unit": "EUR/kW",
+          "source": "JRC, 01_JRC-EU-TIMES Full model, https://zenodo.org/records/3544900, file `SubRES_15_TECHS_HYDROGEN.xlsx`  (SELCH2PEM01,"
+        },
+        "lifetime": {
+          "value": 8.0,
+          "unit": "years",
+          "source": "JRC, 01_JRC-EU-TIMES Full model, https://zenodo.org/records/3544900, file `SubRES_15_TECHS_HYDROGEN.xlsx`  (SELCH2PEM01,"
+        }
+      },
+      "electrolysis": {
+        "FOM": {
+          "value": 4.0,
+          "unit": "%/year",
+          "source": "Danish Energy Agency, inputs/data_sheets_for_renewable_fuels.xlsx"
+        },
+        "efficiency": {
+          "value": 0.6532,
+          "unit": "per unit",
+          "source": "Danish Energy Agency, inputs/data_sheets_for_renewable_fuels.xlsx"
+        },
+        "efficiency-heat": {
+          "value": 0.1849,
+          "unit": "per unit",
+          "source": "Danish Energy Agency, inputs/data_sheets_for_renewable_fuels.xlsx"
+        },
+        "investment": {
+          "value": 1508.8015,
+          "unit": "EUR/kW_e",
+          "source": "private communications; IEA https://iea.blob.core.windows.net/assets/9e0c82d4-06d2-496b-9542-f184ba803645/TheRoleofE-fue"
+        },
+        "lifetime": {
+          "value": 25.0,
+          "unit": "years",
+          "source": "Danish Energy Agency, inputs/data_sheets_for_renewable_fuels.xlsx"
+        }
+      },
+      "fuel cell": {
+        "FOM": {
+          "value": 5.0,
+          "unit": "%/year",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "efficiency": {
+          "value": 0.5,
+          "unit": "per unit",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "investment": {
+          "value": 1269.013,
+          "unit": "EUR/kW_e",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "lifetime": {
+          "value": 10.0,
+          "unit": "years",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        }
+      },
+      "hydrogen storage tank type 1 including compressor": {
+        "FOM": {
+          "value": 1.8484,
+          "unit": "%/year",
+          "source": "Danish Energy Agency, inputs/technology_data_catalogue_for_energy_storage.xlsx"
+        },
+        "investment": {
+          "value": 36.1677,
+          "unit": "EUR/kWh",
+          "source": "Danish Energy Agency, inputs/technology_data_catalogue_for_energy_storage.xlsx"
+        },
+        "lifetime": {
+          "value": 30.0,
+          "unit": "years",
+          "source": "Danish Energy Agency, inputs/technology_data_catalogue_for_energy_storage.xlsx"
+        }
+      },
+      "hydrogen storage tank type 1": {
+        "FOM": {
+          "value": 2.0,
+          "unit": "%/year",
+          "source": "Based on Stöckl et al (2021): https://doi.org/10.48550/arXiv.2005.03464, table SI.9."
+        },
+        "investment": {
+          "value": 16.974,
+          "unit": "EUR/kWh_H2",
+          "source": "Based on Stöckl et al (2021): https://doi.org/10.48550/arXiv.2005.03464, table SI.9."
+        },
+        "lifetime": {
+          "value": 20.0,
+          "unit": "years",
+          "source": "Based on Stöckl et al (2021): https://doi.org/10.48550/arXiv.2005.03464, table SI.9."
+        }
+      },
+      "hydrogen storage underground": {
+        "FOM": {
+          "value": 0.0,
+          "unit": "%/year",
+          "source": "Danish Energy Agency, inputs/technology_data_catalogue_for_energy_storage.xlsx"
+        },
+        "VOM": {
+          "value": 0.0,
+          "unit": "EUR/MWh",
+          "source": "Danish Energy Agency, inputs/technology_data_catalogue_for_energy_storage.xlsx"
+        },
+        "investment": {
+          "value": 2.0056,
+          "unit": "EUR/kWh",
+          "source": "Danish Energy Agency, inputs/technology_data_catalogue_for_energy_storage.xlsx"
+        },
+        "lifetime": {
+          "value": 100.0,
+          "unit": "years",
+          "source": "Danish Energy Agency, inputs/technology_data_catalogue_for_energy_storage.xlsx"
+        }
+      },
+      "SMR": {
+        "FOM": {
+          "value": 5.0,
+          "unit": "%/year",
+          "source": "Danish Energy Agency"
+        },
+        "efficiency": {
+          "value": 0.76,
+          "unit": "per unit (in LHV)",
+          "source": "IEA Global average levelised cost of hydrogen production by energy source and technology, 2019 and 2050 (2020), https://"
+        },
+        "investment": {
+          "value": 659179.2942,
+          "unit": "EUR/MW_CH4",
+          "source": "Danish Energy Agency"
+        },
+        "lifetime": {
+          "value": 30.0,
+          "unit": "years",
+          "source": "IEA Global average levelised cost of hydrogen production by energy source and technology, 2019 and 2050 (2020), https://"
+        }
+      },
+      "SMR CC": {
+        "FOM": {
+          "value": 5.0,
+          "unit": "%/year",
+          "source": "Danish Energy Agency"
+        },
+        "efficiency": {
+          "value": 0.69,
+          "unit": "per unit (in LHV)",
+          "source": "IEA Global average levelised cost of hydrogen production by energy source and technology, 2019 and 2050 (2020), https://"
+        },
+        "investment": {
+          "value": 764647.9813,
+          "unit": "EUR/MW_CH4",
+          "source": "Danish Energy Agency"
+        },
+        "lifetime": {
+          "value": 30.0,
+          "unit": "years",
+          "source": "IEA Global average levelised cost of hydrogen production by energy source and technology, 2019 and 2050 (2020), https://"
+        }
+      },
+      "HVDC inverter pair": {
+        "FOM": {
+          "value": 1.5,
+          "unit": "%/year",
+          "source": "Danish Energy Agency, Technology Data for Energy Transport (July 2025), https://ens.dk/en/analyses-and-statistics/techno"
+        },
+        "investment": {
+          "value": 580.0,
+          "unit": "EUR/kW",
+          "source": "Danish Energy Agency, Technology Data for Energy Transport (July 2025), https://ens.dk/en/analyses-and-statistics/techno"
+        },
+        "lifetime": {
+          "value": 40.0,
+          "unit": "years",
+          "source": "Danish Energy Agency, Technology Data for Energy Transport (July 2025), https://ens.dk/en/analyses-and-statistics/techno"
+        }
+      },
+      "HVDC overhead": {
+        "FOM": {
+          "value": 1.5,
+          "unit": "%/year",
+          "source": "Danish Energy Agency, Technology Data for Energy Transport (July 2025), https://ens.dk/en/analyses-and-statistics/techno"
+        },
+        "investment": {
+          "value": 550.0,
+          "unit": "EUR/MW/km",
+          "source": "Danish Energy Agency, Technology Data for Energy Transport (July 2025), https://ens.dk/en/analyses-and-statistics/techno"
+        },
+        "lifetime": {
+          "value": 40.0,
+          "unit": "years",
+          "source": "Danish Energy Agency, Technology Data for Energy Transport (July 2025), https://ens.dk/en/analyses-and-statistics/techno"
+        }
+      },
+      "HVDC submarine": {
+        "FOM": {
+          "value": 2.5,
+          "unit": "%/year",
+          "source": "Danish Energy Agency, Technology Data for Energy Transport (July 2025), https://ens.dk/en/analyses-and-statistics/techno"
+        },
+        "investment": {
+          "value": 2950.0,
+          "unit": "EUR/MW/km",
+          "source": "Danish Energy Agency, Technology Data for Energy Transport (July 2025), https://ens.dk/en/analyses-and-statistics/techno"
+        },
+        "lifetime": {
+          "value": 40.0,
+          "unit": "years",
+          "source": "Danish Energy Agency, Technology Data for Energy Transport (July 2025), https://ens.dk/en/analyses-and-statistics/techno"
+        }
+      },
+      "HVDC underground": {
+        "FOM": {
+          "value": 2.5,
+          "unit": "%/year",
+          "source": "Danish Energy Agency, Technology Data for Energy Transport (July 2025), https://ens.dk/en/analyses-and-statistics/techno"
+        },
+        "investment": {
+          "value": 3740.0,
+          "unit": "EUR/MW/km",
+          "source": "Danish Energy Agency, Technology Data for Energy Transport (July 2025), https://ens.dk/en/analyses-and-statistics/techno"
+        },
+        "lifetime": {
+          "value": 40.0,
+          "unit": "years",
+          "source": "Danish Energy Agency, Technology Data for Energy Transport (July 2025), https://ens.dk/en/analyses-and-statistics/techno"
+        }
+      },
+      "HVAC overhead": {
+        "FOM": {
+          "value": 1.5,
+          "unit": "%",
+          "source": "Danish Energy Agency, Technology Data for Energy Transport (July 2025), https://ens.dk/en/analyses-and-statistics/techno"
+        },
+        "investment": {
+          "value": 680.0,
+          "unit": "EUR/MW/km",
+          "source": "Danish Energy Agency, Technology Data for Energy Transport (July 2025), https://ens.dk/en/analyses-and-statistics/techno"
+        },
+        "lifetime": {
+          "value": 40.0,
+          "unit": "years",
+          "source": "Danish Energy Agency, Technology Data for Energy Transport (July 2025), https://ens.dk/en/analyses-and-statistics/techno"
+        }
+      },
+      "HVAC submarine": {
+        "FOM": {
+          "value": 2.5,
+          "unit": "%/year",
+          "source": "Danish Energy Agency, Technology Data for Energy Transport (July 2025), https://ens.dk/en/analyses-and-statistics/techno"
+        },
+        "investment": {
+          "value": 4130.0,
+          "unit": "EUR/MW/km",
+          "source": "Danish Energy Agency, Technology Data for Energy Transport (July 2025), https://ens.dk/en/analyses-and-statistics/techno"
+        },
+        "lifetime": {
+          "value": 40.0,
+          "unit": "years",
+          "source": "Danish Energy Agency, Technology Data for Energy Transport (July 2025), https://ens.dk/en/analyses-and-statistics/techno"
+        }
+      },
+      "HVAC underground": {
+        "FOM": {
+          "value": 2.5,
+          "unit": "%/year",
+          "source": "Danish Energy Agency, Technology Data for Energy Transport (July 2025), https://ens.dk/en/analyses-and-statistics/techno"
+        },
+        "investment": {
+          "value": 4130.0,
+          "unit": "EUR/MW/km",
+          "source": "Danish Energy Agency, Technology Data for Energy Transport (July 2025), https://ens.dk/en/analyses-and-statistics/techno"
+        },
+        "lifetime": {
+          "value": 40.0,
+          "unit": "years",
+          "source": "Danish Energy Agency, Technology Data for Energy Transport (July 2025), https://ens.dk/en/analyses-and-statistics/techno"
+        }
+      },
+      "central air-sourced heat pump": {
+        "FOM": {
+          "value": 0.2336,
+          "unit": "%/year",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "VOM": {
+          "value": 2.9254,
+          "unit": "EUR/MWh_th",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "efficiency": {
+          "value": 3.3,
+          "unit": "per unit",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "investment": {
+          "value": 1143.7771,
+          "unit": "EUR/kW_th",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        },
+        "lifetime": {
+          "value": 25.0,
+          "unit": "years",
+          "source": "Danish Energy Agency, inputs/technology_data_for_el_and_dh.xlsx"
+        }
+      }
+    }
+  }
+}
