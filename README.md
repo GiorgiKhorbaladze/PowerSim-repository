@@ -242,6 +242,10 @@ The loader can read the uploaded `plexos model.zip` and uses the original
 hourly profile CSVs for available generation:
 
 * `Load.csv` for internal Georgian demand;
+* `load 2026-2030.xlsx` or another CSV/XLS/XLSX demand workbook as absolute
+  hourly MW demand via `--demand-mode absolute --demand-profile <file>`. For
+  workbooks with separate 2026…2030 columns, the loader picks the column that
+  matches `study_year` unless `--demand-column` is supplied;
 * `Export.csv` for curtailable export demand, capped at 800 MW in the model;
 * `PV * Average.csv`, `Wind * Average.csv`, and `RoR * Medium.csv` as available
   renewable / run-of-river generation profiles.

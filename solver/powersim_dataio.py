@@ -585,6 +585,7 @@ def build_re_site_profiles(
 # ══════════════════════════════════════════════════════════════════════
 _CHAR_YEAR_FILENAME = "GSE_CharYear_Normalized_1.xlsx"
 _PLEXOS_FILENAME    = "GSE_PLEXOS_sc2_2026_1.xlsx"
+_GENERIC_DEMAND_EXTS = (".xlsx", ".xls", ".csv")
 
 
 def _resolve_xlsx(project_dir: Path, basename: str) -> Path:
@@ -594,6 +595,105 @@ def _resolve_xlsx(project_dir: Path, basename: str) -> Path:
         label=f"workbook '{basename}'",
     )
 
+
+
+
+def _is_datetime_like_column(name: object) -> bool:
+    return bool(re.search(r"date.?time|timestamp|თარიღ|დრო", str(name or ""), re.I))
+
+
+def _column_matches_year(name: object, year: int) -> bool:
+    text = unicodedata.normalize("NFC", str(name or "")).strip()
+    return bool(re.search(rf"(?<!\d){int(year)}(?!\d)", text))
+
+
+def _extract_numeric_demand_column(df: pd.DataFrame, *, year: int, column: str | int | None = None) -> tuple[list[float], str]:
+    """Extract one 8760-row hourly MW demand column from a generic table.
+
+    The uploaded GSE workbooks for 2026-2030 commonly contain one column per
+    year.  When ``column`` is omitted we first choose a header containing the
+    requested year, then fall back to the first numeric non-DateTime column.
+    """
+    if len(df) < HOURS_PER_YEAR:
+        raise ProfileLengthError(f"demand table has {len(df)} rows, expected at least {HOURS_PER_YEAR}")
+
+    cols = list(df.columns)
+    chosen = None
+    if column is not None and column != "":
+        if column in df.columns:
+            chosen = column
+        elif isinstance(column, int) or str(column).isdigit():
+            idx = int(column)
+            # Human CLI/users usually count columns from 1.
+            if 1 <= idx <= len(cols):
+                chosen = cols[idx - 1]
+            elif 0 <= idx < len(cols):
+                chosen = cols[idx]
+            else:
+                raise FileFormatError(f"demand column index {column} out of range 1..{len(cols)}")
+        else:
+            raise FileFormatError(f"demand column {column!r} not found; available={cols}")
+
+    if chosen is None:
+        year_cols = [c for c in cols if _column_matches_year(c, year) and not _is_datetime_like_column(c)]
+        numeric_year_cols = []
+        for c in year_cols:
+            vals = pd.to_numeric(df[c].head(HOURS_PER_YEAR), errors="coerce")
+            if vals.notna().sum() >= HOURS_PER_YEAR * 0.95:
+                numeric_year_cols.append(c)
+        if numeric_year_cols:
+            chosen = numeric_year_cols[0]
+
+    if chosen is None:
+        for c in cols:
+            if _is_datetime_like_column(c):
+                continue
+            vals = pd.to_numeric(df[c].head(HOURS_PER_YEAR), errors="coerce")
+            if vals.notna().sum() >= HOURS_PER_YEAR * 0.95:
+                chosen = c
+                break
+
+    if chosen is None:
+        raise FileFormatError("could not infer a numeric demand column (try --demand-column)")
+
+    vals = pd.to_numeric(df[chosen].head(HOURS_PER_YEAR), errors="coerce")
+    if vals.isna().any():
+        raise FileFormatError(f"demand column {chosen!r} contains {int(vals.isna().sum())} non-numeric cells")
+    out = vals.astype(float).tolist()
+    if any(v < 0 for v in out):
+        raise FileFormatError(f"demand column {chosen!r} contains negative MW values")
+    return out, str(chosen)
+
+
+def load_demand_profile_file(path: str | Path, *, year: int = 2026, column: str | int | None = None, sheet: str | int | None = None) -> tuple[list[float], Path, dict]:
+    """Load a generic hourly demand profile from CSV/XLS/XLSX.
+
+    Supports one-year files and multi-year files with columns such as ``2026``
+    … ``2030``.  Exactly one 8760-hour non-leap year is returned; callers build
+    separate PowerSim inputs for each study year.
+    """
+    path = Path(path)
+    if not path.is_file():
+        raise DataIOError(f"demand profile file not found: {path}")
+    ext = path.suffix.lower()
+    if ext == ".csv":
+        df = read_csv_robust(path)
+        sheet_used = None
+    elif ext in (".xlsx", ".xls"):
+        sheet_name = 0 if sheet in (None, "") else (int(sheet) if str(sheet).isdigit() else sheet)
+        df = pd.read_excel(path, sheet_name=sheet_name)
+        sheet_used = sheet_name
+    else:
+        raise FileFormatError(f"unsupported demand profile extension {ext!r}; expected one of {_GENERIC_DEMAND_EXTS}")
+    vals, col_used = _extract_numeric_demand_column(df, year=year, column=column)
+    return vals, path, {"column": col_used, "sheet": sheet_used, "rows": len(df), "year": int(year)}
+
+
+def _resolve_generic_demand_profile(project_dir: Path, demand_profile: str | Path) -> Path:
+    p = Path(demand_profile)
+    if p.is_absolute() or p.exists():
+        return p
+    return _find_in_layout(project_dir, basenames=[str(demand_profile)], label=f"demand profile '{demand_profile}'")
 
 def load_demand_shape_xlsx(project_dir: str | Path) -> tuple[list[float], Path]:
     """
@@ -689,6 +789,9 @@ def build_input_from_project(
     scenario: str = "A_mean",
     annual_twh: float = 15.621,
     demand_mode: str = "shape_times_annual",
+    demand_profile: str | Path | None = None,
+    demand_column: str | int | None = None,
+    demand_sheet: str | int | None = None,
     solver_settings: dict | None = None,
     hydro_inflow_unit: str = "raw",
     scenario_metadata: dict | None = None,
@@ -745,9 +848,17 @@ def build_input_from_project(
         file_hashes["demand_shape_xlsx"] = compute_fingerprint(shape_path)
         demand_source_label = "CharYear_x_SCurve"
     else:                                                   # "absolute"
-        abs_vals, abs_path = load_demand_absolute_plexos(project_dir)
-        file_hashes["demand_absolute_xlsx"] = compute_fingerprint(abs_path)
-        demand_source_label = "PLEXOS_sc2_2026_absolute"
+        if demand_profile:
+            demand_path = _resolve_generic_demand_profile(project_dir, demand_profile)
+            abs_vals, abs_path, demand_meta = load_demand_profile_file(
+                demand_path, year=study_year, column=demand_column, sheet=demand_sheet)
+            file_hashes["demand_profile_file"] = compute_fingerprint(abs_path)
+            file_hashes["demand_profile_meta"] = demand_meta
+            demand_source_label = f"generic_absolute:{abs_path.name}:{demand_meta['column']}"
+        else:
+            abs_vals, abs_path = load_demand_absolute_plexos(project_dir)
+            file_hashes["demand_absolute_xlsx"] = compute_fingerprint(abs_path)
+            demand_source_label = "PLEXOS_sc2_2026_absolute"
 
     demand_spec = {
         "mode":                 demand_mode,
@@ -1050,6 +1161,12 @@ def main(argv: Iterable[str] | None = None) -> int:
     ap.add_argument("--scenario",          default=None, choices=SCENARIOS)
     ap.add_argument("--annual-twh",        type=float, default=None)
     ap.add_argument("--demand-mode",       default=None, choices=DEMAND_MODES)
+    ap.add_argument("--demand-profile",    default=None,
+                    help="Generic CSV/XLS/XLSX absolute MW demand profile. Multi-year files may have 2026..2030 columns.")
+    ap.add_argument("--demand-column",     default=None,
+                    help="Demand column name or 1-based index. Defaults to the column matching --study-year/config study_year.")
+    ap.add_argument("--demand-sheet",      default=None,
+                    help="Excel sheet name/index for --demand-profile (default: first sheet).")
     ap.add_argument("--horizon-hours",     type=int,  default=None)
     ap.add_argument("--start-hour",        type=int,  default=None)
     ap.add_argument("--hydro-inflow-unit", default=None, choices=HYDRO_INFLOW_UNITS)
@@ -1084,6 +1201,9 @@ def main(argv: Iterable[str] | None = None) -> int:
     annual_twh  = args.annual_twh if args.annual_twh is not None \
                    else cfg.get("annual_twh", 15.621)
     hiu         = args.hydro_inflow_unit or cfg.get("hydro_inflow_unit", "raw")
+    demand_profile = args.demand_profile or cfg.get("demand_profile")
+    demand_column  = args.demand_column  or cfg.get("demand_column")
+    demand_sheet   = args.demand_sheet   or cfg.get("demand_sheet")
 
     sh = dict(cfg.get("study_horizon",
                        {"start_hour": 0, "horizon_hours": 8760, "mode": "full"}))
@@ -1105,6 +1225,9 @@ def main(argv: Iterable[str] | None = None) -> int:
         scenario          = scenario,
         annual_twh        = annual_twh,
         demand_mode       = demand_mode,
+        demand_profile    = demand_profile,
+        demand_column     = demand_column,
+        demand_sheet      = demand_sheet,
         solver_settings   = cfg.get("solver_settings"),
         hydro_inflow_unit = hiu,
         scenario_metadata = cfg.get("scenario_metadata"),

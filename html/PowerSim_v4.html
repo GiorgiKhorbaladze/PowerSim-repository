@@ -2786,13 +2786,35 @@ function uploadProfile(input){
         }
         console.info('[uploadProfile] '+file.name+' meta:', r.meta);
       } else {
-        // xlsx path: unchanged
+        if(!window.XLSX) throw new Error('XLSX library not loaded');
         const wb  = XLSX.read(e.target.result, {type:'binary'});
         const ws  = wb.Sheets[wb.SheetNames[0]];
-        const arr = XLSX.utils.sheet_to_json(ws, {header:1});
-        const colIdx = col ? (parseInt(col)-1 || arr[0].indexOf(col)) : 0;
-        const hasHeader = isNaN(parseFloat(arr[0][colIdx]));
-        data = (hasHeader ? arr.slice(1) : arr).map(r => parseFloat(r[colIdx]||0));
+        const arr = XLSX.utils.sheet_to_json(ws, {header:1, raw:false});
+        if(!arr.length) throw new Error('empty workbook');
+        const header = arr[0].map(v => String(v ?? '').trim());
+        const requestedYear = (STATE.metadata && STATE.metadata.study_year) || 2026;
+        let colIdx = -1;
+        if(col){
+          const n = parseInt(col, 10);
+          colIdx = !isNaN(n) ? n - 1 : header.indexOf(col);
+        }
+        if(colIdx < 0){
+          colIdx = header.findIndex(h => new RegExp('(^|\\D)'+requestedYear+'(\\D|$)').test(h) && !/date.?time|timestamp/i.test(h));
+        }
+        if(colIdx < 0){
+          const dtIdx = header.findIndex(h => /date.?time|timestamp/i.test(h));
+          colIdx = header.findIndex((_, i) => i !== dtIdx && arr.slice(1, 51).some(r => !isNaN(parseFloat(String(r[i] ?? '').replace(',', '.')))));
+        }
+        if(colIdx < 0) colIdx = 0;
+        const firstVal = arr[0] && arr[0][colIdx];
+        const hasHeader = isNaN(parseFloat(String(firstVal ?? '').replace(',', '.')));
+        data = (hasHeader ? arr.slice(1) : arr)
+          .map(r => parseFloat(String(r[colIdx] ?? '').replace(',', '.')))
+          .filter(v => !isNaN(v));
+      }
+      if(key === 'demand' && data.length > PS_HOURS_PER_YEAR){
+        showBanner(`⚠ demand ფაილში ${data.length}h არის; PowerSim ამ სცენარისთვის პირველ ${PS_HOURS_PER_YEAR}h-ს იყენებს`, 'y', 7000);
+        data = data.slice(0, PS_HOURS_PER_YEAR);
       }
       STATE.profiles[key] = data;
       showBanner(`✅ "${key}" ჩაიტვ. (${data.length}h)`, 'g');
