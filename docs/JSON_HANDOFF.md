@@ -122,6 +122,50 @@ Per-reservoir aggregates added to `by_unit_summary[hydro_reg_id]`:
 * `total_spill_mm3` — sum of `spill_mm3h * dt` over the horizon.
 * `total_hydro_release_mm3` — sum of `release_mm3h * dt` over the horizon.
 
+### GSE 2026-2030 hourly load projection
+
+A committed JSON snapshot of the GSE PLEXOS sc2 P50-central hourly
+load projections lives at ``data/gse_load_2026_2030.json`` (~340 KiB,
+5 years × 8760 h). The upstream Excel workbooks are in ``load
+2026-2030.rar`` at the repo root; re-run ``python
+scripts/load_gse_projections.py`` to rebuild the JSON after replacing
+the .rar (needs ``unrar-free`` / ``unrar`` / ``7z`` on PATH, or the
+``rarfile`` PyPI package).
+
+```python
+from solver.load_dataio import (
+    snapshot_years, load_snapshot_year, load_snapshot,
+)
+
+years = snapshot_years()               # [2026, 2027, 2028, 2029, 2030]
+inp["profiles"]["demand"] = load_snapshot_year(2030)
+```
+
+Annual targets from the snapshot:
+
+| Year | Target GWh | Peak MW |
+|------|-----------:|--------:|
+| 2026 | 15,621     | 2,645   |
+| 2027 | 16,128     | 2,731   |
+| 2028 | 16,694     | 2,827   |
+| 2029 | 17,406     | 2,947   |
+| 2030 | 18,060     | 3,058   |
+
+The HTML UI has an equivalent uploader in the Profiles tab
+("📂 GSE Load Excel ატვირთვა") that:
+
+* accepts one or many .xlsx files,
+* auto-detects the first sheet/column that looks like an 8760-h MW
+  series (positive, ≤ 100 000 MW, non-flat),
+* extracts a 4-digit year from the filename and stores as
+  ``STATE.profiles['demand_YYYY']`` when multiple files are dropped,
+* aliases the newest year to ``STATE.profiles['demand']`` so the
+  solver picks it up unchanged.
+
+Solver-side, ``solver.load_dataio.autodetect_hourly_demand(path)`` runs
+the same heuristic for arbitrary GSE-style workbooks (not just the
+committed sc2 set).
+
 ### PyPSA-Eur cost / efficiency database
 
 A curated snapshot of validated technology costs from

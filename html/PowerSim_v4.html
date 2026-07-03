@@ -500,6 +500,20 @@ tr:hover td{background:var(--row-hover)}
         <div style="margin-top:5px">
           <button class="btn btn-t btn-s" onclick="generateDemoProfiles()">⚡ Demo 8760h</button>
         </div>
+        <div style="margin-top:8px;padding:6px;background:var(--bg2);border-radius:5px">
+          <div style="font-size:8px;color:var(--gold);font-weight:700;margin-bottom:3px">
+            🇬🇪 GSE hourly-load Excel → demand
+          </div>
+          <div style="font-size:7px;color:var(--t3);margin-bottom:4px">
+            ატვირთე ერთი ან რამდენიმე .xlsx (GSE ფორმატი — DateTime + MW სვეტები, 8760 საათი).
+            პირველი 8760h MW სვეტი აღმოჩენილი ავტომატურად ხდება demand.
+          </div>
+          <label class="btn btn-b btn-s" style="cursor:pointer;display:block;text-align:center">
+            📂 GSE Load Excel ატვირთვა
+            <input type="file" accept=".xlsx,.xls" multiple style="display:none"
+                   onchange="uploadGSELoad(this)">
+          </label>
+        </div>
       </div>
       <div class="card">
         <div class="sh">📋 ატვირთული პროფილები</div>
@@ -2826,6 +2840,91 @@ function uploadProfile(input){
     }
   };
   file.name.toLowerCase().endsWith('.csv') ? reader.readAsText(file) : reader.readAsBinaryString(file);
+}
+
+// ── GSE hourly-load Excel uploader (auto-detects DateTime + MW column,
+//    supports multi-file "one file per year" convention). One 8760h file
+//    ⇒ STATE.profiles['demand']. Multiple files with a 4-digit year in
+//    the filename ⇒ demand_<year> keys plus demand=<newest year>.
+function uploadGSELoad(input){
+  if(!window.XLSX){ showBanner('❌ XLSX library არ დაიტვირთა','r'); return; }
+  const files=Array.from(input.files||[]);
+  if(!files.length) return;
+  const summaries=[]; let processed=0;
+  const trySet=(demand, year, fname, meta)=>{
+    const key = year ? ('demand_'+year) : 'demand';
+    STATE.profiles[key] = demand;
+    summaries.push(`${key}: ${demand.length}h, ${(demand.reduce((s,v)=>s+v,0)/1000).toFixed(0)} GWh, peak ${Math.max(...demand).toFixed(0)} MW (from ${fname})`);
+  };
+  files.forEach(file=>{
+    const reader=new FileReader();
+    reader.onload = e=>{
+      try{
+        const wb = XLSX.read(new Uint8Array(e.target.result), {type:'array', cellDates:false});
+        // Walk sheets, pick first sheet with a numeric column of length
+        // 8760±24 whose values look like MW (positive, ≤100 000, not flat).
+        let picked = null, pickedMeta = null;
+        for(const sn of wb.SheetNames){
+          const ws = wb.Sheets[sn];
+          const rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:null});
+          if(!rows || rows.length < 100) continue;
+          const header = rows[0]||[];
+          const data = rows.slice(1);
+          const nCols = Math.max(...data.slice(0,5).map(r=>r?r.length:0));
+          for(let c=0; c<nCols; c++){
+            const raw = data.map(r=>r&&r[c]);
+            const vals = raw.map(v => (typeof v==='number' && !isNaN(v)) ? v :
+                                       (typeof v==='string' && v.trim()!=='' && !isNaN(+v.replace(',','.'))) ? +v.replace(',','.') :
+                                       null);
+            const good = vals.filter(v=>v!=null);
+            if(good.length < 8000) continue;
+            const mn = Math.min(...good), mx = Math.max(...good);
+            if(mn < 0 || mx <= 0 || mx > 100000) continue;
+            if(mx - mn < 1e-6) continue;   // flat column
+            picked = good.slice(0, 8760);
+            pickedMeta = {sheet: sn, column: header[c]||('col'+c), peak: mx, ghw: (good.reduce((s,v)=>s+v,0)/1000)};
+            break;
+          }
+          if(picked) break;
+        }
+        if(!picked){
+          showBanner('❌ '+file.name+': hourly MW სვეტი ვერ ვიპოვე','r'); return;
+        }
+        // Try to extract a 4-digit year from the filename or sheet name.
+        const src = (file.name+' '+(pickedMeta.sheet||''));
+        const m = src.match(/20\d{2}/);
+        const year = m ? m[0] : null;
+        // Multiple files ⇒ store per-year; the newest year also aliased to
+        // the plain 'demand' key so the solver just picks it up.
+        const multi = files.length > 1;
+        if(multi && year){
+          trySet(picked, year, file.name, pickedMeta);
+        } else {
+          trySet(picked, null, file.name, pickedMeta);
+        }
+      } catch(err){
+        showBanner('❌ '+file.name+': '+err.message,'r');
+      } finally {
+        processed++;
+        if(processed === files.length){
+          // If multi-file with years, alias the newest year to 'demand'.
+          if(files.length > 1){
+            const yrs = Object.keys(STATE.profiles).filter(k=>/^demand_20\d{2}$/.test(k))
+                                                  .sort();
+            if(yrs.length){
+              STATE.profiles['demand'] = STATE.profiles[yrs[yrs.length-1]];
+              summaries.push('active demand = '+yrs[yrs.length-1]);
+            }
+          }
+          renderProfileList && renderProfileList();
+          updateDashKpis && updateDashKpis();
+          showBanner('✅ GSE Load ატვირთვა: '+summaries.length+' profile ჩაწერილი','g',5000);
+          console.info('[uploadGSELoad] summary:', summaries);
+        }
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  });
 }
 
 function generateDemoProfiles(){

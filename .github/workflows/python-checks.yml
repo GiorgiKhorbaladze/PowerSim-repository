@@ -48,9 +48,12 @@ jobs:
               tests/test_solar_stage4.py \
               tests/test_wind_stage5.py \
               tests/test_cost_database.py \
+              tests/test_load_dataio.py \
               solver/cost_database.py \
+              solver/load_dataio.py \
               scripts/cost_lookup.py \
               scripts/refresh_cost_database.py \
+              scripts/load_gse_projections.py \
               tests/test_adequacy_expansion.py \
               tests/test_adequacy_metrics.py \
               tests/test_objective_closure.py \
@@ -105,6 +108,11 @@ jobs:
         # technologies (CCGT/OCGT/onwind/solar/battery), the annuity
         # math matches the closed-form CRF, and missing-key paths raise.
         run: python tests/test_cost_database.py
+      - name: GSE hourly-load loader test (deterministic)
+        # Verifies the 2026-2030 P50 load snapshot: 5 years × 8760 h,
+        # annual GWh matches the target labels within 0.1%, peak grows
+        # monotonically, and profiles pass the schema validator.
+        run: python tests/test_load_dataio.py
       - name: JSON contract regression checks
         run: python tests/check_json_contract.py
       - name: Demo asset registry validator
