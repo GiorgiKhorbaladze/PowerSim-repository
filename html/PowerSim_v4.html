@@ -121,14 +121,23 @@ input:focus,select:focus,textarea:focus{border-color:var(--teal);outline:none;bo
 textarea{resize:vertical;min-height:60px}
 
 /* ── Buttons ──────────────────────────────────────────────────────── */
+/* .btn-p is the one solid/filled treatment — reserved for the single forward
+   action in a panel (add, run, export). The tinted variants (t/g/b/o) are
+   outline-weight secondary actions and stay flat until hover, so the primary
+   action is the only thing that reads as "pressed in" at rest. */
 .btn{border:none;border-radius:9px;cursor:pointer;font-family:'Noto Sans Georgian',sans-serif;
-     font-size:10.5px;font-weight:800;padding:8px 14px;transition:all .15s;box-shadow:var(--control-shadow)}
-.btn-p{background:var(--accent-grad);color:#fff}
+     font-size:10.5px;font-weight:800;padding:8px 14px;transition:all .15s}
+.btn-p{background:var(--accent-grad);color:#fff;box-shadow:var(--control-shadow)}
 .btn-t{background:rgba(0,207,180,.12);border:1px solid rgba(0,207,180,.3);color:var(--teal)}
 .btn-g{background:rgba(32,214,138,.10);border:1px solid rgba(32,214,138,.25);color:var(--green)}
 .btn-b{background:rgba(61,142,240,.12);border:1px solid rgba(61,142,240,.3);color:var(--blue)}
 .btn-o{background:rgba(240,120,48,.12);border:1px solid rgba(240,120,48,.3);color:var(--orange)}
-.btn:hover{filter:brightness(1.12);transform:translateY(-1px);box-shadow:0 10px 24px var(--accent-soft)}
+.btn:hover{filter:brightness(1.12);transform:translateY(-1px)}
+.btn-p:hover{box-shadow:0 10px 24px var(--accent-soft)}
+.btn-t:hover{box-shadow:0 10px 24px var(--teal-soft)}
+.btn-g:hover{box-shadow:0 10px 24px rgba(32,214,138,.22)}
+.btn-b:hover{box-shadow:0 10px 24px rgba(61,142,240,.22)}
+.btn-o:hover{box-shadow:0 10px 24px rgba(240,120,48,.22)}
 .btn-s{font-size:9.5px;padding:4px 9px}
 .bgrp{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:6px}
 
