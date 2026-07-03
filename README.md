@@ -335,3 +335,7 @@ python scripts/run_adequacy.py --input samples/sample_input_168h.json --out-dir 
 ```
 
 The workflow writes adequacy summaries and optional expanded inputs for subsequent UC/ED dispatch testing. It is deterministic/reviewable by design and is not a full PLEXOS PASA or investment-grade optimization without further validation.
+## Optional AI Assistant
+
+PowerSim can be paired with an optional embedded AI assistant backend for scenario explanation, proposed input edits, confirmation-gated solver actions, and report summaries. The base PowerSim workflow does not require AI features. See [AI Assistant Architecture](docs/AI_ASSISTANT_ARCHITECTURE.md) and [AI Assistant Safety](docs/AI_ASSISTANT_SAFETY.md) for the integration contract, confirmation flow, and safety boundaries.
+

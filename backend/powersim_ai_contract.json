@@ -1,0 +1,25 @@
+{
+  "chat_endpoint": "/api/ai/chat",
+  "confirm_endpoint": "/api/ai/confirm",
+  "tools": [
+    "load_input_summary",
+    "summarize_results",
+    "compare_results",
+    "propose_add_bess",
+    "propose_edit_asset",
+    "propose_set_horizon",
+    "run_solver",
+    "run_adequacy",
+    "export_report_summary"
+  ],
+  "safety_classifications": ["read_only", "propose_change", "requires_confirmation"],
+  "action_card": {
+    "action_id": "string",
+    "title": "string",
+    "description": "string",
+    "changes": "array",
+    "risk_level": "low|medium|high",
+    "requires_confirmation": "boolean"
+  },
+  "confirmation_required_for": ["run_solver", "run_adequacy", "export_report_summary"]
+}
