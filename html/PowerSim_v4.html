@@ -2252,7 +2252,7 @@ function clearAssets(){
 //     hydro, thermal, wind/solar, neighbour imports).
 //
 //   Calibration (must match README §"Calibration baseline v10 LOCKED"):
-//     - Hydro pmax derate 0.65       — inflow-driven only (pre-applied)
+//     - Hydro pmax uses installed MW — inflow-driven dispatch is limited by profiles
 //     - Gas fuel_price 5.50 $/MMBtu
 //     - Gas startup 1000 / no_load 50
 //     - Coal startup 4000 / no_load 100
@@ -2445,10 +2445,10 @@ function renderNetwork(){
 }
 
 function loadGSE2026Demo(){
-  // ── Helpers — compact constructors for the 77-asset GSE 2026 fleet.
+  // ── Helpers — compact constructors for the GSE 2026 demo fleet.
   // v10 LOCKED calibration: gas $5.50/MMBtu, startup $1000 / no-load $50,
   // coal startup $4000 / no-load $100, thermal pmin = 25% pmax,
-  // hydro inflow-driven pmax × 0.65 derate, Section-I water values
+  // hydro inflow-driven pmax uses installed capacity from the GSE workbook, Section-I water values
   // $35/$42/$37, target_end_level_frac 0.85, end_level_penalty 20 $/Mm³.
   // Cascades: Vardnili ← Enguri (2h, 0.97); Khrami_2 ← Khrami_1 (1h, 0.95).
   const tGas = (id, name, pmax, yr) => ({               // CCGT gas thermal
@@ -2500,14 +2500,14 @@ function loadGSE2026Demo(){
       conversion_mode: 2
     }), inflow_profile:null, inflow_driven:false
   });
-  // Sections II & III — inflow-driven hydro. `pmax_derated` is already
-  // × 0.65 derated per v10 LOCKED.
-  const hRoR = (id, name, pmax_derated, yr) => ({
+  // Sections II & III — inflow-driven hydro. `pmax_installed` is the
+  // installed capacity from the GSE workbook (no presentation-time derate).
+  const hRoR = (id, name, pmax_installed, yr) => ({
     id, name, type:'hydro_ror', committable:false, _commiss_year:yr||null,
-    pmin:0, pmax:pmax_derated,
+    pmin:0, pmax:pmax_installed,
     ramp_up:9999, ramp_down:9999,
     min_up:0, min_down:0, startup_cost:0, no_load_cost:0, vom:0,
-    initial_status:1, initial_power:Math.round(pmax_derated*0.3*10)/10,
+    initial_status:1, initial_power:Math.round(pmax_installed*0.3*10)/10,
     for_rate:0.06,
     hydro:{efficiency:400, spill_cost:0, water_value:10,
            cascade_upstream:null, travel_delay_h:0, conversion_mode:2,
@@ -2545,55 +2545,55 @@ function loadGSE2026Demo(){
     hReg('zhinvalhesi',  'ჟინვალჰესი',      130.0, {init:150, min:30, max:400, wv:42, yr:1984}),
 
     // ═══════════════════════════════════════════════════════════════
-    // II. სეზონური ჰესები — 24 plants, Σ 1,214.21 MW (× 0.65 derate)
+    // II. სეზონური ჰესები — 24 plants, Σ 1,214.21 MW installed capacity
     // ═══════════════════════════════════════════════════════════════
-    hRoR('zahesi',        'ზაჰესი',                  Math.round(42.0 *0.65*100)/100, 1927),
-    hRoR('rionhesi',      'რიონჰესი',                Math.round(54.0 *0.65*100)/100, 1933),
-    hRoR('atshesi',       'აწჰესი',                  Math.round(18.4 *0.65*100)/100, 1937),
-    hRoR('chitakhevhesi', 'ჩითახევჰესი',             Math.round(21.0 *0.65*100)/100, 1949),
-    hRoR('ortachalhesi',  'ორთაჭალჰესი',             Math.round(18.0 *0.65*100)/100, 1954),
-    hRoR('gumathesi_1',   'გუმათჰესი 1',             Math.round(46.7 *0.65*100)/100, 1956),
-    hRoR('gumathesi_2',   'გუმათჰესი 2',             Math.round(22.8 *0.65*100)/100, 1958),
-    hRoR('lajanurhesi',   'ლაჯანურჰესი',             Math.round(115.6*0.65*100)/100, 1960),
-    hRoR('vartsikhehesi_1','ვარციხეჰესი 1',          Math.round(46.0 *0.65*100)/100, 1976),
-    hRoR('vartsikhehesi_2','ვარციხეჰესი 2',          Math.round(46.0 *0.65*100)/100, 1976),
-    hRoR('vartsikhehesi_3','ვარციხეჰესი 3',          Math.round(46.0 *0.65*100)/100, 1977),
-    hRoR('vartsikhehesi_4','ვარციხეჰესი 4',          Math.round(46.0 *0.65*100)/100, 1977),
-    hRoR('khadorhesi',    'ხადორჰესი',               Math.round(24.0 *0.65*100)/100, 2004),
-    hRoR('larsihesi',     'ლარსიჰესი',               Math.round(19.0 *0.65*100)/100, 2014),
-    hRoR('paravanhesi',   'ფარავანჰესი',             Math.round(86.54*0.65*100)/100, 2014),
-    hRoR('darialhesi',    'დარიალჰესი',              Math.round(108.0*0.65*100)/100, 2016),
-    hRoR('khelvachauri_1','ხელვაჩაური 1',            Math.round(47.48*0.65*100)/100, 2016),
-    hRoR('shuakhevihesi', 'შუახევიჰესი',             Math.round(178.72*0.65*100)/100,2017),
-    hRoR('old_energy',    'ოლდ ენერჯიჰესი (სოხუმჰესი)', Math.round(21.39*0.65*100)/100, 2018),
-    hRoR('kirnatihesi',   'კირნათიჰესი',             Math.round(52.62*0.65*100)/100, 2018),
-    hRoR('mestiachala_2', 'მესტიაჭალა 2',            Math.round(31.9 *0.65*100)/100, 2019),
-    hRoR('mestiachala_1', 'მესტიაჭალა 1',            Math.round(21.26*0.65*100)/100, 2019),
-    hRoR('khobihesi_2',   'ხობიჰესი 2',              Math.round(46.7 *0.65*100)/100, 2024),
-    hRoR('mtkvarihesi',   'მტკვარიჰესი',             Math.round(54.1 *0.65*100)/100, 2025),
+    hRoR('zahesi',        'ზაჰესი',                  42.0, 1927),
+    hRoR('rionhesi',      'რიონჰესი',                54.0, 1933),
+    hRoR('atshesi',       'აწჰესი',                  18.4, 1937),
+    hRoR('chitakhevhesi', 'ჩითახევჰესი',             21.0, 1949),
+    hRoR('ortachalhesi',  'ორთაჭალჰესი',             18.0, 1954),
+    hRoR('gumathesi_1',   'გუმათჰესი 1',             46.7, 1956),
+    hRoR('gumathesi_2',   'გუმათჰესი 2',             22.8, 1958),
+    hRoR('lajanurhesi',   'ლაჯანურჰესი',             115.6, 1960),
+    hRoR('vartsikhehesi_1','ვარციხეჰესი 1',          46.0, 1976),
+    hRoR('vartsikhehesi_2','ვარციხეჰესი 2',          46.0, 1976),
+    hRoR('vartsikhehesi_3','ვარციხეჰესი 3',          46.0, 1977),
+    hRoR('vartsikhehesi_4','ვარციხეჰესი 4',          46.0, 1977),
+    hRoR('khadorhesi',    'ხადორჰესი',               24.0, 2004),
+    hRoR('larsihesi',     'ლარსიჰესი',               19.0, 2014),
+    hRoR('paravanhesi',   'ფარავანჰესი',             86.54, 2014),
+    hRoR('darialhesi',    'დარიალჰესი',              108.0, 2016),
+    hRoR('khelvachauri_1','ხელვაჩაური 1',            47.48, 2016),
+    hRoR('shuakhevihesi', 'შუახევიჰესი',             178.72,2017),
+    hRoR('old_energy',    'ოლდ ენერჯიჰესი (სოხუმჰესი)', 21.39, 2018),
+    hRoR('kirnatihesi',   'კირნათიჰესი',             52.62, 2018),
+    hRoR('mestiachala_2', 'მესტიაჭალა 2',            31.9, 2019),
+    hRoR('mestiachala_1', 'მესტიაჭალა 1',            21.26, 2019),
+    hRoR('khobihesi_2',   'ხობიჰესი 2',              46.7, 2024),
+    hRoR('mtkvarihesi',   'მტკვარიჰესი',             54.1, 2025),
 
     // ═══════════════════════════════════════════════════════════════
-    // III. მცირე ჰესები — top 15 by capacity (x 0.65 derate) + aggregate remainder
+    // III. მცირე ჰესები — top 15 by installed capacity + aggregate remainder
     //       15 named + 1 aggregate (remaining 70 plants = 178.68 MW).
     //       All 85 small HPPs total 331.26 MW.
     // ═══════════════════════════════════════════════════════════════
-    hRoR('satskhenhesi',  'საცხენჰესი',              Math.round(14.0 *0.65*100)/100, 1952),
-    hRoR('basra_1',       'ბასრა 1',                 Math.round(12.53*0.65*100)/100, 2025),
-    hRoR('tetrikhevhesi', 'თეთრიხევჰესი',            Math.round(12.4 *0.65*100)/100, 1952),
-    hRoR('bzhuzhahesi',   'ბჟუჟაჰესი',               Math.round(12.24*0.65*100)/100, 1956),
-    hRoR('rachahesi',     'რაჭაჰესი',                Math.round(11.0 *0.65*100)/100, 2013),
-    hRoR('lakhami_2',     'ლახამი 2',                Math.round(10.71*0.65*100)/100, 2020),
-    hRoR('nakrahesi',     'ნაკრაჰესი',               Math.round(9.95 *0.65*100)/100, 2022),
-    hRoR('bakhvihesi_3',  'ბახვიჰესი 3',             Math.round(9.8  *0.65*100)/100, 2013),
-    hRoR('akhmetahesi',   'ახმეტაჰესი',              Math.round(9.2  *0.65*100)/100, 2014),
-    hRoR('sionhesi',      'სიონჰესი',                Math.round(9.14 *0.65*100)/100, 1964),
-    hRoR('kasletihesi_2', 'კასლეთიჰესი 2',           Math.round(9.1  *0.65*100)/100, 2018),
-    hRoR('skhaltahesi',   'სხალთა',                  Math.round(9.0  *0.65*100)/100, 2021),
-    hRoR('aragvihesi',    'არაგვიჰესი',              Math.round(8.0  *0.65*100)/100, 2014),
-    hRoR('sashuala_1',    'საშუალა 1',               Math.round(7.86 *0.65*100)/100, 2021),
-    hRoR('akhalkalaki_1', 'ახალქალაქი 1',            Math.round(7.65 *0.65*100)/100, 2022),
-    // Remaining 70 small HPPs (vintage 1928–2025) — aggregated (×0.65)
-    hRoR('small_hpp_remainder','მცირე ჰესების ჯამი — დანარჩენი 70', Math.round(178.68*0.65*100)/100, null),
+    hRoR('satskhenhesi',  'საცხენჰესი',              14.0, 1952),
+    hRoR('basra_1',       'ბასრა 1',                 12.53, 2025),
+    hRoR('tetrikhevhesi', 'თეთრიხევჰესი',            12.4, 1952),
+    hRoR('bzhuzhahesi',   'ბჟუჟაჰესი',               12.24, 1956),
+    hRoR('rachahesi',     'რაჭაჰესი',                11.0, 2013),
+    hRoR('lakhami_2',     'ლახამი 2',                10.71, 2020),
+    hRoR('nakrahesi',     'ნაკრაჰესი',               9.95, 2022),
+    hRoR('bakhvihesi_3',  'ბახვიჰესი 3',             9.8, 2013),
+    hRoR('akhmetahesi',   'ახმეტაჰესი',              9.2, 2014),
+    hRoR('sionhesi',      'სიონჰესი',                9.14, 1964),
+    hRoR('kasletihesi_2', 'კასლეთიჰესი 2',           9.1, 2018),
+    hRoR('skhaltahesi',   'სხალთა',                  9.0, 2021),
+    hRoR('aragvihesi',    'არაგვიჰესი',              8.0, 2014),
+    hRoR('sashuala_1',    'საშუალა 1',               7.86, 2021),
+    hRoR('akhalkalaki_1', 'ახალქალაქი 1',            7.65, 2022),
+    // Remaining 70 small HPPs (vintage 1928–2025) — aggregated
+    hRoR('small_hpp_remainder','მცირე ჰესების ჯამი — დანარჩენი 70', 178.68, null),
 
     // ═══════════════════════════════════════════════════════════════
     // V. თბოსადგურები — 7 units, Σ 1,181.40 MW (all gas except Tkibuli)
