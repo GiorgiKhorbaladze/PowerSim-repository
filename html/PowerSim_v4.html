@@ -8,6 +8,7 @@
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<link rel="stylesheet" href="powersim_ai_chat.css">
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Georgian:wght@300;400;500;600;700;900&family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
 <script>
 (function(){
@@ -272,6 +273,7 @@ tr:hover td{background:var(--row-hover)}
     <option value="ka">ქართული</option>
     <option value="en">English</option>
   </select>
+  <button class="btn btn-t btn-s ai-toggle" type="button" onclick="PowerSimAIChat.toggle()" title="AI Assistant">🤖 AI დამხმარე</button>
   <div class="theme-picker" aria-label="Dashboard theme selector">
     <span>Theme</span>
     <select class="theme-select" id="theme-select" onchange="setTheme(this.value)" title="Dashboard theme">
@@ -281,6 +283,29 @@ tr:hover td{background:var(--row-hover)}
     </select>
   </div>
 </div></nav>
+
+
+<!-- ═══ AI ASSISTANT DRAWER ═══ -->
+<section id="powersim-ai-chat" class="ai-drawer" aria-label="PowerSim AI Assistant" aria-live="polite">
+  <div class="ai-head">
+    <div class="ai-title">🤖 AI დამხმარე / AI Assistant</div>
+    <span id="ai-backend-status" class="ai-status bad">offline</span>
+    <button class="icon-btn" type="button" onclick="PowerSimAIChat.toggle(false)" aria-label="Close AI Assistant">✕</button>
+  </div>
+  <div id="ai-error-panel" class="ai-error" style="display:none"></div>
+  <div id="ai-chat-messages" class="ai-body"></div>
+  <div id="ai-action-list" class="ai-body" style="min-height:0;padding-top:0"></div>
+  <div class="ai-settings">
+    <input id="ai-backend-url" type="text" value="http://localhost:8000" aria-label="AI backend URL">
+    <select id="ai-language" aria-label="AI language"><option value="auto">Auto</option><option value="ka">KA</option><option value="en">EN</option></select>
+    <button class="btn btn-b btn-s" type="button" onclick="PowerSimAIChat.saveBackendUrl()">Save</button>
+  </div>
+  <div class="ai-compose">
+    <textarea id="ai-chat-input" placeholder="ჰკითხე PowerSim-ს: დაამატე 500 MW / 2000 MWh BESS და შემიდარე საბაზისო სცენართან...
+Ask PowerSim: add 500 MW / 2000 MWh BESS and compare with the baseline..."></textarea>
+    <button class="btn btn-p" type="button" onclick="PowerSimAIChat.send()">Send</button>
+  </div>
+</section>
 
 <!-- ═══ LOADING OVERLAY ═══ -->
 <div id="overlay">
@@ -1338,6 +1363,7 @@ const STATE = {
   lastCompareRows:[]
 };
 
+window.STATE = STATE;
 const SCHEMA_VERSION = '1.5';
 const ACCEPTED_OUTPUT_SCHEMAS = new Set(['1.5','1.4','1.3','1.2','1.1','1.0']);
 const MODEL_VERSION  = 'PowerSim v4.0';
@@ -5777,5 +5803,6 @@ function init(){
 }
 init();
 </script>
+<script src="powersim_ai_chat.js"></script>
 </body>
 </html>
