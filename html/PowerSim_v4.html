@@ -226,6 +226,17 @@ tr:hover td{background:var(--row-hover)}
 .chart-note{font-size:7.5px;color:var(--t3);line-height:1.5;margin-top:3px}
 @media (max-width:1100px){.layout-lr{grid-template-columns:1fr}.nav-inner{gap:6px;padding:0 10px}.nav-sep{flex-basis:4px}.theme-picker span{display:none}.theme-select{min-width:140px}.nav-title small{display:none}.results-grid{grid-template-columns:1fr!important}.chart-actions{margin-left:0}.chart-toolbar .field{flex:1 1 130px}}
 @media (max-width:760px){.nav-title{max-width:96px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.tab{padding:5px 9px}.theme-select{min-width:116px}.lang-select{max-width:92px}}
+/* Below ~640px there isn't room for logo + title + tabs + pickers on one row —
+   give the tabs their own full-width row instead of letting them get squeezed to nothing. */
+@media (max-width:640px){
+  :root{--nav-h:98px}
+  .nav-inner{flex-wrap:wrap;height:auto;padding:8px 10px;row-gap:6px}
+  .nav-sep{display:none}
+  .nav-title{max-width:none;order:1}
+  .lang-select{order:2;margin-left:auto}
+  .theme-picker{order:3}
+  .tabs{order:4;flex:1 1 100%;min-width:100%}
+}
 </style>
 </head>
 <body>
@@ -1497,7 +1508,9 @@ const I18N = {
   '!python powersim_solver_v2.py → results JSON/Excel': {ka:'!python powersim_solver_v2.py → results JSON/Excel', en:'!python powersim_solver_v2.py → results JSON/Excel'},
   'Results tab-ში results JSON ატვირთე': {ka:'Results ჩანართში ატვირთეთ results JSON', en:'Upload results JSON in the Results tab'},
   '🔍 ძიება...': {ka:'🔍 ძიება...', en:'🔍 Search...'},
-  'სვეტის სახელი ან 1': {ka:'სვეტის სახელი ან 1', en:'Column name or 1'}
+  'სვეტის სახელი ან 1': {ka:'სვეტის სახელი ან 1', en:'Column name or 1'},
+  'Network': {ka:'ქსელი', en:'Network'},
+  'Reports': {ka:'ანგარიშები', en:'Reports'}
 };
 
 const I18N_LOOKUP = Object.create(null);
@@ -1509,6 +1522,9 @@ for(const [key, val] of Object.entries(I18N)){
 function t(key, lang=CURRENT_LANG){
   const canon = I18N_LOOKUP[String(key)] || key;
   return (I18N[canon] && (I18N[canon][lang] || I18N[canon].en)) || key;
+}
+function escapeRegExp(s){
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 function translateVisibleText(root=document.body){
   if(!root) return;
@@ -1534,7 +1550,10 @@ function translateVisibleText(root=document.body){
       .filter(([source])=>source && source.length>2 && next.includes(source))
       .sort((a,b)=>b[0].length-a[0].length);
     for(const [source, key] of terms){
-      next=next.split(source).join(t(key));
+      // Word-boundary match (Unicode-aware) so a short entry like "Commit" can't
+      // clobber a longer word it's merely a prefix of, e.g. "Commitment".
+      const re=new RegExp(`(?<![\\p{L}\\p{N}])${escapeRegExp(source)}(?![\\p{L}\\p{N}])`,'gu');
+      next=next.replace(re, t(key));
     }
     if(next!==raw) node.nodeValue=next;
   });
