@@ -1,5 +1,16 @@
 /* PowerSim AI Assistant panel (static, no-build) */
 .ai-toggle{margin-left:4px;white-space:nowrap}
+/* Floating fallback button — guaranteed visible even if the top toolbar
+   overflows or is styled unusually. Bottom-right, above the drawer. */
+.ai-fab{position:fixed;right:16px;bottom:80px;z-index:410;
+  width:auto;padding:10px 14px;border-radius:999px;
+  background:linear-gradient(180deg,var(--teal),#008b7a);
+  color:#fff;font-weight:900;font-size:12px;border:none;
+  box-shadow:0 6px 16px rgba(0,0,0,.35);cursor:pointer;
+  display:flex;align-items:center;gap:6px}
+.ai-fab:hover{filter:brightness(1.08)}
+.ai-fab.hidden{display:none}
+@media (max-width:720px){.ai-fab{right:10px;bottom:70px;padding:9px 12px;font-size:11px}}
 .ai-drawer{position:fixed;right:16px;bottom:16px;width:min(440px,calc(100vw - 32px));max-height:calc(100vh - 96px);display:none;flex-direction:column;background:var(--card);border:1px solid var(--border);border-radius:16px;box-shadow:var(--panel-shadow);z-index:420;overflow:hidden;color:var(--t1)}
 .ai-drawer.open{display:flex}.ai-head{display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--border);background:var(--nav-bg)}
 .ai-title{font-weight:900;font-size:12px;flex:1}.ai-status{font-size:8px;border:1px solid var(--border);border-radius:999px;padding:3px 7px;color:var(--t3)}.ai-status.ok{color:var(--green);border-color:var(--green)}.ai-status.bad{color:var(--gold);border-color:var(--gold)}
