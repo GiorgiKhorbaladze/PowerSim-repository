@@ -364,11 +364,21 @@ def solve_bess_sizing(
             # If curtailment_penalty_usd_per_mwh > 0 the objective also
             # charges $/MWh per unit of spilled VRE, so the LP trades
             # capex against avoided curtailment when reliability is slack.
+            # This is an OPTIONAL sensitivity parameter, not an official
+            # economic recommendation — the chosen penalty should be
+            # documented by the caller. Defaults to 0 → pure reliability
+            # LP (bit-exact backward compatibility).
             curt_pen = float(params.curtailment_penalty_usd_per_mwh or 0)
             cost_per_mw_yr = DURATION_COST.get(dur, dur * COST_1H_PER_MW_YR)
+            # ``m.spill[t]`` is expressed in MW. Because this sizing model
+            # is fixed at 1-hour resolution, MW × 1 h = MWh, so we scale
+            # by the explicit ``period_h`` here to keep the $/MWh penalty
+            # applied to MWh rather than implicitly to MW.
+            period_h = 1.0
+            curtailment_mwh = sum(m.spill[t] * period_h for t in m.T)
             m.obj = pyo.Objective(
                 expr=cost_per_mw_yr * (m.P - Kp)
-                + curt_pen * sum(m.spill[t] for t in m.T)
+                + curt_pen * curtailment_mwh
                 + _EPS * sum(
                     m.ch[t] + m.dis[t] + m.spill[t] + (X[t] - m.exp[t])
                     for t in m.T
@@ -441,7 +451,10 @@ def solve_bess_sizing(
     ens_exp_mwh = sum(ens_exp_mw)
     total_load  = sum(D)
 
-    cost_per_mw_yr = DURATION_COST.get(dur, COST_1H_PER_MW_YR)
+    # Use the same $/MW/yr fallback as the objective so the reported CAPEX
+    # matches what the LP actually optimised on when ``dur`` is off-menu
+    # (e.g. an interpolated economic duration outside {1.0, 2.0, 4.0}).
+    cost_per_mw_yr = DURATION_COST.get(dur, dur * COST_1H_PER_MW_YR)
     add_capex_yr   = cost_per_mw_yr * p_add
     ksani_capex_yr = COST_1H_PER_MW_YR * Kp
 

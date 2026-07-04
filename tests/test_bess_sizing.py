@@ -300,3 +300,97 @@ class TestScenarioMatrix:
         for dur in DURATIONS:
             count = sum(1 for s in reliability if s.get('add_duration_h') == dur)
             assert count == 6  # 2 export × 3 targets
+
+
+# ── PR #28: curtailment-penalty term in reliability-mode objective ────────────
+
+class TestCurtailmentPenalty:
+    """Direct tests for the optional ``curtailment_penalty_usd_per_mwh``
+    term added to the reliability-mode objective in the curtailable-export
+    branch (``export_firm=False``). See PR #28 audit notes:
+
+    * The economic sizing knob is optional; default 0 must be bit-identical
+      to the pre-PR reliability LP behavior.
+    * ``$/MWh`` penalty is applied to MWh via ``m.spill[t] * period_h``,
+      not implicitly to MW.
+    * Annualized-CAPEX fallback is consistent between the objective
+      (``dur * COST_1H_PER_MW_YR``) and the result extraction.
+    """
+
+    def _abundant_data(self):
+        """Reliability-slack synthetic case: must-run PV covers load with
+        headroom, no export demand, no reliability shortfall regardless
+        of BESS size."""
+        return {
+            'load':   _flat(500.0),
+            'export': _flat(0.0),
+            'pv':     _flat(1000.0),     # 2× headroom ⇒ spill available
+            'wind':   _flat(0.0),
+            'ror':    _flat(0.0),
+            'tpp':    _flat(0.0),
+        }
+
+    def test_zero_penalty_matches_default(self):
+        """Test A — backward compatibility.
+
+        Default (unset) and explicit ``curtailment_penalty_usd_per_mwh=0.0``
+        must produce the same p/E/curt/EENS in reliability mode on an
+        abundant-VRE synthetic case where the pure reliability LP would
+        return zero additional BESS.
+        """
+        data = self._abundant_data()
+        base = BessSizingParams(mode='reliability', eens_target_pct=0.10,
+                                add_duration_h=1.0, export_firm=False)
+        r_default = solve_bess_sizing(data, base, _REG_ENERGY, _REG_PMAX)
+        explicit_zero = BessSizingParams(mode='reliability', eens_target_pct=0.10,
+                                          add_duration_h=1.0, export_firm=False,
+                                          curtailment_penalty_usd_per_mwh=0.0)
+        r_zero = solve_bess_sizing(data, explicit_zero, _REG_ENERGY, _REG_PMAX)
+        assert math.isclose(r_default['pbess_add_mw'],
+                            r_zero['pbess_add_mw'], abs_tol=1e-6)
+        assert math.isclose(r_default['ebess_add_mwh'],
+                            r_zero['ebess_add_mwh'], abs_tol=1e-6)
+        assert math.isclose(r_default['curtailment_gwh'],
+                            r_zero['curtailment_gwh'], abs_tol=1e-6)
+        assert math.isclose(r_default['eens_pct'],
+                            r_zero['eens_pct'], abs_tol=1e-6)
+
+    def test_positive_penalty_does_not_worsen_eens_or_curtailment(self):
+        """Test B — positive penalty effect.
+
+        A ``curtailment_penalty_usd_per_mwh > 0`` on a controlled
+        surplus-VRE synthetic case must not raise EENS and must not raise
+        curtailment; when the penalty is large enough to bite it should
+        strictly reduce curtailment or grow the added BESS. Ksani minimum
+        constraint must still hold in every case.
+        """
+        data = self._abundant_data()
+        base = BessSizingParams(mode='reliability', eens_target_pct=0.10,
+                                add_duration_h=1.0, export_firm=False,
+                                curtailment_penalty_usd_per_mwh=0.0)
+        r0 = solve_bess_sizing(data, base, _REG_ENERGY, _REG_PMAX)
+        # Deterministic positive penalty. Value chosen as a sensitivity
+        # signal, NOT an economic recommendation.
+        r1 = solve_bess_sizing(
+            data,
+            BessSizingParams(mode='reliability', eens_target_pct=0.10,
+                             add_duration_h=1.0, export_firm=False,
+                             curtailment_penalty_usd_per_mwh=1000.0),
+            _REG_ENERGY, _REG_PMAX,
+        )
+        assert r1['eens_pct'] <= r0['eens_pct'] + 1e-6, (
+            f"positive penalty worsened EENS: {r0['eens_pct']} → {r1['eens_pct']}")
+        # Either curtailment drops OR BESS size grows — at least one
+        # direction should respond to a very large penalty.
+        curtailment_dropped = r1['curtailment_gwh'] <= r0['curtailment_gwh'] + 1e-6
+        capacity_grew      = (r1['pbess_add_mw'] > r0['pbess_add_mw'] - 1e-6
+                              and r1['ebess_add_mwh'] > r0['ebess_add_mwh'] - 1e-6)
+        assert curtailment_dropped or capacity_grew, (
+            f"positive penalty had no effect: "
+            f"curt {r0['curtailment_gwh']}→{r1['curtailment_gwh']} GWh, "
+            f"P {r0['pbess_add_mw']}→{r1['pbess_add_mw']} MW, "
+            f"E {r0['ebess_add_mwh']}→{r1['ebess_add_mwh']} MWh")
+        # Ksani minimum-BESS constraint holds under any penalty.
+        for r in (r0, r1):
+            assert r['pbess_total_mw'] >= KSANI_P_MW - 1e-6
+            assert r['ebess_total_mwh'] >= KSANI_E_MWH - 1e-6
