@@ -8,11 +8,21 @@
   const $ = id => document.getElementById(id);
   const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
+  function ensureFab(){
+    if(document.getElementById('ai-fab')) return document.getElementById('ai-fab');
+    const b=document.createElement('button');
+    b.id='ai-fab'; b.className='ai-fab'; b.type='button';
+    b.title='PowerSim AI Assistant'; b.innerHTML='<span>🤖</span><span>AI</span>';
+    b.addEventListener('click', ()=>toggle());
+    document.body.appendChild(b);
+    return b;
+  }
   function init(){
     state.sessionId = getSessionId();
     state.backendUrl = localStorage.getItem(STORAGE_URL) || DEFAULT_URL;
     if($('ai-backend-url')) $('ai-backend-url').value = state.backendUrl;
-    addSystem('AI backend is not connected. Start the backend server to use chat.\n\nLocal setup:\n1. Install backend requirements\n2. Set OPENAI_API_KEY\n3. Run uvicorn backend.powersim_ai_server:app --reload --port 8000');
+    ensureFab();
+    addSystem('AI backend is not connected.\n\nStart backend:\nuvicorn backend.powersim_ai_server:app --reload --port 8000\n\nSet API key on backend:\nexport OPENAI_API_KEY=...\n\nNo API key is stored in browser.');
     health();
     setInterval(health, 30000);
     $('ai-chat-input')?.addEventListener('keydown', e=>{ if(e.key==='Enter' && (e.ctrlKey || e.metaKey)){ send(); } });
@@ -94,7 +104,15 @@
   function applyPatchedInput(input){ addMsg('system','Patched input received. Stage 1 does not overwrite all editor fields automatically; export/apply workflow hook is ready.'); window.PowerSimAIPatchedInput=input; }
   function importResultsObject(data){ if(!data) return; window.STATE.results=data; if(typeof window.renderWorkflowSteps==='function') window.renderWorkflowSteps(); if(typeof window.goTab==='function') window.goTab('results'); if(typeof window.renderResults==='function') window.renderResults(); if(typeof window.renderReports==='function') try{window.renderReports();}catch(e){} addMsg('system','Results imported into the Results tab.'); }
   function selfCheck(){
-    return {hasDrawer:!!$('powersim-ai-chat'), hasBackendUrl:!!$('ai-backend-url'), noHardcodedSecret:!document.documentElement.innerHTML.match(new RegExp('s'+'k-[A-Za-z0-9_-]{20,}')), canBuildContext:!!buildAiContextSummary().session_id};
+    return {
+      hasDrawer:!!$('powersim-ai-chat'),
+      hasToolbarButton:!!document.querySelector('.ai-toggle'),
+      hasFloatingButton:!!$('ai-fab'),
+      hasBackendUrl:!!$('ai-backend-url'),
+      noHardcodedSecret:!document.documentElement.innerHTML.match(new RegExp('s'+'k-[A-Za-z0-9_-]{20,}')),
+      canBuildContext:!!buildAiContextSummary().session_id,
+      backendOnline:!!state.online,
+    };
   }
   window.PowerSimAIChat = {init,toggle,send,saveBackendUrl,health,buildAiContextSummary,renderActions,importResultsObject,selfCheck};
   document.addEventListener('DOMContentLoaded', init);
