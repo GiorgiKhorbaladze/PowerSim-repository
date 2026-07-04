@@ -64,7 +64,14 @@ jobs:
               tests/check_json_contract.py \
               tests/check_demo_asset_registry.py \
               tests/test_rolling_carryover.py \
-              tests/test_subhourly_ramp.py
+              tests/test_subhourly_ramp.py \
+              tests/test_generic_demand_profile.py \
+              tests/test_ai_backend_safety.py \
+              tests/test_ai_backend_tools.py \
+              tests/test_ai_intents.py \
+              tests/test_ai_prompt_contract.py \
+              tests/test_ai_safety.py \
+              tests/test_ai_tool_schemas.py
       - name: Dependency sanity
         run: |
           python - <<'PY'
@@ -144,10 +151,31 @@ jobs:
       - name: Adequacy + expansion deterministic tests
         # Proves the Stage 1 adequacy screening and expansion candidate workflow.
         run: python tests/test_adequacy_expansion.py
-      - name: Pytest-style suites (BESS sizing + GSE 2026 registry mapping)
-        # tests/test_bess_sizing.py and tests/test_gse_2026_registry_mapping.py are
+      - name: Generic demand profile deterministic tests
+        # Proves the generic demand-profile builder against a synthetic
+        # fleet definition and known-good target GWh.
+        run: python tests/test_generic_demand_profile.py
+      - name: AI assistant backend safety (unittest)
+        # tests/test_ai_backend_safety.py is unittest-style; runs via python
+        # tests/... and exits 1 if any assertion trips.
+        run: python tests/test_ai_backend_safety.py
+      - name: AI assistant backend tools (unittest)
+        # tests/test_ai_backend_tools.py is unittest-style; runs via python
+        # tests/... and exits 1 if any assertion trips.
+        run: python tests/test_ai_backend_tools.py
+      - name: Pytest-style suites (BESS sizing, GSE registry, AI safety / intents / prompt / tool schemas)
+        # tests/test_bess_sizing.py, tests/test_gse_2026_registry_mapping.py,
+        # tests/test_ai_intents.py, tests/test_ai_prompt_contract.py,
+        # tests/test_ai_safety.py, and tests/test_ai_tool_schemas.py are
         # pytest-style; running them directly via python silently no-ops.
-        run: python -m pytest tests/test_bess_sizing.py tests/test_gse_2026_registry_mapping.py
+        run: |
+          python -m pytest \
+              tests/test_bess_sizing.py \
+              tests/test_gse_2026_registry_mapping.py \
+              tests/test_ai_intents.py \
+              tests/test_ai_prompt_contract.py \
+              tests/test_ai_safety.py \
+              tests/test_ai_tool_schemas.py
       - name: Smoke test (synthetic project_data → solver → validate)
         run: |
           python scripts/build_demo_project.py --out project_data
