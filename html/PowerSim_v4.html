@@ -2500,20 +2500,31 @@ function loadGSE2026Demo(){
       conversion_mode: 2
     }), inflow_profile:null, inflow_driven:false
   });
-  // Sections II & III — inflow-driven hydro. `pmax_derated` is already
-  // × 0.65 derated per v10 LOCKED.
-  const hRoR = (id, name, pmax_derated, yr) => ({
-    id, name, type:'hydro_ror', committable:false, _commiss_year:yr||null,
-    pmin:0, pmax:pmax_derated,
-    ramp_up:9999, ramp_down:9999,
-    min_up:0, min_down:0, startup_cost:0, no_load_cost:0, vom:0,
-    initial_status:1, initial_power:Math.round(pmax_derated*0.3*10)/10,
-    for_rate:0.06,
-    hydro:{efficiency:400, spill_cost:0, water_value:10,
-           cascade_upstream:null, travel_delay_h:0, conversion_mode:2,
-           reservoir_init:0, reservoir_min:0, reservoir_max:0, reservoir_end_min:0},
-    availability_profile:null, inflow_driven:true
-  });
+  // Sections II & III — inflow-driven hydro.
+  // NB (bug fix): the call sites still pass the ×0.65 CF-derated value
+  // for legacy reasons, but here we recover the true installed capacity
+  // (÷0.65) and store it as ``pmax`` so the registry / Dashboard KPI
+  // shows the authoritative 4,770 MW total. The LP still dispatches at
+  // installed × cf (v10 LOCKED average 0.65 for GSE RoR) via
+  // ``get_pmax_t`` which honours the ``cf`` fallback field when there is
+  // no availability_profile bound to the asset.
+  const _CF_ROR = 0.65;
+  const hRoR = (id, name, pmax_derated, yr) => {
+    const pmax_installed = Math.round(pmax_derated / _CF_ROR * 100) / 100;
+    return {
+      id, name, type:'hydro_ror', committable:false, _commiss_year:yr||null,
+      pmin:0, pmax:pmax_installed,
+      cf:_CF_ROR,
+      ramp_up:9999, ramp_down:9999,
+      min_up:0, min_down:0, startup_cost:0, no_load_cost:0, vom:0,
+      initial_status:1, initial_power:Math.round(pmax_derated*0.3*10)/10,
+      for_rate:0.06,
+      hydro:{efficiency:400, spill_cost:0, water_value:10,
+             cascade_upstream:null, travel_delay_h:0, conversion_mode:2,
+             reservoir_init:0, reservoir_min:0, reservoir_max:0, reservoir_end_min:0},
+      availability_profile:null, inflow_driven:true
+    };
+  };
   const w = (id, name, pmax, yr) => ({                  // Wind
     id, name, type:'wind', committable:false, _commiss_year:yr||null,
     pmax_installed:pmax, vom:0, curtailment_cost:0,
