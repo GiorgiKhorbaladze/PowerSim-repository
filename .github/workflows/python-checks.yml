@@ -31,7 +31,6 @@ jobs:
               solver/powersim_kpi.py \
               solver/powersim_stochastic.py \
               solver/powersim_expansion.py \
-              solver/bess_sizing.py \
               scripts/build_demo_project.py \
               scripts/run_horizon.py \
               scripts/run_mc_sweep.py \
@@ -41,7 +40,6 @@ jobs:
               tests/smoke_168h.py \
               tests/test_maintenance.py \
               tests/test_bess_plexos_parity.py \
-              tests/test_bess_sizing.py \
               tests/test_hydro_inflow_units.py \
               tests/test_hydro_stage2.py \
               tests/test_thermal_stage3.py \
@@ -163,14 +161,13 @@ jobs:
         # tests/test_ai_backend_tools.py is unittest-style; runs via python
         # tests/... and exits 1 if any assertion trips.
         run: python tests/test_ai_backend_tools.py
-      - name: Pytest-style suites (BESS sizing, GSE registry, AI safety / intents / prompt / tool schemas)
-        # tests/test_bess_sizing.py, tests/test_gse_2026_registry_mapping.py,
-        # tests/test_ai_intents.py, tests/test_ai_prompt_contract.py,
-        # tests/test_ai_safety.py, and tests/test_ai_tool_schemas.py are
-        # pytest-style; running them directly via python silently no-ops.
+      - name: Pytest-style suites (GSE registry, AI safety / intents / prompt / tool schemas)
+        # tests/test_gse_2026_registry_mapping.py, tests/test_ai_intents.py,
+        # tests/test_ai_prompt_contract.py, tests/test_ai_safety.py, and
+        # tests/test_ai_tool_schemas.py are pytest-style; running them directly
+        # via python silently no-ops.
         run: |
           python -m pytest \
-              tests/test_bess_sizing.py \
               tests/test_gse_2026_registry_mapping.py \
               tests/test_ai_intents.py \
               tests/test_ai_prompt_contract.py \
