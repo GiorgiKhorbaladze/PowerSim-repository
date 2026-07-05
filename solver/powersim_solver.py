@@ -1592,6 +1592,14 @@ def solve_window(
             m.add_component(f"ResSup_{rid}", pyo.Constraint(m.T, rule=res_supply))
 
         # Headroom/footroom: p + res_up ≤ pmax·u ; p - res_down ≥ pmin·u
+        # For an eligible unit under a single-direction reserve product,
+        # the opposite direction variable is otherwise unconstrained and
+        # never appears in the objective. Fix it to zero so the solver
+        # can't leave it undefined and the output layer cannot emit
+        # garbage under ``hourly_by_unit[…].reserve_up/down``. Ineligible
+        # units are already zeroed below; this closes the eligible-side
+        # gap for thermal/hydro/wind/solar/import (BESS is already handled
+        # symmetrically in its own block).
         for g in elig:
             if dirn in ("up","symmetric"):
                 def res_head(m, t, _g=g, _rid=rid):
@@ -1599,12 +1607,16 @@ def solve_window(
                     u_t = m.u[_g,t] if _g in committable else 1
                     return m.p[_g,t] + m.res_up[_rid,_g,t] <= pmx * u_t
                 m.add_component(f"ResHead_{rid}_{g}", pyo.Constraint(m.T, rule=res_head))
+            else:
+                for t in T: m.res_up[rid,g,t].fix(0)
             if dirn in ("down","symmetric"):
                 def res_foot(m, t, _g=g, _rid=rid):
                     pmin = float(assets[_g].get("pmin",0))
                     u_t  = m.u[_g,t] if _g in committable else 1
                     return m.p[_g,t] - m.res_down[_rid,_g,t] >= pmin * u_t
                 m.add_component(f"ResFoot_{rid}_{g}", pyo.Constraint(m.T, rule=res_foot))
+            else:
+                for t in T: m.res_down[rid,g,t].fix(0)
 
         for b in elig_bess:
             if dirn not in ("up", "symmetric"):
