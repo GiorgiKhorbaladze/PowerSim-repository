@@ -335,6 +335,16 @@ Ask PowerSim: add 500 MW / 2000 MWh BESS and compare with the baseline..."></tex
         <div class="sh">⚡ სწრაფი ქმედებები</div>
         <div class="bgrp" style="flex-direction:column">
           <button class="btn btn-b" onclick="loadGSE2026Demo()">🏭 GSE 2026 Demo ჩატვირთვა</button>
+          <div style="display:flex;gap:4px;align-items:center">
+            <button class="btn btn-b" style="flex:1" onclick="loadDemandDemo()">📊 Demo მოხმარების მონაცემები ჩატვირთვა</button>
+            <select id="wf-demand-year" style="font-size:9px;width:70px" title="აირჩიე წელი">
+              <option value="2030" selected>2030</option>
+              <option value="2029">2029</option>
+              <option value="2028">2028</option>
+              <option value="2027">2027</option>
+              <option value="2026">2026</option>
+            </select>
+          </div>
           <button class="btn btn-t" onclick="goTab('validate');runValidation()">✅ ვალიდაცია</button>
           <button class="btn btn-p" onclick="exportInputJSON()">⬇ Export Input JSON</button>
           <button class="btn btn-g" onclick="document.getElementById('import-results-inp').click()">📥 Import Results</button>
@@ -3216,6 +3226,37 @@ function computeDemandKPIs(arr){
   }
   const winterPct = sum>0 ? wint/sum*100 : 0;
   return {twh,gwh,avg,peak,peakIdx,min,lf,winterPct};
+}
+
+// Public-facing "load demo demand" — the button on the Workflow tab.
+// Seeds the 5 GSE-P50 scenarios (from window.GSE_LOAD_2026_2030 loaded
+// via the sibling script) and activates the year picked in the drop-down
+// next to the button (defaults to 2030). Triggers a full Dashboard +
+// Demand tab re-render so KPIs and charts appear immediately.
+function loadDemandDemo(){
+  if(typeof window==='undefined' || !window.GSE_LOAD_2026_2030){
+    if(typeof showBanner==='function'){
+      showBanner('❌ gse_load_2026_2030.js ვერ ჩაიტვ. — HTML-ის გვერდით უნდა იყოს ფაილი','r',8000);
+    }
+    return;
+  }
+  _ensureDemandStateInit();
+  const sel = document.getElementById('wf-demand-year');
+  const year = (sel && sel.value) || '2030';
+  const key = 'GSE_P50_'+year;
+  if(!STATE.demandScenarios[key]){
+    if(typeof showBanner==='function') showBanner('❌ '+key+' არ არის snapshot-ში','r');
+    return;
+  }
+  setActiveDemand(key);   // sets STATE.profiles.demand + persists + re-renders demand tab
+  if(typeof updateDashKpis==='function') updateDashKpis();
+  if(typeof renderWorkflowSteps==='function') renderWorkflowSteps();
+  const arr = STATE.demandScenarios[key];
+  const twh = (arr.reduce((s,v)=>s+v,0)/1e6).toFixed(2);
+  const peak = Math.max(...arr).toFixed(0);
+  if(typeof showBanner==='function'){
+    showBanner('✅ Demo მოხმარება ჩაიტვ.: '+key+' ('+twh+' TWh, peak '+peak+' MW)','g',6000);
+  }
 }
 
 function setActiveDemand(key){
