@@ -1292,7 +1292,12 @@ def solve_window(
                                               assets[h]["hydro"].get("reservoir_min",0)))
         m.StorLB  = pyo.Constraint(m.GR, m.T, rule=stor_lb)
         m.StorUB  = pyo.Constraint(m.GR, m.T, rule=stor_ub)
-        m.StorEnd = pyo.Constraint(m.GR, rule=stor_end)
+        # End-of-horizon storage floor is a study-wide constraint and
+        # must only bind on the LAST rolling window (or a single full
+        # solve). Rolling driver flags this via solver_cfg; default True
+        # keeps the non-rolling and single-window paths unchanged.
+        if bool(solver_cfg.get("_is_last_window", True)):
+            m.StorEnd = pyo.Constraint(m.GR, rule=stor_end)
 
         # ── Stage 2: strategic end-of-horizon soft penalty ──────────
         # Purpose: discourage myopic depletion over the horizon when the
@@ -1315,7 +1320,11 @@ def solve_window(
                 ha     = assets[h]["hydro"]
                 target = float(ha["target_end_level_frac"]) * float(ha.get("reservoir_max", 0))
                 return m.end_short[h] >= target - m.stor[h, T[-1]]
-            m.EndShort = pyo.Constraint(m.GR_strat, rule=end_short_c)
+            # Same reasoning as StorEnd: only bind on the last window.
+            # Intermediate windows keep m.end_short at zero (via the
+            # objective + NonNegative domain) so no shortfall is charged.
+            if bool(solver_cfg.get("_is_last_window", True)):
+                m.EndShort = pyo.Constraint(m.GR_strat, rule=end_short_c)
 
     # ── BESS Constraints ───────────────────────────────────────────────
     # v1.5 PLEXOS-parity additions (all optional, gated by field presence):
@@ -1422,7 +1431,11 @@ def solve_window(
                 a = assets[b]
                 tgt_mwh = float(a["soc_end_target"]) * float(a["energy_mwh"])
                 return m.bess_end_short[b] >= tgt_mwh - m.soc[b, T[-1]]
-            m.BessEndShort = pyo.Constraint(m.BessEndTgt, rule=_bess_end_short)
+            # Same reasoning as StorEnd / EndShort: bind only on the
+            # last window. m.bess_end_short stays at zero (NonNeg) in
+            # intermediate windows, so no shortfall is charged.
+            if bool(solver_cfg.get("_is_last_window", True)):
+                m.BessEndShort = pyo.Constraint(m.BessEndTgt, rule=_bess_end_short)
 
         # v1.4: BESS depth-multiplier — split discharge into a 'deep'
         # component that's only non-zero when SOC is below the deep
@@ -2153,13 +2166,26 @@ def solve_all(inp: dict, assets: dict, profiles: dict, gas_limits: dict) -> tupl
         start_p = w * step_p
         end_p   = min(start_p + window_p, H_total_p)
         if start_p >= H_total_p: break
+        # End-of-horizon storage / SOC targets must only bind on the
+        # LAST window; otherwise every intermediate window drives the
+        # reservoir/SOC to the end target, which is not the intent.
+        is_last_window = (end_p >= H_total_p)
 
         demand_w   = demand[start_p:end_p]
         profiles_w = {k: v[start_p:end_p] if isinstance(v, list) else v
                       for k, v in profiles.items()}
-        start_h    = start_p // periods_per_h
+        # window_start_h is the window's offset WITHIN the study; the
+        # study itself may start mid-year via sh["start_hour"] (captured
+        # above as the outer start_h). Both must combine into offset_h
+        # so profile shapes, month lookups, and hour-of-year outputs
+        # align with the calendar. Bug: prior code shadowed start_h
+        # here and lost the outer offset entirely.
+        window_start_h = start_p // periods_per_h
+        window_offset_h = start_h + window_start_h
 
         # Inject remaining budgets into per-window gas_limits / state.
+        solver_cfg_win = dict(solver_cfg)
+        solver_cfg_win["_is_last_window"] = is_last_window
         gas_limits_window = dict(gas_limits)
         if annual_cap_full:
             gas_limits_window["_remaining_annual_mm3"] = remaining_annual
@@ -2172,7 +2198,7 @@ def solve_all(inp: dict, assets: dict, profiles: dict, gas_limits: dict) -> tupl
         commit_n_p = min(step_p, end_p - start_p)
         hourly_w, state, swall, obj_w = solve_window(
             assets, demand_w, profiles_w, reserve_prods, gas_limits_window,
-            init_state=state, solver_cfg=solver_cfg, offset_h=start_h,
+            init_state=state, solver_cfg=solver_cfg_win, offset_h=window_offset_h,
             dt=dt_h, warm_start=prev_hint if warm_start_enabled else None,
             commit_periods=commit_n_p)
         if state.get("_iis_report"):
@@ -2194,7 +2220,7 @@ def solve_all(inp: dict, assets: dict, profiles: dict, gas_limits: dict) -> tupl
                 if annual_cap_full:
                     remaining_annual = max(0.0, remaining_annual - gas_used)
                 if remaining_monthly:
-                    gh = (start_h + int(j * dt_h)) % HOURS_PER_YEAR
+                    gh = (window_offset_h + int(j * dt_h)) % HOURS_PER_YEAR
                     mo = _hour_to_month_local(gh)
                     if mo in remaining_monthly:
                         remaining_monthly[mo] = max(0.0, remaining_monthly[mo] - gas_used)
@@ -2344,6 +2370,14 @@ def build_result_store(hourly: list, assets: dict, inp: dict, solve_time: float,
         elif atype == "pumped_hydro":
             energy = sum((h.get("pumped_hydro", {}) or {}).get(gid, {}).get("net_mw", 0)
                          for h in hourly) * dt_h
+        elif atype == "bess":
+            # BESS is not in `dispatch` — its per-period MW flows live in
+            # the `bess` map. Net delivered energy = (discharge − charge) × dt.
+            energy = sum(
+                float((h.get("bess", {}) or {}).get(gid, {}).get("discharge_mw", 0) or 0)
+                - float((h.get("bess", {}) or {}).get(gid, {}).get("charge_mw", 0) or 0)
+                for h in hourly
+            ) * dt_h
         else:
             energy = sum(h["dispatch"].get(gid, 0) for h in hourly) * dt_h
         oper_p    = sum(1 for h in hourly if h["commitment"].get(gid,0) > 0.5 or
@@ -2588,10 +2622,51 @@ def build_result_store(hourly: list, assets: dict, inp: dict, solve_time: float,
             spill_cost = float(ha.get("spill_cost_usd_per_mm3", ha.get("spill_cost", 0)) or 0)
             hydro_spill_penalty += spill_cost * sum(float((h.get("hydro", {}) or {}).get(gid, {}).get("spill_mm3h", 0) or 0) * dt_h for h in hourly)
     pen_unserved = unserv_pen * total_unserv
-    pen_reserve  = sum(res_pen_by.get(rid, 0) * res_shortfall.get(rid, 0) for rid in res_ids)
+    # LP objective charges `res_penalty × m.res_sh × dt` per period, so
+    # the reconstructed penalty must also multiply the summed MW shortfall
+    # by dt_h to yield MWh at sub-hourly resolutions.
+    pen_reserve  = sum(res_pen_by.get(rid, 0) * res_shortfall.get(rid, 0) * dt_h
+                       for rid in res_ids)
+    # LP objective includes a CO₂ term `co2_factor × p × dt × co2_price`
+    # for every thermal unit; per-unit outputs already carry
+    # `co2_cost_usd`, so summing them closes that term into the objective.
+    co2_cost_total = sum(float(bu.get("co2_cost_usd", 0) or 0)
+                         for bu in by_unit.values())
+    # LP objective includes a storage-target shortfall penalty for hydro
+    # plants with a monthly `storage_targets.month_end` schedule. Sum
+    # actual shortfall at each target month-end against its target.
+    _MONTH_END_HOURS_LOCAL = (744, 1416, 2160, 2880, 3624, 4344,
+                              5088, 5832, 6552, 7296, 8016, 8760)
+    stor_target_pen = 0.0
+    if hourly:
+        # index rows by their (rounded) hour_of_year for O(1) month-end lookup
+        row_by_hoy = {}
+        for row in hourly:
+            key = int(round(float(row.get("hour_of_year", 0))))
+            row_by_hoy.setdefault(key, row)
+        for gid, a in assets.items():
+            if a.get("type") != "hydro_reg":
+                continue
+            st = ((a.get("hydro") or {}).get("storage_targets") or {})
+            targets = st.get("month_end") or []
+            penalty = float(st.get("penalty_usd_per_mm3", 50) or 0)
+            if penalty <= 0 or len(targets) != 12:
+                continue
+            for m_idx, tgt in enumerate(targets):
+                if tgt is None:
+                    continue
+                key = _MONTH_END_HOURS_LOCAL[m_idx]
+                row = row_by_hoy.get(key)
+                if row is None:
+                    continue
+                stor_now = float((row.get("hydro") or {}).get(gid, {}).get("storage_mm3", 0) or 0)
+                short = max(0.0, float(tgt) - stor_now)
+                if short > 0:
+                    stor_target_pen += penalty * short
     reconstructed = (fuel_cost + startup_cost + no_load_cost + vom_cost + bess_degradation_cost
         + bess_end_soc_penalty + dr_cost + pumped_hydro_cost + pen_unserved + pen_reserve
-        + hydro_end_level_penalty + hydro_spill_penalty)
+        + hydro_end_level_penalty + hydro_spill_penalty
+        + co2_cost_total + stor_target_pen)
 
     if obj_total is None or obj_total != obj_total:      # NaN / not supplied
         closure_gap  = None
@@ -2614,6 +2689,8 @@ def build_result_store(hourly: list, assets: dict, inp: dict, solve_time: float,
         "reserve_shortfall_penalty": round(pen_reserve, 6),
         "hydro_end_level_penalty": round(hydro_end_level_penalty, 6),
         "hydro_spill_penalty": round(hydro_spill_penalty, 6),
+        "co2_cost": round(co2_cost_total, 6),
+        "storage_target_penalty": round(stor_target_pen, 6),
         "total_reconstructed": round(reconstructed, 6),
         "pyomo_objective": None if obj_total is None or obj_total != obj_total else round(obj_total, 6),
         "closure_gap_pct": None if closure_gap is None else round(closure_gap * 100, 6),

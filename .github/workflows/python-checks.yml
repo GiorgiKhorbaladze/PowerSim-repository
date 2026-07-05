@@ -57,6 +57,7 @@ jobs:
               tests/test_objective_closure.py \
               tests/test_reserve_storage_provision.py \
               tests/test_reserve_direction_isolation.py \
+              tests/test_solver_audit_bugs.py \
               tests/test_rolling_boundary_ramp.py \
               tests/test_stochastic_summary.py \
               tests/test_gse_2026_registry_mapping.py \
@@ -139,6 +140,11 @@ jobs:
         # Proves single-direction reserve products don't leak into the
         # opposite direction's unbounded variable for eligible units.
         run: python tests/test_reserve_direction_isolation.py
+      - name: Solver audit-bug batch deterministic test
+        # Proves the five-bug fix batch (start_h shadow, end-of-window
+        # constraints, closure CO₂ + storage-target terms, reserve × dt,
+        # BESS energy_mwh) — see tests/test_solver_audit_bugs.py.
+        run: python tests/test_solver_audit_bugs.py
       - name: Reserve storage provision deterministic tests
         # Proves BESS and pumped-hydro can provide spinning / non-spinning reserve.
         run: python tests/test_reserve_storage_provision.py
