@@ -392,6 +392,21 @@ Ask PowerSim: add 500 MW / 2000 MWh BESS and compare with the baseline..."></tex
           <div class="kpi"><div class="kpi-label">სულ Pmax</div><div class="kpi-val" id="kpi-pmax">—</div><span class="kpi-unit">MW</span></div>
           <div class="kpi teal"><div class="kpi-label">პროფილი</div><div class="kpi-val" id="kpi-profiles">—</div></div>
           <div class="kpi green"><div class="kpi-label">სცენარი</div><div class="kpi-val" id="kpi-scenario">—</div></div>
+          <div class="kpi teal"><div class="kpi-label">Demand წელი</div><div class="kpi-val" id="kpi-demand-year">—</div></div>
+          <div class="kpi teal"><div class="kpi-label">Annual TWh</div><div class="kpi-val" id="kpi-demand-twh">—</div></div>
+          <div class="kpi teal"><div class="kpi-label">Peak MW</div><div class="kpi-val" id="kpi-demand-peak">—</div></div>
+          <div class="kpi teal"><div class="kpi-label">Load factor</div><div class="kpi-val" id="kpi-demand-lf">—</div></div>
+        </div>
+      </div>
+      <div class="card" id="wf-demand-preview">
+        <div class="sh">📉 Demand preview — <span id="wf-demand-preview-name">—</span></div>
+        <div style="font-size:8px;color:var(--t3);margin-bottom:4px">
+          Monthly TWh (მარცხნივ) + სრული 8760h duration curve (მარჯვნივ).
+          Demand ტაბზე ცვლი წელს ან უზრდი growth-ს.
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <div id="wf-demand-monthly" style="min-height:150px"></div>
+          <div id="wf-demand-duration" style="min-height:150px"></div>
         </div>
       </div>
     </div>
@@ -5979,6 +5994,38 @@ function updateDashKpis(){
   if(el('kpi-profiles')) el('kpi-profiles').textContent=Object.keys(STATE.profiles).length;
   const sscen=document.getElementById('hor-scenario');
   if(el('kpi-scenario')) el('kpi-scenario').textContent=(sscen&&sscen.value)||'A_mean';
+  // Demand KPIs (also seeds Dashboard preview so the user sees the
+  // active demand without opening the Demand tab).
+  try{
+    const dArr = STATE.profiles && STATE.profiles.demand;
+    if(Array.isArray(dArr) && dArr.length===8760 && typeof computeDemandKPIs==='function'){
+      const k = computeDemandKPIs(dArr);
+      const activeName = STATE.activeDemandKey || 'demand';
+      const yearMatch = activeName.match(/(20\d{2})/);
+      if(el('kpi-demand-year'))  el('kpi-demand-year').textContent  = yearMatch ? yearMatch[1] : '—';
+      if(el('kpi-demand-twh'))   el('kpi-demand-twh').textContent   = k.twh.toFixed(2);
+      if(el('kpi-demand-peak'))  el('kpi-demand-peak').textContent  = k.peak.toFixed(0);
+      if(el('kpi-demand-lf'))    el('kpi-demand-lf').textContent    = (k.lf*100).toFixed(1)+' %';
+      if(el('wf-demand-preview-name')) el('wf-demand-preview-name').textContent = activeName;
+      // Monthly + duration mini-charts on the Workflow / Dashboard tab.
+      if(typeof _svgLineChart==='function' && typeof _svgBarChart==='function'){
+        const mo=[744,672,744,720,744,720,744,744,720,744,720,744];
+        const labels=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+        const vals=[]; let acc=0;
+        for(let m=0;m<12;m++){ let s=0; for(let i=acc;i<acc+mo[m];i++) s+=dArr[i]; vals.push(s/1e6); acc+=mo[m]; }
+        _svgBarChart('wf-demand-monthly', vals, labels, {title:'TWh / month'});
+        const sorted=dArr.slice().sort((a,b)=>b-a);
+        const step=Math.max(1, Math.floor(sorted.length/500));
+        const sample=[]; for(let i=0;i<sorted.length;i+=step) sample.push(sorted[i]);
+        _svgLineChart('wf-demand-duration', sample, {title:'Duration — MW sorted'});
+      }
+    } else {
+      if(el('kpi-demand-year'))  el('kpi-demand-year').textContent  = '—';
+      if(el('kpi-demand-twh'))   el('kpi-demand-twh').textContent   = '—';
+      if(el('kpi-demand-peak'))  el('kpi-demand-peak').textContent  = '—';
+      if(el('kpi-demand-lf'))    el('kpi-demand-lf').textContent    = '—';
+    }
+  }catch(_){}
   const status=document.getElementById('sys-status');
   if(status){
     const lines=[
