@@ -6170,6 +6170,20 @@ function evaluateKpiTemplatesOnResults(){
 // ══════════════════════════════════════════════════════════════════
 function init(){
   initLanguage();
+  // Auto-seed the GSE 2026-2030 P50 demand snapshot into STATE.demandScenarios
+  // and set 2030 as the active demand so the solver picks it up without any
+  // click. If STATE.profiles.demand is already set (import / hand-loaded),
+  // leave it — the seed only fills empty slots.
+  try{
+    if(typeof _ensureDemandStateInit === 'function'){
+      _ensureDemandStateInit();
+      if(!STATE.profiles['demand'] || !STATE.profiles['demand'].length){
+        if(STATE.activeDemandKey && STATE.demandScenarios[STATE.activeDemandKey]){
+          STATE.profiles['demand'] = STATE.demandScenarios[STATE.activeDemandKey].slice();
+        }
+      }
+    }
+  }catch(_){}
   renderWorkflowSteps();
   updateDashKpis();
   updateHorizonPreview();
