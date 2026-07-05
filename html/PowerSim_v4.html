@@ -8,6 +8,7 @@
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="gse_load_2026_2030.js"></script>
 <link rel="stylesheet" href="powersim_ai_chat.css">
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Georgian:wght@300;400;500;600;700;900&family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
 <script>
@@ -259,6 +260,7 @@ tr:hover td{background:var(--row-hover)}
   <div class="tabs" id="tabs-bar">
     <button class="tab on"  data-tab="workflow">🏠 Workflow</button>
     <button class="tab"     data-tab="assets">🏭 Assets</button>
+    <button class="tab"     data-tab="demand">📊 Demand</button>
     <button class="tab"     data-tab="profiles">📉 Profiles</button>
     <button class="tab"     data-tab="reserves">🛡 Reserves</button>
     <button class="tab"     data-tab="gas">⛽ Gas</button>
@@ -517,6 +519,92 @@ Ask PowerSim: add 500 MW / 2000 MWh BESS and compare with the baseline..."></tex
             <th>Factor</th><th>Cap MW</th><th>Note</th><th>✕</th>
           </tr></thead><tbody id="maint-tbody"></tbody></table>
         </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════════ -->
+<!-- TAB: DEMAND (dedicated menu, GSE 2026-2030 P50 + custom scenarios) -->
+<!-- ════════════════════════════════════════════════════════════════ -->
+<div class="pane" id="pane-demand">
+  <div class="layout-lr">
+    <div class="lpanel">
+      <div class="card">
+        <div class="sh">🇬🇪 GSE 2026–2030 P50</div>
+        <div style="font-size:8px;color:var(--t3);margin-bottom:5px">
+          წელი დააჭირე → აქტიური მოხმარება ხდება ის წელი.
+          სცენარები localStorage-ში ინახება + JSON export/import.
+        </div>
+        <div id="demand-years" class="bgrp" style="flex-wrap:wrap"></div>
+        <div style="margin-top:8px">
+          <label style="font-size:8px;color:var(--t3)">აქტიური სცენარი</label>
+          <select id="demand-active-select" onchange="setActiveDemand(this.value)" style="font-size:8px;width:100%"></select>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="sh">📈 Growth / Scale</div>
+        <div class="field">
+          <label>წლიური ზრდის %/y (post-target-year)</label>
+          <input type="number" id="demand-growth-pct" step="0.1" value="3.7" style="font-size:8px">
+        </div>
+        <div class="field">
+          <label>Target წელი</label>
+          <input type="number" id="demand-target-year" min="2026" max="2050" value="2033" style="font-size:8px">
+        </div>
+        <button class="btn btn-p btn-s" onclick="applyGrowthTargetYear()" title="აქტიური სცენარი × (1+growth)^Δ">📈 გაზარდე target-ზე</button>
+        <div style="margin-top:8px">
+          <label style="font-size:8px;color:var(--t3)">ან პირდაპირი scale factor</label>
+          <input type="number" id="demand-scale" step="0.01" value="1.0" style="font-size:8px;width:100%">
+          <button class="btn btn-b btn-s" onclick="applyScale()" style="margin-top:4px">🔧 გამრავლე</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="sh">🔀 Blend</div>
+        <div class="field"><label>A სცენარი</label><select id="demand-blend-a" style="font-size:8px"></select></div>
+        <div class="field"><label>B სცენარი</label><select id="demand-blend-b" style="font-size:8px"></select></div>
+        <div class="field"><label>წილი A (0-1)</label><input type="number" id="demand-blend-w" step="0.1" min="0" max="1" value="0.5" style="font-size:8px"></div>
+        <button class="btn btn-p btn-s" onclick="blendScenarios()">🎛 შერევა → ახალი სცენარი</button>
+      </div>
+
+      <div class="card">
+        <div class="sh">📂 Import / Export</div>
+        <label class="btn btn-b btn-s" style="cursor:pointer;display:block;text-align:center">
+          📂 Excel-ის ატვირთვა (GSE format)
+          <input type="file" accept=".xlsx,.xls" multiple style="display:none" onchange="uploadGSELoad(this)">
+        </label>
+        <div style="margin-top:4px">
+          <button class="btn btn-t btn-s" onclick="exportActiveDemandCSV()">📤 Export CSV (active)</button>
+          <button class="btn btn-t btn-s" onclick="exportScenariosJSON()">💾 Export scenarios JSON</button>
+        </div>
+        <label class="btn btn-o btn-s" style="cursor:pointer;display:block;text-align:center;margin-top:4px">
+          📥 Import scenarios JSON
+          <input type="file" accept=".json" style="display:none" onchange="importScenariosJSON(this)">
+        </label>
+      </div>
+    </div>
+
+    <div class="rpanel">
+      <div class="card">
+        <div class="sh">📊 Active demand KPIs</div>
+        <div id="demand-kpis" class="frow" style="flex-wrap:wrap;gap:8px;font-size:9px"></div>
+      </div>
+
+      <div class="card">
+        <div class="sh">📉 Duration curve (sorted 8760h)</div>
+        <div id="demand-duration-chart" style="min-height:180px"></div>
+      </div>
+
+      <div class="card">
+        <div class="sh">📅 Monthly energy (TWh)</div>
+        <div id="demand-monthly-chart" style="min-height:180px"></div>
+      </div>
+
+      <div class="card">
+        <div class="sh">🔍 Peak week (168h around annual max)</div>
+        <div id="demand-peakweek-chart" style="min-height:180px"></div>
       </div>
     </div>
   </div>
@@ -1664,6 +1752,7 @@ function goTab(id){
   const tab=document.querySelector(`.tab[data-tab="${id}"]`);
   if(tab) tab.classList.add('on');
   if(id==='profiles') renderProfileList();
+  if(id==='demand') renderDemandTab();
   if(id==='gas') updateGasUI();
   if(id==='horizon') updateHorizonPreview();
   if(id==='results' && STATE.results) renderResults();
@@ -3034,6 +3123,305 @@ function generateDemoProfiles(){
   renderProfileList();
   renderWorkflowSteps();
   showBanner('✅ Demo 8760h profiles: demand, wind, solar, hydro','g');
+}
+
+// ══════════════════════════════════════════════════════════════════
+// DEMAND TAB  —  dedicated menu, GSE 2026-2030 + custom scenarios
+//   Scenarios live under STATE.demandScenarios[key] = number[8760].
+//   Active key: STATE.activeDemandKey. Solver-side, the "active" is
+//   copied into STATE.profiles.demand so buildInputPayload() is unchanged.
+//   Persistence: localStorage per session + full JSON export/import.
+// ══════════════════════════════════════════════════════════════════
+const _DEMAND_LS_KEY = 'powersim_demand_scenarios_v1';
+const _DEMAND_ACTIVE_LS_KEY = 'powersim_demand_active_v1';
+
+function _ensureDemandStateInit(){
+  if(!STATE.demandScenarios) STATE.demandScenarios = {};
+  if(STATE.activeDemandKey === undefined) STATE.activeDemandKey = null;
+  // Seed with GSE 2026-2030 P50 (from sibling gse_load_2026_2030.js).
+  const gse = (typeof window!=='undefined') ? window.GSE_LOAD_2026_2030 : null;
+  if(gse && gse.load_mw_by_year){
+    for(const y of Object.keys(gse.load_mw_by_year)){
+      const k = 'GSE_P50_'+y;
+      if(!STATE.demandScenarios[k]){
+        STATE.demandScenarios[k] = gse.load_mw_by_year[y].slice();
+      }
+    }
+  }
+  // Try to hydrate custom scenarios from localStorage.
+  try{
+    const raw = localStorage.getItem(_DEMAND_LS_KEY);
+    if(raw){
+      const stored = JSON.parse(raw);
+      for(const [k,v] of Object.entries(stored||{})){
+        if(Array.isArray(v) && v.length===8760 && !STATE.demandScenarios[k]){
+          STATE.demandScenarios[k] = v;
+        }
+      }
+    }
+    const lastActive = localStorage.getItem(_DEMAND_ACTIVE_LS_KEY);
+    if(lastActive && STATE.demandScenarios[lastActive]){
+      STATE.activeDemandKey = lastActive;
+      STATE.profiles['demand'] = STATE.demandScenarios[lastActive].slice();
+    }
+  }catch(_){}
+  if(!STATE.activeDemandKey && STATE.demandScenarios['GSE_P50_2030']){
+    STATE.activeDemandKey = 'GSE_P50_2030';
+    STATE.profiles['demand'] = STATE.demandScenarios['GSE_P50_2030'].slice();
+  }
+}
+
+function _persistCustomDemandScenarios(){
+  try{
+    const custom = {};
+    for(const [k,v] of Object.entries(STATE.demandScenarios||{})){
+      if(!/^GSE_P50_/.test(k)) custom[k] = v;
+    }
+    localStorage.setItem(_DEMAND_LS_KEY, JSON.stringify(custom));
+    if(STATE.activeDemandKey) localStorage.setItem(_DEMAND_ACTIVE_LS_KEY, STATE.activeDemandKey);
+  }catch(_){}
+}
+
+function computeDemandKPIs(arr){
+  if(!Array.isArray(arr) || arr.length!==8760) return null;
+  let sum=0, peak=-Infinity, min=Infinity, peakIdx=0;
+  for(let i=0;i<8760;i++){
+    const v=+arr[i]||0; sum+=v;
+    if(v>peak){peak=v; peakIdx=i;}
+    if(v<min) min=v;
+  }
+  const twh = sum/1e6, gwh = sum/1000, avg = sum/8760;
+  const lf  = peak>0 ? (avg/peak) : 0;
+  // Winter share = Jan+Feb+Nov+Dec MW-hours / total
+  const mo=[744,672,744,720,744,720,744,744,720,744,720,744]; let acc=0, wint=0;
+  for(let m=0;m<12;m++){
+    const start=acc, end=acc+mo[m];
+    for(let i=start;i<end;i++) if([0,1,10,11].includes(m)) wint += arr[i];
+    acc=end;
+  }
+  const winterPct = sum>0 ? wint/sum*100 : 0;
+  return {twh,gwh,avg,peak,peakIdx,min,lf,winterPct};
+}
+
+function setActiveDemand(key){
+  if(!key || !STATE.demandScenarios[key]) return;
+  STATE.activeDemandKey = key;
+  STATE.profiles['demand'] = STATE.demandScenarios[key].slice();
+  _persistCustomDemandScenarios();
+  renderDemandTab();
+  if(typeof updateDashKpis==='function') updateDashKpis();
+  if(typeof showBanner==='function') showBanner('✅ Active demand: '+key,'g',3000);
+}
+
+function _formatHourIso(idx){
+  const base = new Date(2026,0,1,0,0);
+  const d = new Date(base.getTime()+idx*3600000);
+  return d.toISOString().slice(0,13).replace('T',' ')+':00';
+}
+
+function renderDemandTab(){
+  _ensureDemandStateInit();
+  // Year buttons
+  const yrsHost = document.getElementById('demand-years'); if(yrsHost){
+    yrsHost.innerHTML = '';
+    for(const y of [2026,2027,2028,2029,2030]){
+      const k = 'GSE_P50_'+y;
+      const btn = document.createElement('button');
+      btn.className = 'btn btn-s ' + (STATE.activeDemandKey===k ? 'btn-p' : 'btn-b');
+      btn.textContent = y;
+      btn.onclick = ()=>setActiveDemand(k);
+      yrsHost.appendChild(btn);
+    }
+  }
+  // Active + blend selects
+  const keys = Object.keys(STATE.demandScenarios).sort();
+  const opts = keys.map(k=>`<option value="${k}" ${k===STATE.activeDemandKey?'selected':''}>${k} (${(STATE.demandScenarios[k].reduce((s,v)=>s+v,0)/1e6).toFixed(2)} TWh)</option>`).join('');
+  const activeSel = document.getElementById('demand-active-select'); if(activeSel) activeSel.innerHTML = opts;
+  const a = document.getElementById('demand-blend-a'); if(a) a.innerHTML = opts;
+  const b = document.getElementById('demand-blend-b'); if(b) b.innerHTML = opts;
+  // KPIs
+  const arr = STATE.demandScenarios[STATE.activeDemandKey];
+  const k = computeDemandKPIs(arr);
+  const kpiHost = document.getElementById('demand-kpis');
+  if(kpiHost){
+    if(!k){ kpiHost.innerHTML = '<div style="color:var(--t3)">არაფერი აქტიური არ არის</div>'; }
+    else {
+      kpiHost.innerHTML = [
+        ['Annual', k.twh.toFixed(2)+' TWh'],
+        ['Peak',   k.peak.toFixed(0)+' MW'],
+        ['Peak @', _formatHourIso(k.peakIdx)],
+        ['Min',    k.min.toFixed(0)+' MW'],
+        ['Avg',    k.avg.toFixed(0)+' MW'],
+        ['Load factor', (k.lf*100).toFixed(1)+' %'],
+        ['Winter share', k.winterPct.toFixed(1)+' %'],
+        ['Scenario', STATE.activeDemandKey||'—'],
+      ].map(([l,v])=>`<div class="kpi teal" style="min-width:80px"><div class="kpi-label">${l}</div><div class="kpi-val">${v}</div></div>`).join('');
+    }
+  }
+  _drawDemandCharts(arr);
+}
+
+function _svgLineChart(hostId, data, opts){
+  const host = document.getElementById(hostId); if(!host) return;
+  if(!Array.isArray(data) || !data.length){ host.innerHTML = '<div style="color:var(--t3);font-size:9px">no data</div>'; return; }
+  const W=560,H=160,PAD=28;
+  const mx = Math.max(...data), mn = Math.min(...data,0);
+  const xs = i => PAD + i/(data.length-1)*(W-2*PAD);
+  const ys = v => H-PAD - (v-mn)/(mx-mn||1)*(H-2*PAD);
+  const path = data.map((v,i)=> (i?'L':'M')+xs(i).toFixed(1)+','+ys(v).toFixed(1)).join(' ');
+  const title = (opts && opts.title) || '';
+  const ymid = (mx+mn)/2;
+  host.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="100%" height="180"
+    style="font-family:sans-serif;font-size:9px;color:var(--t2)">
+    <text x="${PAD}" y="12" fill="currentColor">${title}</text>
+    <line x1="${PAD}" y1="${H-PAD}" x2="${W-PAD}" y2="${H-PAD}" stroke="var(--border)"/>
+    <line x1="${PAD}" y1="${PAD}" x2="${PAD}" y2="${H-PAD}" stroke="var(--border)"/>
+    <text x="4" y="${PAD+4}" fill="currentColor">${mx.toFixed(0)}</text>
+    <text x="4" y="${H-PAD}" fill="currentColor">${mn.toFixed(0)}</text>
+    <text x="4" y="${ys(ymid).toFixed(1)}" fill="currentColor">${ymid.toFixed(0)}</text>
+    <path d="${path}" fill="none" stroke="var(--teal)" stroke-width="1.4"/>
+  </svg>`;
+}
+
+function _svgBarChart(hostId, values, labels, opts){
+  const host = document.getElementById(hostId); if(!host) return;
+  const n = values.length;
+  const W=560,H=160,PAD=28;
+  const mx = Math.max(...values,1);
+  const bw = (W-2*PAD)/n * 0.86;
+  const bars = values.map((v,i)=>{
+    const x = PAD + i/n*(W-2*PAD) + ((W-2*PAD)/n - bw)/2;
+    const h = v/mx*(H-2*PAD);
+    return `<rect x="${x.toFixed(1)}" y="${(H-PAD-h).toFixed(1)}" width="${bw.toFixed(1)}" height="${h.toFixed(1)}" fill="var(--gold)" opacity="0.85"><title>${labels[i]}: ${v.toFixed(2)}</title></rect><text x="${(x+bw/2).toFixed(1)}" y="${H-PAD+10}" fill="currentColor" text-anchor="middle" font-size="8">${labels[i]}</text>`;
+  }).join('');
+  const title = (opts && opts.title) || '';
+  host.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="100%" height="180"
+    style="font-family:sans-serif;font-size:9px;color:var(--t2)">
+    <text x="${PAD}" y="12" fill="currentColor">${title}</text>
+    <line x1="${PAD}" y1="${H-PAD}" x2="${W-PAD}" y2="${H-PAD}" stroke="var(--border)"/>
+    <text x="4" y="${PAD+4}" fill="currentColor">${mx.toFixed(1)}</text>
+    ${bars}
+  </svg>`;
+}
+
+function _drawDemandCharts(arr){
+  if(!Array.isArray(arr) || arr.length!==8760){
+    ['demand-duration-chart','demand-monthly-chart','demand-peakweek-chart'].forEach(id=>{
+      const h=document.getElementById(id); if(h) h.innerHTML='<div style="color:var(--t3);font-size:9px">no data</div>';
+    });
+    return;
+  }
+  // Duration curve (sorted desc)
+  const sorted = arr.slice().sort((a,b)=>b-a);
+  // sub-sample to 500 pts for the svg
+  const step = Math.floor(sorted.length/500);
+  const durSample = []; for(let i=0;i<sorted.length;i+=step) durSample.push(sorted[i]);
+  _svgLineChart('demand-duration-chart', durSample, {title:'MW — sorted 8760h'});
+  // Monthly TWh
+  const mo=[744,672,744,720,744,720,744,744,720,744,720,744];
+  const labels=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const vals=[]; let acc=0;
+  for(let m=0;m<12;m++){ let s=0; for(let i=acc;i<acc+mo[m];i++) s+=arr[i]; vals.push(s/1e6); acc+=mo[m]; }
+  _svgBarChart('demand-monthly-chart', vals, labels, {title:'TWh per month'});
+  // Peak week (168h around annual peak)
+  let peakIdx = 0, peakV = -Infinity;
+  for(let i=0;i<arr.length;i++) if(arr[i]>peakV){peakV=arr[i]; peakIdx=i;}
+  const start = Math.max(0, peakIdx-84), end = Math.min(arr.length, start+168);
+  _svgLineChart('demand-peakweek-chart', arr.slice(start, end), {title:'MW — ±84h around peak (hour '+peakIdx+')'});
+}
+
+function applyGrowthTargetYear(){
+  const key = STATE.activeDemandKey; if(!key || !STATE.demandScenarios[key]){ showBanner('❌ არ არის აქტიური სცენარი','r'); return; }
+  const growth = +(document.getElementById('demand-growth-pct')||{}).value / 100;
+  const target = +(document.getElementById('demand-target-year')||{}).value;
+  const baseYearMatch = key.match(/(20\d{2})/);
+  const baseYear = baseYearMatch ? +baseYearMatch[1] : 2030;
+  const delta = target - baseYear;
+  if(delta === 0){ showBanner('ℹ️ target == base year — nothing to scale','o'); return; }
+  const factor = Math.pow(1+growth, delta);
+  const arr = STATE.demandScenarios[key].map(v=>v*factor);
+  const newKey = 'grown_'+key+'_to_'+target;
+  STATE.demandScenarios[newKey] = arr;
+  _persistCustomDemandScenarios();
+  setActiveDemand(newKey);
+  showBanner('✅ '+newKey+' × '+factor.toFixed(4),'g',5000);
+}
+
+function applyScale(){
+  const key = STATE.activeDemandKey; if(!key || !STATE.demandScenarios[key]){ showBanner('❌ არ არის აქტიური სცენარი','r'); return; }
+  const s = +(document.getElementById('demand-scale')||{}).value || 1;
+  if(s <= 0){ showBanner('❌ scale > 0','r'); return; }
+  const arr = STATE.demandScenarios[key].map(v=>v*s);
+  const newKey = 'scaled_'+key+'_x'+s.toFixed(3);
+  STATE.demandScenarios[newKey] = arr;
+  _persistCustomDemandScenarios();
+  setActiveDemand(newKey);
+}
+
+function blendScenarios(){
+  const ka = (document.getElementById('demand-blend-a')||{}).value;
+  const kb = (document.getElementById('demand-blend-b')||{}).value;
+  const w  = Math.max(0, Math.min(1, +(document.getElementById('demand-blend-w')||{}).value));
+  const A = STATE.demandScenarios[ka], B = STATE.demandScenarios[kb];
+  if(!A || !B){ showBanner('❌ ორივე სცენარი მოგცე','r'); return; }
+  const arr = A.map((v,i)=> w*v + (1-w)*(B[i]||0));
+  const newKey = 'blend_'+w.toFixed(2)+'_'+ka+'_'+kb;
+  STATE.demandScenarios[newKey] = arr;
+  _persistCustomDemandScenarios();
+  setActiveDemand(newKey);
+}
+
+function exportActiveDemandCSV(){
+  const key = STATE.activeDemandKey; if(!key){ showBanner('❌ არ არის აქტიური სცენარი','r'); return; }
+  const arr = STATE.demandScenarios[key];
+  const lines = ['hour_of_year,mw'];
+  for(let i=0;i<arr.length;i++) lines.push(i+','+arr[i].toFixed(3));
+  const blob = new Blob([lines.join('\n')], {type:'text/csv;charset=utf-8'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = key + '.csv';
+  a.click(); URL.revokeObjectURL(a.href);
+  showBanner('✅ CSV: '+key,'g');
+}
+
+function exportScenariosJSON(){
+  const custom = {};
+  for(const [k,v] of Object.entries(STATE.demandScenarios||{})) if(!/^GSE_P50_/.test(k)) custom[k] = v;
+  const payload = {
+    meta:{exported_at: new Date().toISOString(), scenario_count: Object.keys(custom).length,
+          note:'PowerSim demand scenarios — GSE_P50_* keys are re-generated at load, not exported.'},
+    scenarios: custom,
+    active_demand_key: STATE.activeDemandKey,
+  };
+  const blob = new Blob([JSON.stringify(payload,null,2)], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'powersim_demand_scenarios_'+new Date().toISOString().slice(0,10)+'.json';
+  a.click(); URL.revokeObjectURL(a.href);
+  showBanner('✅ scenarios JSON exported ('+Object.keys(custom).length+')','g');
+}
+
+function importScenariosJSON(input){
+  const f = input && input.files && input.files[0]; if(!f) return;
+  const r = new FileReader();
+  r.onload = e=>{
+    try{
+      const d = JSON.parse(e.target.result);
+      const scen = d.scenarios || d;
+      let n = 0;
+      for(const [k,v] of Object.entries(scen||{})){
+        if(Array.isArray(v) && v.length===8760){ STATE.demandScenarios[k] = v; n++; }
+      }
+      if(d.active_demand_key && STATE.demandScenarios[d.active_demand_key]){
+        STATE.activeDemandKey = d.active_demand_key;
+        STATE.profiles['demand'] = STATE.demandScenarios[d.active_demand_key].slice();
+      }
+      _persistCustomDemandScenarios();
+      renderDemandTab();
+      showBanner('✅ imported '+n+' scenarios','g',5000);
+    }catch(err){ showBanner('❌ JSON parse: '+err.message,'r'); }
+  };
+  r.readAsText(f);
 }
 
 function renderProfileList(){
