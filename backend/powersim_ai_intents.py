@@ -23,6 +23,23 @@ _RULES = [
 ]
 
 
+_QUESTION_MARK_RE = re.compile(r"\?")
+# Question-form starters (English + Georgian) — presence + no action verb
+# means the user is asking about a concept, not requesting an action.
+_QUESTION_STARTERS_RE = re.compile(
+    r"^\s*(what|why|how|when|where|who|which|is\s+|are\s+|does\s+|do\s+|can\s+|"
+    r"რა\s+|როგორ|რატომ|რომელი|რომელი\s+)",
+    re.IGNORECASE,
+)
+# Action verbs that override the question guard — "how do I add BESS?"
+# is an action request even though it starts with "how".
+_ACTION_VERBS_RE = re.compile(
+    r"\b(add|run|edit|change|set|update|create|remove|delete|compare|export|"
+    r"დაამატე|გაუშვი|შეადარე|შეცვალე|შექმენი|წაშალე)\b",
+    re.IGNORECASE,
+)
+
+
 def classify_intent(message: str) -> str:
     """Classify chat text into one supported intent using deterministic rules."""
     if reject_unsafe_request(message):
@@ -32,6 +49,17 @@ def classify_intent(message: str) -> str:
     for intent, patterns in _RULES:
         if any(re.search(pattern, text, re.IGNORECASE) for pattern in patterns):
             matched.append(intent)
+    # Question-form guard: "what is LOLE?" should be a general question,
+    # not run_adequacy. If the text is question-form (ends in `?` or
+    # starts with a question word) AND has no action verb, return
+    # general_question — the user is asking about a concept, not
+    # requesting a run/edit. Prevents the classifier from firing an
+    # action just because a domain keyword appears in the question.
+    is_question = bool(_QUESTION_MARK_RE.search(text)
+                       or _QUESTION_STARTERS_RE.match(text))
+    has_action = bool(_ACTION_VERBS_RE.search(text))
+    if is_question and not has_action:
+        return "general_question"
     if "add_bess" in matched:
         return "add_bess"
     if "run_adequacy" in matched:
