@@ -3765,11 +3765,15 @@ function runValidation(){
     if(a.pmin>=a.pmax) errors.push(`${a.name}: pmin ≥ pmax`);
   });
 
-  // Profiles
+  // Profiles — periods_per_year scales with resolution_min for sub-hourly runs.
+  const resMinEl=document.getElementById('hor-resolution');
+  const resMin=+(resMinEl?resMinEl.value:60)||60;
+  const periodsPerYear=Math.round(8760*(60/resMin));
   const demandArr=STATE.profiles['demand'];
   if(!demandArr||!demandArr.length) errors.push('demand profile სავ.!');
   else{
-    if(demandArr.length!==8760) errors.push(`demand length ${demandArr.length} ≠ 8760`);
+    if(demandArr.length!==periodsPerYear)
+      errors.push(`demand length ${demandArr.length} ≠ ${periodsPerYear} (${resMin}-min periods/year)`);
     if(demandArr.some(v=>v<0)) errors.push('demand < 0 values');
     if(demandArr.some(v=>isNaN(v))) errors.push('demand NaN values');
   }
@@ -3779,9 +3783,9 @@ function runValidation(){
     const pk=a.availability_profile;
     if(pk&&!STATE.profiles[pk]) warnings.push(`${a.name}: profile '${pk}' ვერ მოიძებნა / not found`);
     else if(!pk) warnings.push(`${a.name}: availability_profile არ მითითებულა / not selected`);
-    else if(STATE.profiles[pk].length!==8760){
+    else if(STATE.profiles[pk].length!==periodsPerYear){
       if(STATE.profiles[pk].length<horizonNeed) errors.push(`${pk}: length ${STATE.profiles[pk].length} < horizon ${horizonNeed}`);
-      else warnings.push(`${pk}: length ${STATE.profiles[pk].length} ≠ 8760`);
+      else warnings.push(`${pk}: length ${STATE.profiles[pk].length} ≠ ${periodsPerYear}`);
     }
   });
   // Hydro inflow

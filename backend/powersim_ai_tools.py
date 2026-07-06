@@ -41,6 +41,16 @@ def _get_path(data: dict[str, Any], paths: list[tuple[str, ...]]) -> Any:
     return None
 
 
+def _first_present(d: dict[str, Any], keys: tuple[str, ...]) -> float | None:
+    """Return `_num(d[k])` for the first `k` present in `d` — even if the
+    value is 0. Using `d.get(a) or d.get(b)` silently drops legitimate
+    zero values because 0.0 is falsy."""
+    for k in keys:
+        if k in d:
+            return _num(d[k])
+    return None
+
+
 def load_input_summary(input_json: dict[str, Any]) -> dict[str, Any]:
     assets = input_json.get("assets") or []
     by_type: dict[str, int] = {}
@@ -65,19 +75,61 @@ def load_input_summary(input_json: dict[str, Any]) -> dict[str, Any]:
 def summarize_results(results_json: dict[str, Any]) -> dict[str, Any]:
     sys_sum = results_json.get("system_summary") or {}
     hourly = results_json.get("hourly_system") or []
-    units = results_json.get("by_unit_summary") or []
-    lambdas = [_num((h or {}).get("lambda") or (h or {}).get("price") or (h or {}).get("marginal_cost")) for h in hourly if isinstance(h, dict)]
+    # The solver emits `by_unit_summary` as a dict keyed by asset id, not
+    # a list — normalise before iterating so the AI summariser works on
+    # real solver outputs. Fallback keeps list-style inputs working too.
+    units_raw = results_json.get("by_unit_summary") or []
+    if isinstance(units_raw, dict):
+        units = [
+            {"id": gid, **(u or {})} for gid, u in units_raw.items()
+            if isinstance(u, dict)
+        ]
+    else:
+        units = [u for u in units_raw if isinstance(u, dict)]
+    # Row-level marginal price key in solver output is `lambda_usd_mwh`.
+    lambdas = [_num(
+        (h or {}).get("lambda_usd_mwh")
+        or (h or {}).get("lambda")
+        or (h or {}).get("price")
+        or (h or {}).get("marginal_cost")
+    ) for h in hourly if isinstance(h, dict)]
     lambdas = [x for x in lambdas if x is not None]
-    top_gen = sorted([u for u in units if isinstance(u, dict)], key=lambda u: _num(u.get("generation_mwh") or u.get("gen_mwh")) or 0, reverse=True)[:5]
-    top_cost = sorted([u for u in units if isinstance(u, dict)], key=lambda u: _num(u.get("cost") or u.get("total_cost")) or 0, reverse=True)[:5]
-    bess = [u for u in units if str(u.get("type") or u.get("technology") or "").lower() in {"bess", "battery", "storage"}]
+    top_gen = sorted(units, key=lambda u: _num(
+        u.get("energy_mwh") or u.get("generation_mwh") or u.get("gen_mwh")
+    ) or 0, reverse=True)[:5]
+    top_cost = sorted(units, key=lambda u: _num(
+        u.get("gross_cost") or u.get("cost") or u.get("total_cost")
+    ) or 0, reverse=True)[:5]
+    bess = [u for u in units
+            if str(u.get("type") or u.get("technology") or "").lower()
+               in {"bess", "battery", "storage"}]
     return {
-        "total_cost": _get_path(results_json, [("system_summary", "total_cost"), ("diagnostics", "total_cost")]),
-        "total_objective_cost": _get_path(results_json, [("system_summary", "objective_cost"), ("diagnostics", "objective_cost"), ("metadata", "objective_cost")]),
-        "avg_lambda": (sum(lambdas) / len(lambdas)) if lambdas else _num(sys_sum.get("avg_lambda")),
-        "gas": sys_sum.get("gas") or sys_sum.get("gas_used") or sys_sum.get("gas_mmbtu"),
-        "unserved": sys_sum.get("unserved") or sys_sum.get("unserved_mwh"),
-        "curtailment": sys_sum.get("curtailment") or sys_sum.get("curtailment_mwh"),
+        # The solver emits *_usd suffixed keys in system_summary; keep the
+        # legacy unsuffixed keys as fallbacks for older result files.
+        "total_cost": _get_path(results_json, [
+            ("system_summary", "total_cost_usd"),
+            ("system_summary", "total_cost"),
+            ("diagnostics", "total_cost"),
+        ]),
+        "total_objective_cost": _get_path(results_json, [
+            ("system_summary", "total_objective_cost_usd"),
+            ("system_summary", "objective_cost"),
+            ("diagnostics", "objective_cost"),
+            ("diagnostics", "objective_breakdown", "total_reconstructed"),
+            ("metadata", "objective_cost"),
+        ]),
+        # `or` short-circuits on 0.0 so a legitimate zero-unserved run
+        # would report None; walk the fallback list explicitly and stop
+        # on the first key present.
+        "avg_lambda": (sum(lambdas) / len(lambdas)) if lambdas else _first_present(
+            sys_sum, ("avg_lambda_usd_mwh", "avg_lambda")
+        ),
+        "gas":         _first_present(sys_sum, ("total_gas_mm3", "gas",
+                                                "gas_used", "gas_mmbtu")),
+        "unserved":    _first_present(sys_sum, ("total_unserved_mwh",
+                                                "unserved", "unserved_mwh")),
+        "curtailment": _first_present(sys_sum, ("total_curtailed_mwh",
+                                                "curtailment", "curtailment_mwh")),
         "top_units_by_generation": top_gen,
         "top_units_by_cost": top_cost,
         "bess_metrics": bess,
