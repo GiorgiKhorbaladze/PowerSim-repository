@@ -1710,6 +1710,10 @@ def solve_window(
                 return 12
             month_to_periods: dict[int, list[int]] = {}
             for t in T:
+                # `% 8760` folds the study clock into a single calendar
+                # year. Multi-year studies (horizon_hours > 8760) reuse
+                # the same monthly gas cap for every year — intentional
+                # for repeating annual budgets, but not a per-year cap.
                 gh = (offset_h + int((t - 1) * dt)) % 8760
                 mo = _hour_to_month(gh)
                 month_to_periods.setdefault(mo, []).append(t)
@@ -2220,6 +2224,11 @@ def solve_all(inp: dict, assets: dict, profiles: dict, gas_limits: dict) -> tupl
                 if annual_cap_full:
                     remaining_annual = max(0.0, remaining_annual - gas_used)
                 if remaining_monthly:
+                    # `% HOURS_PER_YEAR` folds the study clock into a
+                    # single calendar year — see the same guard inside
+                    # solve_window's monthly-gas constraint. Multi-year
+                    # studies decrement the same monthly bucket every
+                    # year; per-calendar-year caps are not supported.
                     gh = (window_offset_h + int(j * dt_h)) % HOURS_PER_YEAR
                     mo = _hour_to_month_local(gh)
                     if mo in remaining_monthly:

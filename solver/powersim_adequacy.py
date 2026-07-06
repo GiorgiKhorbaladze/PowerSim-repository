@@ -115,8 +115,12 @@ def run_adequacy(inp: dict, mode: str | None = None, samples: int | None = None,
         lole /= samples; eens /= samples; peak_sf = peak_sf
     else:
         sf, _ = one(None, derated=True); lole = float(sum(1 for x in sf if x > 1e-9)); eens = float(sum(sf)); peak_sf = max(sf or [0.0])
-    firm = sum(_asset_hourly_available(a, inp, n, req_dur, True, None)[demand.index(max(demand))] for a in inp.get("assets") or [])
-    peak = max(demand); rm = ((firm - peak) / peak * 100.0) if peak else 0.0
+    # Hoist the peak hour once — prior form recomputed `demand.index(max(...))`
+    # per asset which is O(assets × n). Ties resolve on the first peak.
+    peak = max(demand); peak_hour = demand.index(peak)
+    firm = sum(_asset_hourly_available(a, inp, n, req_dur, True, None)[peak_hour]
+               for a in inp.get("assets") or [])
+    rm = ((firm - peak) / peak * 100.0) if peak else 0.0
     passed = lole <= lole_target and eens <= eens_target and rm >= rm_target
     return {"mode": mode, "samples": samples if mode == "monte_carlo" else None, "seed": seed if mode == "monte_carlo" else None, "LOLE_h_per_year": lole, "LOLP_pct": lole / n * 100.0, "EENS_mwh": eens, "peak_shortfall_mw": peak_sf, "expected_shortfall_hours": lole, "reserve_margin_pct": rm, "firm_capacity_mw": firm, "peak_load_mw": peak, "adequacy_pass": bool(passed), "targets": {"lole_target_h": lole_target, "eens_target_mwh": eens_target, "reserve_margin_target_pct": rm_target}, "notes": ["Stage 1 screening approximation; BESS firm capacity is duration-limited, not chronological storage adequacy."]}
 
