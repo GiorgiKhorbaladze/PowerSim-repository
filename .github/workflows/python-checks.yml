@@ -58,6 +58,7 @@ jobs:
               tests/test_reserve_storage_provision.py \
               tests/test_reserve_direction_isolation.py \
               tests/test_solver_audit_bugs.py \
+              tests/test_audit_followup_batch.py \
               tests/test_rolling_boundary_ramp.py \
               tests/test_stochastic_summary.py \
               tests/test_gse_2026_registry_mapping.py \
@@ -145,6 +146,13 @@ jobs:
         # constraints, closure CO₂ + storage-target terms, reserve × dt,
         # BESS energy_mwh) — see tests/test_solver_audit_bugs.py.
         run: python tests/test_solver_audit_bugs.py
+      - name: Audit follow-up batch deterministic test
+        # Proves the follow-up fix batch: AI summarizer reads real
+        # solver keys (B2 MiniMax audit), ED resolve treats BESS/DR/
+        # pumped-hydro as fixed net MW (#4), and HRC-only thermal
+        # asset fuel_cost integrates the curve (#8) instead of
+        # collapsing to VOM. See tests/test_audit_followup_batch.py.
+        run: python tests/test_audit_followup_batch.py
       - name: Reserve storage provision deterministic tests
         # Proves BESS and pumped-hydro can provide spinning / non-spinning reserve.
         run: python tests/test_reserve_storage_provision.py

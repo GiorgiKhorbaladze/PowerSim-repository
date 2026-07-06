@@ -2274,34 +2274,54 @@ def compute_marginal_prices(hourly: list, assets: dict, profiles: dict,
         print("ℹ️  ED resolve skipped — DC-OPF is on; nodal LMPs already in bus_lmp.")
         return hourly
     print("⚡ ED resolve for marginal prices (LP, fixed commitment)...")
+    # Storage / DR / pumped-hydro MW are not on the `dispatch` map and
+    # don't use `pmax`. Rather than trying to redispatch them as free
+    # generators (which drops their contribution to the balance and
+    # yields a wrong marginal price), snapshot their committed MIP MW
+    # per period and inject them into the RHS of the balance constraint.
     demand = [h["load_mw"] for h in hourly]
     H = len(demand)
     T = list(range(1, H + 1))
+    disp_assets = {gid: a for gid, a in assets.items()
+                   if a.get("type") not in ("bess", "dr", "pumped_hydro")}
+    fixed_net_mw = [0.0] * H
+    for t_i, h in enumerate(hourly):
+        bess = h.get("bess") or {}
+        for gid in bess:
+            b = bess.get(gid) or {}
+            fixed_net_mw[t_i] += float(b.get("discharge_mw", 0) or 0) - float(b.get("charge_mw", 0) or 0)
+        dr = h.get("dr") or {}
+        for gid in dr:
+            fixed_net_mw[t_i] += float(dr.get(gid, 0) or 0)
+        ph = h.get("pumped_hydro") or {}
+        for gid in ph:
+            v = ph.get(gid) or {}
+            fixed_net_mw[t_i] += float(v.get("net_mw", 0) or 0)
     m = pyo.ConcreteModel()
     m.T = pyo.Set(initialize=T, ordered=True)
-    m.G = pyo.Set(initialize=list(assets.keys()))
+    m.G = pyo.Set(initialize=list(disp_assets.keys()))
 
     # Continuous only — no binary (LP)
     m.p = pyo.Var(m.G, m.T, domain=pyo.NonNegativeReals)
     m.unserv = pyo.Var(m.T, domain=pyo.NonNegativeReals)
 
     # Fix upper bound based on UC commitment
-    for g in assets:
+    for g in disp_assets:
         for t in T:
             h_dict  = hourly[t-1]
             comm    = h_dict.get("commitment", {}).get(g, 1)  # default 1 for non-committable
-            pmx     = get_pmax_t(assets[g], t-1, profiles)
-            pmin    = float(assets[g].get("pmin",0)) * comm
+            pmx     = get_pmax_t(disp_assets[g], t-1, profiles)
+            pmin    = float(disp_assets[g].get("pmin",0)) * comm
             m.p[g,t].setub(pmx * comm)
             m.p[g,t].setlb(pmin)
 
     UNSERVED_PEN = float(solver_cfg.get("unserved_penalty", 3000))
-    def obj(m): return sum(assets[g]["_dispMC"] * m.p[g,t] for g in m.G for t in m.T) + \
+    def obj(m): return sum(disp_assets[g]["_dispMC"] * m.p[g,t] for g in m.G for t in m.T) + \
                         UNSERVED_PEN * sum(m.unserv[t] for t in m.T)
     m.OBJ = pyo.Objective(rule=obj, sense=pyo.minimize)
 
     def balance(m, t):
-        return sum(m.p[g,t] for g in m.G) + m.unserv[t] == demand[t-1]
+        return sum(m.p[g,t] for g in m.G) + m.unserv[t] == demand[t-1] - fixed_net_mw[t-1]
     m.Balance = pyo.Constraint(m.T, rule=balance)
 
     m.dual = pyo.Suffix(direction=pyo.Suffix.IMPORT)
@@ -2385,7 +2405,33 @@ def build_result_store(hourly: list, assets: dict, inp: dict, solve_time: float,
         oper_h    = oper_p * dt_h
         starts    = sum(1 for i,h in enumerate(hourly)
                         if h["startup"].get(gid,0) > 0.5)
-        fuel_cost = energy * a["_dispMC"]
+        # Per-period fuel cost. For assets with a piecewise heat_rate_curve,
+        # `_dispMC` collapses to `vom` (no scalar heat_rate) and would
+        # under-report fuel cost by orders of magnitude. Reconstruct the
+        # curve-consistent cost by interpolating each period's dispatch
+        # `p_t` along the vertex costs `hr_k × p_k × fp × 0.9478`.
+        hrc = a.get("heat_rate_curve") if atype == "thermal" else None
+        if isinstance(hrc, list) and len(hrc) >= 2:
+            fp    = float(a.get("fuel_price", 0) or 0)
+            pts   = sorted((float(pmw), float(hr)) for pmw, hr in hrc)
+            xs    = [pt[0] for pt in pts]
+            costs = [pt[1] * pt[0] * fp * 0.9478 for pt in pts]  # $ / h at vertex
+            fuel_cost = 0.0
+            for h in hourly:
+                p_t = float(h["dispatch"].get(gid, 0) or 0)
+                if p_t <= xs[0]:
+                    cost_rate = costs[0]
+                elif p_t >= xs[-1]:
+                    cost_rate = costs[-1]
+                else:
+                    for k in range(len(xs) - 1):
+                        if xs[k] <= p_t <= xs[k+1]:
+                            frac = (p_t - xs[k]) / (xs[k+1] - xs[k])
+                            cost_rate = costs[k] + frac * (costs[k+1] - costs[k])
+                            break
+                fuel_cost += cost_rate * dt_h
+        else:
+            fuel_cost = energy * a["_dispMC"]
         # v1.5 Thermal Stage 3 — multi-stage startup cost reconstruction.
         if a.get("startup_cost_hot") is not None and a.get("startup_cost_cold") is not None:
             hot_n  = sum(1 for h in hourly if (h.get("startup_hot") or {}).get(gid, 0) > 0.5)
