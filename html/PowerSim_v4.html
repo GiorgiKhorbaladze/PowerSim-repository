@@ -1942,9 +1942,15 @@ function renderAssetTable(){
     const isImport=a.type==='import';
     // Profile binding — active only for wind / solar / hydro_ror (availability_profile).
     const profileBindable=a.type==='wind'||a.type==='solar'||a.type==='hydro_ror';
-    const profKeys=Object.keys(STATE.profiles).filter(k=>k!=='demand'&&!/inflow/i.test(k));
+    const baseProfKeys=Object.keys(STATE.profiles).filter(k=>k!=='demand'&&!/inflow/i.test(k));
+    // For wind/solar, always expose every bundled 2026 PLEXOS site profile in
+    // the dropdown (all 10 RE_SITES), not only whatever's already been seeded
+    // into STATE.profiles — lets a freshly-added custom asset pick a real
+    // location profile without needing the GSE demo button first.
+    const reProfKeys=(isRE && window.RE_PROFILES_2026) ? Object.keys(window.RE_PROFILES_2026) : [];
+    const profKeys=[...new Set([...(isRE?reProfKeys:[]), ...baseProfKeys])];
     const cur=a.availability_profile;
-    const staleOpt=(cur&&!STATE.profiles[cur])?`<option value="${cur}" selected>⚠️ ${cur} (?)</option>`:'';
+    const staleOpt=(cur&&!profKeys.includes(cur))?`<option value="${cur}" selected>⚠️ ${cur} (?)</option>`:'';
     const profileCell=profileBindable
       ? `<select onchange="STATE.assets[${ci}].availability_profile=this.value||null;updateDashKpis()"
                  style="width:96px;font-size:7.5px" title="availability profile binding (wind/solar/RoR)">
@@ -2844,19 +2850,33 @@ function loadGSE2026Demo(){
   STATE.horizon = {year:2026,start_date:'2026-01-01',start_hour:0,
                    horizon_h:8760,mode:'auto',window_h:168,step_h:24};
 
-  // Auto-attach real 2026 PLEXOS wind/solar CF profiles by location —
-  // every wind/solar asset above already carries the matching
-  // `_wind_<site>` / `_solar_<site>` key in `availability_profile`;
-  // this seeds STATE.profiles so the binding is live immediately
-  // (dropdown pre-selected, no manual upload/selection needed).
-  if(typeof window!=='undefined' && window.RE_PROFILES_2026){
-    STATE.assets.forEach(a=>{
-      const key = a.availability_profile;
-      if((a.type==='wind'||a.type==='solar') && key && window.RE_PROFILES_2026[key]){
-        STATE.profiles[key] = window.RE_PROFILES_2026[key].slice();
-      }
+  // Seed all 10 RE_SITES' 2026 PLEXOS wind/solar CF profiles (all
+  // `_wind_<site>` / `_solar_<site>` keys, not only the ones the demo
+  // fleet currently references) so every profile is immediately
+  // resolvable in the UI and exported JSON — mirrors the RoR zone-profile
+  // seeding pattern (bindRoRProfilesToAssets / ROR_ZONE_BY_ASSET).
+  if(window.RE_PROFILES_2026){
+    Object.assign(STATE.profiles, window.RE_PROFILES_2026);
+    STATE.profile_bundle = Object.assign({}, STATE.profile_bundle || {}, {
+      renewables_source: 'PLEXOS_2026_Wind_Solar_A_mean',
+      re_profile_count: Object.keys(window.RE_PROFILES_2026).length
     });
   }
+  // Every wind/solar asset above already carries the matching
+  // `_wind_<site>` / `_solar_<site>` key in `availability_profile` via the
+  // `site` argument passed to w()/s() — explicitly re-write it onto the
+  // live assets too, so the binding survives even if assets were built
+  // before profiles were seeded (defensive, same as bindRoRProfilesToAssets).
+  const RE_SITE_BY_ASSET = {
+    wind_kartli:'Gori', wind_zemo_vindi:'Dedoplistskaro',
+    solar_gamarjvebis:'Telavi', solar_jugaanis:'Telavi', solar_kaspis:'Gori',
+    solar_khirsis:'Telavi', solar_kedis:'Kutaisi', solar_kistauris:'Telavi',
+  };
+  STATE.assets.forEach(a=>{
+    if(a.type!=='wind' && a.type!=='solar') return;
+    const site = RE_SITE_BY_ASSET[a.id];
+    if(site) a.availability_profile = `_${a.type}_${site}`;
+  });
 
   renderAssetTable();
   renderReservesList();
