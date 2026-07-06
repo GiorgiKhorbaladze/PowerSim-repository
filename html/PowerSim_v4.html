@@ -3952,7 +3952,15 @@ function buildInputPayload(){
     applies_to:gc.applies_to
   };
   if(gc.mode!=='monthly') gasConf.annual={cap:annualCap};
-  if(gc.mode!=='annual')  gasConf.monthly=gc.monthly;
+  // Schema requires capitalized month names ('Jan'..'Dec'); internal
+  // STATE.gasConfig.monthly keys are lowercase 3-letter (UI convenience).
+  if(gc.mode!=='annual'){
+    const monthly={};
+    for(const [m,v] of Object.entries(gc.monthly||{})){
+      monthly[m.charAt(0).toUpperCase()+m.slice(1,3)]=v;
+    }
+    gasConf.monthly=monthly;
+  }
 
   return{
     metadata:{
