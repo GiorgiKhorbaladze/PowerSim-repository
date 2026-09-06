@@ -30,3 +30,15 @@ jobs:
         with:
           name: study-data-2027-2030
           path: out/study_extract/study_data_2027_2030.json
+      - name: Upload reproducible study input files
+        uses: actions/upload-artifact@v4
+        with:
+          name: study-raw-inputs
+          compression-level: 6
+          path: |
+            Info.xlsx
+            data/gse_load_2026_2030.json
+            data/renewables/
+            PLEXOS_2026_profiles-or.zip
+            PLEXOS_2026_zones_60files.zip
+            plexos model.zip
