@@ -18,8 +18,15 @@ jobs:
         run: python -m pip install pandas openpyxl
       - name: Audit repository study inputs
         run: python scripts/audit_study_inputs_2027_2030.py
+      - name: Extract exact study data
+        run: python scripts/extract_study_data_2027_2030.py
       - name: Upload audit artifact
         uses: actions/upload-artifact@v4
         with:
           name: study-input-audit
           path: out/study_audit/study_input_audit.json
+      - name: Upload extracted study data
+        uses: actions/upload-artifact@v4
+        with:
+          name: study-data-2027-2030
+          path: out/study_extract/study_data_2027_2030.json
