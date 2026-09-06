@@ -1,0 +1,25 @@
+name: 2027-2030 study input audit
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [codex/res-bess-2027-2030-final]
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install audit dependencies
+        run: python -m pip install pandas openpyxl
+      - name: Audit repository study inputs
+        run: python scripts/audit_study_inputs_2027_2030.py
+      - name: Upload audit artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: study-input-audit
+          path: out/study_audit/study_input_audit.json
