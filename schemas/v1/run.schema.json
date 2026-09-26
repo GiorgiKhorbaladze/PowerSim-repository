@@ -1,0 +1,262 @@
+{
+  "$defs": {
+    "QAStatus": {
+      "enum": [
+        "pass",
+        "warn",
+        "fail",
+        "not_run"
+      ],
+      "title": "QAStatus",
+      "type": "string"
+    },
+    "ResultValidity": {
+      "enum": [
+        "valid",
+        "valid_with_warnings",
+        "invalid"
+      ],
+      "title": "ResultValidity",
+      "type": "string"
+    },
+    "RunEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "details": {
+          "additionalProperties": true,
+          "title": "Details",
+          "type": "object"
+        },
+        "message": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Message"
+        },
+        "sequence": {
+          "minimum": 0,
+          "title": "Sequence",
+          "type": "integer"
+        },
+        "status": {
+          "$ref": "#/$defs/RunStatus"
+        },
+        "timestamp": {
+          "format": "date-time",
+          "title": "Timestamp",
+          "type": "string"
+        }
+      },
+      "required": [
+        "sequence",
+        "timestamp",
+        "status"
+      ],
+      "title": "RunEvent",
+      "type": "object"
+    },
+    "RunStatus": {
+      "enum": [
+        "draft",
+        "validating",
+        "queued",
+        "preparing",
+        "solving",
+        "validating_results",
+        "reporting",
+        "completed",
+        "failed",
+        "cancelled"
+      ],
+      "title": "RunStatus",
+      "type": "string"
+    },
+    "SolverDiagnostics": {
+      "additionalProperties": false,
+      "properties": {
+        "actual_mip_gap": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Actual Mip Gap"
+        },
+        "backend": {
+          "title": "Backend",
+          "type": "string"
+        },
+        "backend_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Backend Version"
+        },
+        "best_bound": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Best Bound"
+        },
+        "has_incumbent": {
+          "title": "Has Incumbent",
+          "type": "boolean"
+        },
+        "incumbent_objective": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Incumbent Objective"
+        },
+        "normalized_status": {
+          "$ref": "#/$defs/SolverStatus"
+        },
+        "orchestration_runtime_s": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Orchestration Runtime S"
+        },
+        "qa_status": {
+          "$ref": "#/$defs/QAStatus"
+        },
+        "requested_mip_gap": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Requested Mip Gap"
+        },
+        "result_validity": {
+          "$ref": "#/$defs/ResultValidity"
+        },
+        "runtime_s": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Runtime S"
+        },
+        "termination_condition": {
+          "title": "Termination Condition",
+          "type": "string"
+        }
+      },
+      "required": [
+        "backend",
+        "termination_condition",
+        "normalized_status",
+        "has_incumbent",
+        "result_validity",
+        "qa_status"
+      ],
+      "title": "SolverDiagnostics",
+      "type": "object"
+    },
+    "SolverStatus": {
+      "enum": [
+        "optimal",
+        "feasible",
+        "time_limit",
+        "infeasible",
+        "unbounded",
+        "numerical_error",
+        "solver_error"
+      ],
+      "title": "SolverStatus",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "contract_version": {
+      "default": "1.0.0",
+      "title": "Contract Version",
+      "type": "string"
+    },
+    "events": {
+      "items": {
+        "$ref": "#/$defs/RunEvent"
+      },
+      "title": "Events",
+      "type": "array"
+    },
+    "id": {
+      "title": "Id",
+      "type": "string"
+    },
+    "snapshot_fingerprint": {
+      "title": "Snapshot Fingerprint",
+      "type": "string"
+    },
+    "solver_diagnostics": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/SolverDiagnostics"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "status": {
+      "$ref": "#/$defs/RunStatus",
+      "default": "draft"
+    }
+  },
+  "required": [
+    "id",
+    "snapshot_fingerprint"
+  ],
+  "title": "RunContract",
+  "type": "object"
+}
