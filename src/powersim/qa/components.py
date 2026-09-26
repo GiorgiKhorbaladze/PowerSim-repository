@@ -183,6 +183,28 @@ def check_component_results(
             _record(buckets, "component.thermal_uc_transition", passed=violation <= limit, violation=violation, tolerance=limit,
                     witness={"asset_id": asset_id, "period": current.period, "commitment_delta": expected, "startup_minus_shutdown": actual})
 
+    bess_by_asset: dict[str, list[ComponentResult]] = defaultdict(list)
+    for item in results:
+        if item.component_kind == "bess":
+            bess_by_asset[item.asset_id].append(item)
+    for asset_id, observations in bess_by_asset.items():
+        asset = asset_map.get(asset_id, {})
+        observations.sort(key=lambda item: item.period)
+        energy = float(asset.get("energy_mwh", 0) or 0)
+        lower = float(asset.get("soc_min", 0) or 0) * energy
+        upper = float(asset.get("soc_max", 1) or 1) * energy
+        charge_cap = float(asset.get("charge_power_mw", asset.get("power_mw", 0)) or 0)
+        discharge_cap = float(asset.get("discharge_power_mw", asset.get("power_mw", 0)) or 0)
+        for item in observations:
+            soc = float(item.state_of_charge_mwh or 0)
+            violation = max(0.0, lower - soc, soc - upper, -float(item.injection_mw), -float(item.withdrawal_mw), float(item.injection_mw) - discharge_cap, float(item.withdrawal_mw) - charge_cap)
+            limit = tolerance.limit(max(1.0, energy, charge_cap, discharge_cap))
+            _record(buckets, "component.bess_bounds", passed=violation <= limit, violation=violation, tolerance=limit,
+                    witness={"asset_id": asset_id, "period": item.period, "soc_mwh": soc, "charge_mw": item.withdrawal_mw, "discharge_mw": item.injection_mw})
+            mode_violation = min(float(item.injection_mw), float(item.withdrawal_mw))
+            _record(buckets, "component.bess_mode", passed=mode_violation <= limit, violation=mode_violation, tolerance=limit,
+                    witness={"asset_id": asset_id, "period": item.period, "charge_mw": item.withdrawal_mw, "discharge_mw": item.injection_mw})
+
     checks: list[QACheckResult] = []
     for check_id in sorted(buckets):
         bucket = buckets[check_id]

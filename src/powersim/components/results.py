@@ -47,6 +47,7 @@ class ComponentResult:
     no_load_cost_usd: float | None = None
     co2_t: float | None = None
     co2_cost_usd: float | None = None
+    state_of_charge_mwh: float | None = None
 
 
 @dataclass(frozen=True)
