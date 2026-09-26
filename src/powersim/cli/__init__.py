@@ -1,0 +1,2 @@
+"""PowerSim command-line interface."""
+

@@ -1,0 +1,563 @@
+{
+  "$defs": {
+    "AssetContract": {
+      "additionalProperties": true,
+      "properties": {
+        "bus": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Bus"
+        },
+        "capacity_max_mw": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Capacity Max Mw"
+        },
+        "capacity_min_mw": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Capacity Min Mw"
+        },
+        "enabled": {
+          "default": true,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "minLength": 1,
+          "title": "Kind",
+          "type": "string"
+        },
+        "profile_references": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Profile References",
+          "type": "array"
+        },
+        "provenance": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Provenance"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "id",
+        "kind"
+      ],
+      "title": "AssetContract",
+      "type": "object"
+    },
+    "BranchContract": {
+      "additionalProperties": false,
+      "properties": {
+        "emergency_limit_mw": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Emergency Limit Mw"
+        },
+        "from_bus": {
+          "title": "From Bus",
+          "type": "string"
+        },
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "normal_limit_mw": {
+          "exclusiveMinimum": 0,
+          "title": "Normal Limit Mw",
+          "type": "number"
+        },
+        "phase_shift_rad": {
+          "default": 0.0,
+          "title": "Phase Shift Rad",
+          "type": "number"
+        },
+        "provenance": {
+          "$ref": "#/$defs/Provenance"
+        },
+        "susceptance_mw_per_rad": {
+          "title": "Susceptance Mw Per Rad",
+          "type": "number"
+        },
+        "to_bus": {
+          "title": "To Bus",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "from_bus",
+        "to_bus",
+        "susceptance_mw_per_rad",
+        "normal_limit_mw",
+        "provenance"
+      ],
+      "title": "BranchContract",
+      "type": "object"
+    },
+    "BusContract": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "is_slack": {
+          "default": false,
+          "title": "Is Slack",
+          "type": "boolean"
+        },
+        "name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Name"
+        },
+        "provenance": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Provenance"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "BusContract",
+      "type": "object"
+    },
+    "CalendarPolicy": {
+      "enum": [
+        "non_leap",
+        "explicit_periods"
+      ],
+      "title": "CalendarPolicy",
+      "type": "string"
+    },
+    "FlowUnitMetadata": {
+      "additionalProperties": false,
+      "properties": {
+        "rate_unit": {
+          "minLength": 1,
+          "title": "Rate Unit",
+          "type": "string"
+        },
+        "volume_unit": {
+          "minLength": 1,
+          "title": "Volume Unit",
+          "type": "string"
+        }
+      },
+      "required": [
+        "volume_unit",
+        "rate_unit"
+      ],
+      "title": "FlowUnitMetadata",
+      "type": "object"
+    },
+    "NetworkContract": {
+      "additionalProperties": false,
+      "properties": {
+        "branches": {
+          "items": {
+            "$ref": "#/$defs/BranchContract"
+          },
+          "title": "Branches",
+          "type": "array"
+        },
+        "buses": {
+          "items": {
+            "$ref": "#/$defs/BusContract"
+          },
+          "title": "Buses",
+          "type": "array"
+        }
+      },
+      "title": "NetworkContract",
+      "type": "object"
+    },
+    "ProfileContract": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "provenance": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Provenance"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "unit": {
+          "title": "Unit",
+          "type": "string"
+        },
+        "values": {
+          "items": {
+            "type": "number"
+          },
+          "title": "Values",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "unit",
+        "values"
+      ],
+      "title": "ProfileContract",
+      "type": "object"
+    },
+    "ProjectVersionContract": {
+      "additionalProperties": false,
+      "properties": {
+        "contract_version": {
+          "default": "1.0.0",
+          "title": "Contract Version",
+          "type": "string"
+        },
+        "parent_fingerprint": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Parent Fingerprint"
+        },
+        "revision": {
+          "minimum": 1,
+          "title": "Revision",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "revision"
+      ],
+      "title": "ProjectVersionContract",
+      "type": "object"
+    },
+    "Provenance": {
+      "additionalProperties": false,
+      "properties": {
+        "details": {
+          "additionalProperties": true,
+          "title": "Details",
+          "type": "object"
+        },
+        "source": {
+          "title": "Source",
+          "type": "string"
+        },
+        "source_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source Version"
+        },
+        "transformation": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Transformation"
+        }
+      },
+      "required": [
+        "source"
+      ],
+      "title": "Provenance",
+      "type": "object"
+    },
+    "ScenarioContract": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Name"
+        },
+        "overlay": {
+          "additionalProperties": true,
+          "title": "Overlay",
+          "type": "object"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "ScenarioContract",
+      "type": "object"
+    },
+    "TimeContract": {
+      "additionalProperties": false,
+      "properties": {
+        "calendar_policy": {
+          "$ref": "#/$defs/CalendarPolicy"
+        },
+        "interval_duration_hours": {
+          "exclusiveMinimum": 0,
+          "title": "Interval Duration Hours",
+          "type": "number"
+        },
+        "periods": {
+          "exclusiveMinimum": 0,
+          "title": "Periods",
+          "type": "integer"
+        },
+        "resolution_minutes": {
+          "exclusiveMinimum": 0,
+          "maximum": 1440,
+          "title": "Resolution Minutes",
+          "type": "integer"
+        },
+        "start": {
+          "format": "date-time",
+          "title": "Start",
+          "type": "string"
+        },
+        "study_year": {
+          "maximum": 9999,
+          "minimum": 1900,
+          "title": "Study Year",
+          "type": "integer"
+        },
+        "timezone": {
+          "title": "Timezone",
+          "type": "string"
+        }
+      },
+      "required": [
+        "timezone",
+        "study_year",
+        "resolution_minutes",
+        "interval_duration_hours",
+        "start",
+        "periods",
+        "calendar_policy"
+      ],
+      "title": "TimeContract",
+      "type": "object"
+    },
+    "UnitSystem": {
+      "additionalProperties": false,
+      "properties": {
+        "currency": {
+          "minLength": 1,
+          "title": "Currency",
+          "type": "string"
+        },
+        "duration": {
+          "const": "hours",
+          "default": "hours",
+          "title": "Duration",
+          "type": "string"
+        },
+        "energy": {
+          "const": "MWh",
+          "default": "MWh",
+          "title": "Energy",
+          "type": "string"
+        },
+        "gas": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FlowUnitMetadata"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "power": {
+          "const": "MW",
+          "default": "MW",
+          "title": "Power",
+          "type": "string"
+        },
+        "resolution": {
+          "const": "minutes",
+          "default": "minutes",
+          "title": "Resolution",
+          "type": "string"
+        },
+        "water": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FlowUnitMetadata"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "currency"
+      ],
+      "title": "UnitSystem",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "assets": {
+      "items": {
+        "$ref": "#/$defs/AssetContract"
+      },
+      "title": "Assets",
+      "type": "array"
+    },
+    "contract_version": {
+      "default": "1.0.0",
+      "title": "Contract Version",
+      "type": "string"
+    },
+    "id": {
+      "title": "Id",
+      "type": "string"
+    },
+    "metadata": {
+      "additionalProperties": true,
+      "title": "Metadata",
+      "type": "object"
+    },
+    "network": {
+      "$ref": "#/$defs/NetworkContract"
+    },
+    "profiles": {
+      "items": {
+        "$ref": "#/$defs/ProfileContract"
+      },
+      "title": "Profiles",
+      "type": "array"
+    },
+    "reserve_products": {
+      "items": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "title": "Reserve Products",
+      "type": "array"
+    },
+    "scenarios": {
+      "items": {
+        "$ref": "#/$defs/ScenarioContract"
+      },
+      "title": "Scenarios",
+      "type": "array"
+    },
+    "solver_settings": {
+      "additionalProperties": true,
+      "title": "Solver Settings",
+      "type": "object"
+    },
+    "time": {
+      "$ref": "#/$defs/TimeContract"
+    },
+    "units": {
+      "$ref": "#/$defs/UnitSystem"
+    },
+    "version": {
+      "$ref": "#/$defs/ProjectVersionContract"
+    }
+  },
+  "required": [
+    "id",
+    "version",
+    "units",
+    "time"
+  ],
+  "title": "ProjectContract",
+  "type": "object"
+}

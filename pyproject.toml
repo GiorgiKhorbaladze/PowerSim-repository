@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "powersim"
+dynamic = ["version"]
+description = "PowerSim power-system planning contracts and tools"
+readme = "README.md"
+requires-python = ">=3.10,<3.13"
+dependencies = ["pydantic>=2.7,<3"]
+
+[project.optional-dependencies]
+test = ["pytest>=8"]
+
+[project.scripts]
+powersim = "powersim.cli.main:main"
+
+[tool.setuptools.dynamic]
+version = {attr = "powersim.version.__version__"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src", "."]
+

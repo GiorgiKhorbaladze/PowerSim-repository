@@ -1,0 +1,65 @@
+{
+  "$defs": {
+    "QACheckResult": {
+      "additionalProperties": false,
+      "properties": {
+        "check_id": {
+          "title": "Check Id",
+          "type": "string"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/QAStatus"
+        },
+        "witness": {
+          "additionalProperties": true,
+          "title": "Witness",
+          "type": "object"
+        }
+      },
+      "required": [
+        "check_id",
+        "status",
+        "message"
+      ],
+      "title": "QACheckResult",
+      "type": "object"
+    },
+    "QAStatus": {
+      "enum": [
+        "pass",
+        "warn",
+        "fail",
+        "not_run"
+      ],
+      "title": "QAStatus",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "checks": {
+      "items": {
+        "$ref": "#/$defs/QACheckResult"
+      },
+      "title": "Checks",
+      "type": "array"
+    },
+    "contract_version": {
+      "default": "1.0.0",
+      "title": "Contract Version",
+      "type": "string"
+    },
+    "status": {
+      "$ref": "#/$defs/QAStatus"
+    }
+  },
+  "required": [
+    "status"
+  ],
+  "title": "QAReport",
+  "type": "object"
+}
