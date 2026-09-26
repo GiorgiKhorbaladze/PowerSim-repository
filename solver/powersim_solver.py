@@ -1116,6 +1116,7 @@ def solve_window(
         shared_asset_ids = shared_session.asset_ids
     shared_bess_ids = set(shared_asset_ids).intersection(bess_ids)
     shared_ph_ids = set(shared_asset_ids).intersection(ph_ids)
+    shared_dr_ids = set(shared_asset_ids).intersection(dr_ids)
 
     def gen_lb(m, g, t):
         if g in shared_asset_ids:
@@ -1639,6 +1640,8 @@ def solve_window(
     # ── v1.4: DR curtailment constraints ──────────────────────────────
     if dr_ids:
         def dr_ub(m, d, t):
+            if d in shared_dr_ids:
+                return pyo.Constraint.Skip
             a = assets[d]
             pmc = float(a["pmax_curtail"])
             avail_key = a.get("availability_profile")
@@ -1654,6 +1657,8 @@ def solve_window(
         # hours_per_year_max.
         dr_remaining_in = (init_state or {}).get("_dr_remaining_hours") or {}
         def dr_annual(m, d):
+            if d in shared_dr_ids:
+                return pyo.Constraint.Skip
             a = assets[d]
             pmc = float(a["pmax_curtail"])
             if d in dr_remaining_in:
