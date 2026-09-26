@@ -5,16 +5,37 @@ from dataclasses import dataclass
 from typing import Any
 
 from powersim.components import BuildContext, stage3a_registry
+from powersim.contracts import IssueSeverity
 
 MIGRATED_KINDS = frozenset({"wind", "solar", "hydro_ror", "import"})
 
 
-def build_stage3a_context(model: Any, periods, duration_hours: float, profiles,
-                          assets, *, offset_hours=0.0, capabilities=None) -> BuildContext:
-    return BuildContext(builder=model, periods=tuple(periods), duration_hours=duration_hours,
-                        profiles=profiles, assets=assets, offset_hours=offset_hours,
-                        capabilities=frozenset(capabilities or {"deterministic",
-                                                                "subhourly" if duration_hours < 1 else "deterministic"}))
+def build_stage3a_context(
+    model: Any,
+    periods,
+    duration_hours: float,
+    profiles,
+    assets,
+    *,
+    offset_hours=0.0,
+    capabilities=None,
+    compatibility_mode: bool = True,
+) -> BuildContext:
+    requested = capabilities
+    if requested is None:
+        requested = {"deterministic"}
+        if duration_hours < 1:
+            requested.add("subhourly")
+    return BuildContext(
+        builder=model,
+        periods=tuple(periods),
+        duration_hours=duration_hours,
+        profiles=profiles,
+        assets=assets,
+        offset_hours=offset_hours,
+        capabilities=frozenset(requested),
+        compatibility_mode=compatibility_mode,
+    )
 
 
 @dataclass
@@ -27,9 +48,11 @@ class SharedComponentSession:
         for asset in self.context.assets.values():
             if asset.get("type") in MIGRATED_KINDS:
                 by_kind[asset["type"]].append(asset)
-        self.components = [registry.create(kind, asset)
-                           for kind in registry.kinds
-                           for asset in sorted(by_kind[kind], key=lambda item: str(item["id"]))]
+        self.components = [
+            registry.create(kind, asset)
+            for kind in registry.kinds
+            for asset in sorted(by_kind[kind], key=lambda item: str(item["id"]))
+        ]
 
     @property
     def asset_ids(self) -> frozenset[str]:
@@ -38,10 +61,16 @@ class SharedComponentSession:
     def validate(self) -> None:
         for component in self.components:
             component.validate(self.context)
-        errors = [issue for issue in self.context.validation_issues if issue.severity == "error"]
+        errors = [
+            issue
+            for issue in self.context.validation_issues
+            if issue.severity == IssueSeverity.ERROR
+        ]
         if errors:
-            raise ValueError("shared component validation failed: " + "; ".join(
-                f"{issue.asset_id}: {issue.message}" for issue in errors))
+            raise ValueError(
+                "shared component validation failed: "
+                + "; ".join(f"{issue.path}: {issue.message}" for issue in errors)
+            )
 
     def build(self) -> None:
         self.validate()
@@ -49,9 +78,14 @@ class SharedComponentSession:
             component.declare_parameters(self.context)
             component.declare_variables(self.context)
             component.add_constraints(self.context)
+            # Stage 3A records parity-tested cost terms, but the transitional
+            # assembler still owns the authoritative Pyomo objective.
             component.objective_terms(self.context)
 
     def extract(self, solution=None):
         solution = solution or self.context.builder
-        return [result for component in self.components
-                for result in component.extract(solution, self.context)]
+        return [
+            result
+            for component in self.components
+            for result in component.extract(solution, self.context)
+        ]
