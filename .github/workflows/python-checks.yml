@@ -32,6 +32,8 @@ jobs:
           python -m pytest tests/test_stage1_contracts.py
       - name: Stage 2 solver truthfulness and QA checks
         run: python -m pytest tests/test_stage2_solver_truthfulness.py
+      - name: Stage 3A component and parity checks
+        run: python -m pytest tests/components
       - name: Compile check (schema + solver + scripts + tests)
         run: |
           python -m py_compile schema/powersim_schema.py \

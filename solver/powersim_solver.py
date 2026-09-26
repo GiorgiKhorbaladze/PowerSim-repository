@@ -51,11 +51,12 @@ class SolvedRows(list):
     """List-compatible extraction payload carrying this solve's explicit context."""
 
     def __init__(self, rows=(), *, solver_diagnostics=None, window_diagnostics=None,
-                 iis_reports=None, extraction_completed=True):
+                 iis_reports=None, component_results=None, extraction_completed=True):
         super().__init__(rows)
         self.solver_diagnostics = solver_diagnostics
         self.window_diagnostics = list(window_diagnostics or [])
         self.iis_reports = list(iis_reports or [])
+        self.component_results = list(component_results or [])
         self.extraction_completed = extraction_completed
 
 # ── Schema coupling (Stage 1 patch) ───────────────────────────────────
@@ -712,6 +713,12 @@ def solve_window(
     T   = list(range(1, H + 1))    # 1-indexed periods
     m   = pyo.ConcreteModel()
 
+    # Stage 3A rollback seam. The default remains the validated legacy path;
+    # shared is explicit and deterministic (never selected by environment).
+    component_engine = str(solver_cfg.get("component_engine", "legacy")).lower()
+    if component_engine not in {"legacy", "shared"}:
+        raise ValueError("solver_settings.component_engine must be 'legacy' or 'shared'")
+
     # Asset lists by type
     all_ids    = list(assets.keys())
     thermal    = [i for i,a in assets.items() if a["type"]=="thermal"]
@@ -1094,17 +1101,32 @@ def solve_window(
         m.Balance = pyo.Constraint(m.T, rule=balance)
 
     # ── Generation bounds ──────────────────────────────────────────────
+    shared_session = None
+    shared_asset_ids = frozenset()
+    if component_engine == "shared":
+        from powersim.workflows.deterministic import SharedComponentSession, build_stage3a_context
+        shared_context = build_stage3a_context(m, T, dt, profiles_w, assets,
+                                               offset_hours=offset_h)
+        shared_session = SharedComponentSession(shared_context)
+        shared_asset_ids = shared_session.asset_ids
+
     def gen_lb(m, g, t):
         if g in committable:
             return m.p[g,t] >= float(assets[g].get("pmin",0)) * m.u[g,t]
         return m.p[g,t] >= 0
     def gen_ub(m, g, t):
+        if g in shared_asset_ids:
+            return pyo.Constraint.Skip
         pmx = get_pmax_t(assets[g], t-1, profiles_w, offset_h, dt)
         if g in committable:
             return m.p[g,t] <= pmx * m.u[g,t]
         return m.p[g,t] <= pmx
     m.GenLB = pyo.Constraint(m.G, m.T, rule=gen_lb)
     m.GenUB = pyo.Constraint(m.G, m.T, rule=gen_ub)
+    if shared_session is not None:
+        # The component implementation is the sole upper-bound owner for
+        # migrated assets; all other assets remain on the legacy path.
+        shared_session.build()
 
     # ── UC logic: u[t] - u[t-1] = y[t] - z[t] ────────────────────────
     def uc_logic(m, g, t):
@@ -2037,7 +2059,16 @@ def solve_window(
         obj_val = float(pyo.value(m.OBJ))
     except Exception:
         obj_val = float("nan")
-    return SolvedRows(hourly_w, solver_diagnostics=diagnostics), fin_state, solve_wall_s, obj_val
+
+    # Stage 3A canonical component extraction stays full precision and is
+    # transported explicitly with this solve. Legacy serialization remains a
+    # separate compatibility layer.
+    component_results = shared_session.extract(m) if shared_session is not None else []
+    return SolvedRows(
+        hourly_w,
+        solver_diagnostics=diagnostics,
+        component_results=component_results,
+    ), fin_state, solve_wall_s, obj_val
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -2088,9 +2119,14 @@ def solve_all(inp: dict, assets: dict, profiles: dict, gas_limits: dict) -> tupl
         if fin_state.get("_iis_report"):
             iis_reports.append(fin_state["_iis_report"])
         window_record = _window_diagnostic(hourly.solver_diagnostics, 1, 0, H_total_p)
-        rows = SolvedRows(hourly, solver_diagnostics=hourly.solver_diagnostics,
-                          window_diagnostics=[window_record], iis_reports=iis_reports,
-                          extraction_completed=hourly.extraction_completed)
+        rows = SolvedRows(
+            hourly,
+            solver_diagnostics=hourly.solver_diagnostics,
+            window_diagnostics=[window_record],
+            iis_reports=iis_reports,
+            component_results=hourly.component_results,
+            extraction_completed=hourly.extraction_completed,
+        )
         return rows, swall, obj_val
 
     n_windows = math.ceil((H_total_p - window_p) / step_p) + 1
@@ -2098,6 +2134,7 @@ def solve_all(inp: dict, assets: dict, profiles: dict, gas_limits: dict) -> tupl
           f"= {n_windows} windows  (dt={r_min}min, warm_start={warm_start_enabled})")
 
     all_hourly, state, total_swall, obj_accum = [], {}, 0.0, 0.0
+    all_component_results = []
     window_diagnostics = []
     committed_p = 0
     prev_hint: dict | None = None
@@ -2175,6 +2212,16 @@ def solve_all(inp: dict, assets: dict, profiles: dict, gas_limits: dict) -> tupl
             print(f"   ❌ window {w+1} has no usable incumbent; rolling solve aborted")
             break
         all_hourly.extend(hourly_w[:commit_n_p])
+        # Canonical shared results include the full look-ahead window. Publish
+        # only the committed slice so overlapping rolling windows never
+        # duplicate physical observations.
+        window_base_period = int(round(window_offset_h / dt_h))
+        commit_end_period = window_base_period + commit_n_p
+        all_component_results.extend(
+            result
+            for result in hourly_w.component_results
+            if window_base_period <= result.period < commit_end_period
+        )
         committed_p += commit_n_p
         if obj_w == obj_w and len(hourly_w) > 0:
             obj_accum += obj_w * (commit_n_p / len(hourly_w))
@@ -2226,9 +2273,14 @@ def solve_all(inp: dict, assets: dict, profiles: dict, gas_limits: dict) -> tupl
           f"{total_swall:.0f}s ({total_swall/60:.1f} min)")
     aggregate = _aggregate_solver_diagnostics(window_diagnostics, obj_accum)
     complete = committed_p == H_total_p and aggregate.has_incumbent
-    rows = SolvedRows(all_hourly, solver_diagnostics=aggregate,
-                      window_diagnostics=window_diagnostics,
-                      iis_reports=iis_reports, extraction_completed=complete)
+    rows = SolvedRows(
+        all_hourly,
+        solver_diagnostics=aggregate,
+        window_diagnostics=window_diagnostics,
+        iis_reports=iis_reports,
+        component_results=all_component_results,
+        extraction_completed=complete,
+    )
     return rows, total_swall, obj_accum if complete else float("nan")
 
 
@@ -2886,7 +2938,20 @@ def build_result_store(hourly: list, assets: dict, inp: dict, solve_time: float,
             normalized_status=SolverStatus.SOLVER_ERROR, has_incumbent=False,
             result_validity=ResultValidity.INVALID, qa_status=QAStatus.NOT_RUN,
             metadata={"unavailability_reason":"caller did not provide solve execution context"})
-    qa_report = run_qa(inp, result, persisted=True)
+    component_results = list(getattr(hourly, "component_results", None) or [])
+    if component_results:
+        from dataclasses import asdict
+        result["component_results"] = [asdict(item) for item in component_results]
+    else:
+        result["component_results"] = []
+
+    qa_report = run_qa(
+        inp,
+        result,
+        persisted=True,
+        component_results=component_results,
+        component_duration_hours=dt_h if component_results else None,
+    )
     finite_check = next((check for check in qa_report.checks if check.check_id == "finite_values"), None)
     required_finite = finite_check is not None and finite_check.status == QAStatus.PASS
     decision = evaluate_publication(solver_diagnostics, qa_report,
