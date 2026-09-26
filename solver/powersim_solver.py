@@ -712,6 +712,12 @@ def solve_window(
     T   = list(range(1, H + 1))    # 1-indexed periods
     m   = pyo.ConcreteModel()
 
+    # Stage 3A rollback seam. The default remains the validated legacy path;
+    # shared is explicit and deterministic (never selected by environment).
+    component_engine = str(solver_cfg.get("component_engine", "legacy")).lower()
+    if component_engine not in {"legacy", "shared"}:
+        raise ValueError("solver_settings.component_engine must be 'legacy' or 'shared'")
+
     # Asset lists by type
     all_ids    = list(assets.keys())
     thermal    = [i for i,a in assets.items() if a["type"]=="thermal"]
@@ -1094,17 +1100,32 @@ def solve_window(
         m.Balance = pyo.Constraint(m.T, rule=balance)
 
     # ── Generation bounds ──────────────────────────────────────────────
+    shared_session = None
+    shared_asset_ids = frozenset()
+    if component_engine == "shared":
+        from powersim.workflows.deterministic import SharedComponentSession, build_stage3a_context
+        shared_context = build_stage3a_context(m, T, dt, profiles_w, assets,
+                                               offset_hours=offset_h)
+        shared_session = SharedComponentSession(shared_context)
+        shared_asset_ids = shared_session.asset_ids
+
     def gen_lb(m, g, t):
         if g in committable:
             return m.p[g,t] >= float(assets[g].get("pmin",0)) * m.u[g,t]
         return m.p[g,t] >= 0
     def gen_ub(m, g, t):
+        if g in shared_asset_ids:
+            return pyo.Constraint.Skip
         pmx = get_pmax_t(assets[g], t-1, profiles_w, offset_h, dt)
         if g in committable:
             return m.p[g,t] <= pmx * m.u[g,t]
         return m.p[g,t] <= pmx
     m.GenLB = pyo.Constraint(m.G, m.T, rule=gen_lb)
     m.GenUB = pyo.Constraint(m.G, m.T, rule=gen_ub)
+    if shared_session is not None:
+        # The component implementation is the sole upper-bound owner for
+        # migrated assets; all other assets remain on the legacy path.
+        shared_session.build()
 
     # ── UC logic: u[t] - u[t-1] = y[t] - z[t] ────────────────────────
     def uc_logic(m, g, t):
