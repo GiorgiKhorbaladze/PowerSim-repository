@@ -15,10 +15,12 @@ class Component(Protocol):
     def objective_terms(self, builder, context) -> list[CostTerm]: ...
     def boundary_state(self, solution, at) -> BoundaryState: ...
     def extract(self, solution, context) -> ComponentResult: ...
-    def qa(self, resolved_input, result, context) -> list[CheckResult]: ...
+    def qa_spec(self) -> ComponentQAMetadata: ...
 ```
 
 `BuildContext` supplies canonical time/scenario/contingency sets, `Δt`, buses, workflow capabilities, initial/boundary state, profiles and shared registries. Components may publish typed ports—power injection/withdrawal, reserve capability, fuel use, water flow, state and cost—but may not reach into another component's private variables. Couplers (balance, reserve, cascade, gas and network) consume ports.
+
+`qa_spec()` may expose typed variable meanings, units, sign conventions and reconstruction metadata only. Components do **not** determine QA status and must not call the constraint-building implementation to validate its own equations. Independent modules under `powersim/qa` reconstruct invariants from resolved inputs and canonical physical results and exclusively own tolerance application and `pass|warn|fail` computation. This intentional implementation separation prevents a modelling defect from being repeated by its validator.
 
 ## Common asset contract
 
@@ -38,6 +40,12 @@ All assets require stable `id`, `kind`, display metadata, enabled state, bus (un
 | Reserves | product definition, requirement, direction, response time, duration, eligibility and substitution | consumes provider offers; publishes requirement/shortfall/cost diagnostics |
 | Network | buses/branches, angle/flow/injection equations, slack/islands, limits/loss policy | consumes nodal power ports; publishes flows/congestion/security state |
 | Imports/exchange | directional capacity/profile, price, ramp/energy/take-or-pay and outage identity | nodal power, reserve eligibility if declared, costs and boundary use |
+
+## DC-network electrical units
+
+The canonical normalized branch parameter is `susceptance_mw_per_rad`, with flow defined as `flow_mw = susceptance_mw_per_rad × (theta_from_rad - theta_to_rad - phase_shift_rad)` before any explicitly modelled tap convention. Import adapters may accept series reactance `x_pu` only when an explicit positive `base_mva` is supplied; for the simple lossless, unit-tap convention they normalize it as `susceptance_mw_per_rad = base_mva / x_pu`. Adapters must apply and record any transformer tap or sign convention rather than silently folding it into `x_pu`.
+
+The canonical project snapshot stores the normalized MW/radian value and provenance of the conversion. Validation rejects zero reactance, ambiguous `x_pu`, missing base MVA, inconsistent project/branch bases, and a mixture of normalized and per-unit semantics that cannot be reconciled deterministically.
 
 ## State and chronology
 

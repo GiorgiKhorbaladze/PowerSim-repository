@@ -8,7 +8,7 @@ Approve these documents; inventory claims/capabilities; capture golden inputs/re
 
 ## Stage 1 — package and contracts
 
-Create installable `src/powersim`; introduce typed, versioned project/input/result/QA/run contracts and explicit migrations. Wrap current schema/CLI without changing equations. Publish JSON Schema/OpenAPI and contract fixtures. **Exit:** clean install, round trips and legacy JSON compatibility.
+Create installable `src/powersim`; introduce typed, versioned project/input/result/QA/run contracts and explicit migrations. Wrap current schema/CLI without changing equations. Normalize every network branch to canonical `susceptance_mw_per_rad`; require and record `base_mva` when converting legacy/imported `x_pu`, reject ambiguous network inputs, and add conversion fixtures before any network migration. Publish JSON Schema/OpenAPI and contract fixtures. **Exit:** clean install, round trips, legacy JSON compatibility, and unambiguous DC-network units.
 
 ## Stage 2 — solver/result truthfulness
 
@@ -20,7 +20,7 @@ Define ports/build/boundary protocols. Extract one component at a time from `pow
 
 ## Stage 4 — deterministic, reserve and DC-network hardening
 
-Make deterministic assembler canonical; implement product-correct reserve coupling and technically correct nodal DC formulation. Complete invariant QA and LP price-resolve semantics. **Exit:** Gates G2–G3 and performance budget.
+Make deterministic assembler canonical; implement product-correct reserve coupling and a technically correct nodal DC formulation using the frozen MW/radian semantics. Complete independent invariant QA, including full-precision and persisted-result tolerance profiles, and LP price-resolve semantics. **Exit:** Gates G2–G3 and performance budget.
 
 ## Stage 5 — workflow parity
 

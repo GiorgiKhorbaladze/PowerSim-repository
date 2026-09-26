@@ -4,6 +4,8 @@
 **Audience:** product, modelling, backend, UI, QA, and release owners  
 **Rule:** this document defines the destination; `MIGRATION_PLAN.md` defines how to reach it without a rewrite.
 
+This document describes the **PowerSim 1.0 target state**, not the capability of the current `main` branch. No target capability may be presented as already implemented until its applicable release gate in `DEFINITION_OF_DONE.md` has passed with recorded evidence.
+
 ## Product boundary
 
 PowerSim 1.0 is an offline-capable, production-quality platform for chronological electricity-system planning and operational studies. It supports deterministic UC/ED, stochastic UC, adequacy assessment, security-constrained UC, and scoped capacity-expansion screening using shared representations of thermal, reservoir and run-of-river hydro, wind, solar, BESS, pumped hydro, demand response, reserves, DC networks, and imports/cross-border exchange.

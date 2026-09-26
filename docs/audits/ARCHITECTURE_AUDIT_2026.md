@@ -51,9 +51,13 @@ The HTML and AI FastAPI pieces demonstrate a control surface but ordinary operat
 
 ## Open PR review: #63, #64 and #65
 
-GitHub PR pages/API and pull refs were unavailable from this execution environment (HTTP/tunnel 401/403), and the supplied repository contains no refs or metadata for these PRs. A content-based merge recommendation would therefore be fabricated. Provisional disposition for **each of #63, #64 and #65: `partially reused` pending mandatory re-review**—do not merge or close in this architecture task. Cherry-pick only contract-compatible, independently tested leaf changes; supersede conflicting monolith/schema/UI architecture, and close only after replacement evidence exists. The architecture owner must record title/head SHA/file diff/tests for each PR before implementation Stage 1; then choose exactly `merged as-is`, `partially reused`, `superseded`, or `closed`.
+| PR | Verified state | Disposition | Rationale and required action |
+|---|---|---|---|
+| **#63 — “Preload 2026 PLEXOS RoR profiles and auto-bind to hydro_ror assets”** | Open, `mergeable=false`; no automated tests added | **SUPERSEDED / CLOSE** after a final unique-functionality check; **do not merge as-is** | `main` already contains merged PR #62, “Seed PLEXOS 2026 RoR profiles and auto-bind to hydro_ror assets.” Compare #63 against current `main` once to confirm it contains no unique functionality; if confirmed, close it as superseded rather than resolving conflicts in duplicate work. |
+| **#64 — “ui: fix Results-tab false import-error banner, CDN silent failure, export downloads, tab overflow”** | Open and mergeable | **MERGE AS-IS** if its current regression and manual Playwright checks still pass after rebasing; **PARTIALLY REUSE** only if a concrete conflict is found | These are confirmed defects in the legacy UI, which must remain functional throughout staged migration. Record rebase/check evidence. Preserve these behaviors as automated browser E2E cases when the replacement UI is introduced. |
+| **#65 — “2027–2030 RES/BESS integration study audit and final methodology”** | Draft; study-specific | **PARTIALLY REUSE / DO NOT MERGE AS-IS** | Retain generic audit/extraction ideas only in an explicitly separated study/tooling layer. Do not promote study-specific assumptions or acceptance criteria into PowerSim core architecture. Its GitHub Actions workflow uploads raw files—including `Info.xlsx`, PLEXOS ZIP inputs and model archives—as CI artifacts; it must not merge until confidentiality, licensing and data-governance review confirms those files are safe for GitHub Actions and artifact storage. |
 
-This provisional decision is intentionally conservative: no unknown PR should merge as-is into a frozen architecture, while potentially valuable tests/data/bug fixes should not be discarded unseen.
+This review does not merge or close any PR. The stated conditions must be applied by the respective PR owner, and the resulting evidence retained in the PR record.
 
 ## Priority recommendations
 

@@ -1,18 +1,21 @@
 # Model invariants and post-solve QA
 
-QA independently recomputes residuals from the resolved input and canonical extracted result. It must not merely evaluate Pyomo constraint bodies from the solved model. Checks apply per interval/scenario/contingency and at rolling seams.
+QA independently recomputes residuals from the resolved input and canonical extracted result. It must not merely evaluate Pyomo constraint bodies from the solved model or delegate pass/fail decisions to physical components. Checks apply per interval/scenario/contingency and at rolling seams.
 
 ## Tolerance policy
 
-For equality residual `r = lhs-rhs`, pass when `|r| ≤ A + R·max(1, |lhs|, |rhs|)`. Defaults are `A_power=1e-4 MW`, `A_energy=1e-4 MWh`, `A_binary=1e-6`, `A_water=1e-6` in the declared canonical water volume, `A_gas=1e-6` in the declared gas unit, `A_cost=$0.01`, and `R=1e-7`. Inequality violation uses the same scale rule. Aggregated energy/cost checks use `R_aggregate=1e-6`.
+Mandatory QA operates on unrounded, full-precision canonical numeric results in memory whenever possible and persists its report with the result. For equality residual `r = lhs-rhs`, the internal pass threshold is `T_internal = max(T_solver, A + R·max(1, |lhs|, |rhs|))`, where `T_solver` is the effective primal/integrality feasibility tolerance translated into the invariant's units. Initial release defaults are `A_power=1e-4 MW`, `A_energy=1e-4 MWh`, `A_binary=1e-6`, `A_water=1e-6` in the declared canonical water volume, `A_gas=1e-6` in the declared gas unit, `A_cost=$0.01`, and `R=1e-7`; backend qualification may establish stricter values but must record the effective profile. Inequality violation uses the same scale-aware rule, and aggregated energy/cost checks begin with `R_aggregate=1e-6`.
 
-Results within 10× the pass threshold are `warn`; beyond that are `fail`. A project may request stricter tolerances but may not loosen release defaults without recording an approved tolerance profile. Integrality checks use distance to the nearest integer. Missing/nonfinite required data is always `fail`.
+Persisted-result reconciliation is a distinct check and must account for serialization quantization. Its threshold is `T_persisted = T_internal + Q`, where `Q` is a conservative propagation bound computed from each participating field's declared serialization resolution and the number/coefficient of rounded terms (for a single value rounded to step `q`, its contribution is at most `q/2`). Thus legacy fields serialized to approximately `0.001 MW` cannot be judged against `0.0001 MW` alone. New contracts record field precision or preserve sufficient digits. Persisted reconciliation detects corruption or inconsistent extraction; it must never reject an otherwise valid full-precision solution solely because export rounded it.
+
+For either profile, results within 10× the applicable pass threshold are `warn`; beyond that are `fail`. A project may request stricter tolerances but may not loosen release defaults without recording an approved tolerance profile. Integrality checks use distance to the nearest integer. Missing/nonfinite required data is always `fail`. Every QA result identifies `internal_full_precision` or `persisted_reconciliation`, effective solver tolerance, scale terms and quantization allowance.
 
 ## Mandatory checks
 
 | Invariant | Independent reconstruction | Required scope |
 |---|---|---|
-| Electricity balance | generation + discharge + imports + load shed = demand + charge + pumping + exports + modeled auxiliary load + curtailment only where convention requires | every interval; system balance when copperplate |
+| Electricity balance | actual dispatched generation + discharge + imports + load shedding = demand + charge + pumping + exports + modeled auxiliary consumption; curtailment is excluded to avoid double counting | every interval; system balance when copperplate |
+| Renewable resource accounting | available renewable power/energy = dispatched renewable power/energy + curtailed renewable power/energy, subject to an explicitly declared availability/curtailment convention | every renewable asset and interval, with interval-to-energy reconciliation |
 | Nodal balance | injections − withdrawals = signed incident branch flows | every bus, interval, scenario and contingency; sum of nodal residuals cross-checks system balance |
 | Hydro water balance | storage[t] = storage[t−1] + inflow + upstream delayed release − release − spill − losses; generation/release conversion and bounds | every reservoir and seam; initial/terminal targets separately reported |
 | BESS SOC | SOC[t] = retained SOC[t−1] + η_charge·charge·Δt − discharge·Δt/η_discharge; auxiliary treatment and power/energy bounds | every BESS and seam; forbid simultaneous modes where configured |
@@ -22,7 +25,7 @@ Results within 10× the pass threshold are `warn`; beyond that are `fail`. A pro
 | Minimum up/down | every start/shutdown activates the complete required forward/backward duration, including carry-in age and horizon end policy | every committable unit and seam |
 | Reserve headroom | awarded upward/downward products plus dispatch fit available limits without double counting; eligibility and response/ramp constraints hold | unit/product/interval; scenario policy declared |
 | Reserve energy sufficiency | storage/hydro/DR/import energy can sustain each product for its declared duration after efficiency, state and competing awards | provider/product/interval |
-| Transmission | DC flow equals susceptance × angle difference (with tap/phase policy); normal/emergency bounds, reference angle and island rules hold | branch/interval/scenario/contingency |
+| Transmission | DC flow equals `susceptance_mw_per_rad × (theta_from_rad − theta_to_rad − phase_shift_rad)` under the declared tap/sign convention; imported `x_pu` conversion reconciles to explicit `base_mva`; normal/emergency bounds, reference angle and island rules hold | branch/interval/scenario/contingency |
 | Gas | unit heat/fuel reconstruction, shared pipeline/supply/period caps and rolling cumulative use reconcile | unit and constraint group at every applicable period |
 | Objective | sum all variable, startup/shutdown, no-load, fuel, emissions, import/export, reserve, penalty, water/terminal and risk terms | total and term breakdown; compare incumbent objective |
 
