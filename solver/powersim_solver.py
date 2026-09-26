@@ -51,12 +51,16 @@ class SolvedRows(list):
     """List-compatible extraction payload carrying this solve's explicit context."""
 
     def __init__(self, rows=(), *, solver_diagnostics=None, window_diagnostics=None,
-                 iis_reports=None, extraction_completed=True):
+                 iis_reports=None, extraction_completed=True,
+                 component_results=None):
         super().__init__(rows)
         self.solver_diagnostics = solver_diagnostics
         self.window_diagnostics = list(window_diagnostics or [])
         self.iis_reports = list(iis_reports or [])
         self.extraction_completed = extraction_completed
+        # Explicit per-solve transport; never module-global. Values remain
+        # full precision until a caller deliberately serializes them.
+        self.component_results = list(component_results or [])
 
 # ── Schema coupling (Stage 1 patch) ───────────────────────────────────
 # The schema module owns the version constant and the output validator.
@@ -712,6 +716,12 @@ def solve_window(
     T   = list(range(1, H + 1))    # 1-indexed periods
     m   = pyo.ConcreteModel()
 
+    # Stage 3A rollback seam. The default remains the validated legacy path;
+    # shared is explicit and deterministic (never selected by environment).
+    component_engine = str(solver_cfg.get("component_engine", "legacy")).lower()
+    if component_engine not in {"legacy", "shared"}:
+        raise ValueError("solver_settings.component_engine must be 'legacy' or 'shared'")
+
     # Asset lists by type
     all_ids    = list(assets.keys())
     thermal    = [i for i,a in assets.items() if a["type"]=="thermal"]
@@ -1094,17 +1104,33 @@ def solve_window(
         m.Balance = pyo.Constraint(m.T, rule=balance)
 
     # ── Generation bounds ──────────────────────────────────────────────
+    shared_session = None
+    shared_asset_ids = frozenset()
+    if component_engine == "shared":
+        from powersim.workflows.deterministic import SharedComponentSession, build_stage3a_context
+        shared_context = build_stage3a_context(m, T, dt, profiles_w, assets,
+                                               offset_hours=offset_h,
+                                               validation_mode="legacy")
+        shared_session = SharedComponentSession(shared_context)
+        shared_asset_ids = shared_session.asset_ids
+
     def gen_lb(m, g, t):
         if g in committable:
             return m.p[g,t] >= float(assets[g].get("pmin",0)) * m.u[g,t]
         return m.p[g,t] >= 0
     def gen_ub(m, g, t):
+        if g in shared_asset_ids:
+            return pyo.Constraint.Skip
         pmx = get_pmax_t(assets[g], t-1, profiles_w, offset_h, dt)
         if g in committable:
             return m.p[g,t] <= pmx * m.u[g,t]
         return m.p[g,t] <= pmx
     m.GenLB = pyo.Constraint(m.G, m.T, rule=gen_lb)
     m.GenUB = pyo.Constraint(m.G, m.T, rule=gen_ub)
+    if shared_session is not None:
+        # The component implementation is the sole upper-bound owner for
+        # migrated assets; all other assets remain on the legacy path.
+        shared_session.build()
 
     # ── UC logic: u[t] - u[t-1] = y[t] - z[t] ────────────────────────
     def uc_logic(m, g, t):
@@ -1810,7 +1836,7 @@ def solve_window(
             })
         fin_state = {"_iis_report": iis_report} if iis_report else {}
         return SolvedRows(hourly_w_empty, solver_diagnostics=diagnostics,
-                          extraction_completed=False), fin_state, solve_wall_s, float("nan")
+                          extraction_completed=False, component_results=[]), fin_state, solve_wall_s, float("nan")
 
     def pv(var, *keys):
         try: v = pyo.value(var[keys]); return float(v) if v else 0.0
@@ -2037,7 +2063,9 @@ def solve_window(
         obj_val = float(pyo.value(m.OBJ))
     except Exception:
         obj_val = float("nan")
-    return SolvedRows(hourly_w, solver_diagnostics=diagnostics), fin_state, solve_wall_s, obj_val
+    component_results = shared_session.extract(m) if shared_session is not None else []
+    return SolvedRows(hourly_w, solver_diagnostics=diagnostics,
+                      component_results=component_results), fin_state, solve_wall_s, obj_val
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -2090,14 +2118,15 @@ def solve_all(inp: dict, assets: dict, profiles: dict, gas_limits: dict) -> tupl
         window_record = _window_diagnostic(hourly.solver_diagnostics, 1, 0, H_total_p)
         rows = SolvedRows(hourly, solver_diagnostics=hourly.solver_diagnostics,
                           window_diagnostics=[window_record], iis_reports=iis_reports,
-                          extraction_completed=hourly.extraction_completed)
+                          extraction_completed=hourly.extraction_completed,
+                          component_results=hourly.component_results)
         return rows, swall, obj_val
 
     n_windows = math.ceil((H_total_p - window_p) / step_p) + 1
     print(f"⚙️  Rolling Horizon: {H_total_h}h ÷ {window_h}h window × {step_h}h step "
           f"= {n_windows} windows  (dt={r_min}min, warm_start={warm_start_enabled})")
 
-    all_hourly, state, total_swall, obj_accum = [], {}, 0.0, 0.0
+    all_hourly, all_component_results, state, total_swall, obj_accum = [], [], {}, 0.0, 0.0
     window_diagnostics = []
     committed_p = 0
     prev_hint: dict | None = None
@@ -2160,7 +2189,10 @@ def solve_all(inp: dict, assets: dict, profiles: dict, gas_limits: dict) -> tupl
             state = dict(state)
             state["_dr_remaining_hours"] = dict(remaining_dr_hours)
 
-        commit_n_p = min(step_p, end_p - start_p)
+        # Intermediate windows commit one step; the final window commits its
+        # entire remaining slice. This keeps both hourly and component
+        # extraction complete without publishing earlier look-ahead tails.
+        commit_n_p = (end_p - start_p) if is_last_window else min(step_p, end_p - start_p)
         hourly_w, state, swall, obj_w = solve_window(
             assets, demand_w, profiles_w, reserve_prods, gas_limits_window,
             init_state=state, solver_cfg=solver_cfg_win, offset_h=window_offset_h,
@@ -2175,6 +2207,10 @@ def solve_all(inp: dict, assets: dict, profiles: dict, gas_limits: dict) -> tupl
             print(f"   ❌ window {w+1} has no usable incumbent; rolling solve aborted")
             break
         all_hourly.extend(hourly_w[:commit_n_p])
+        committed_coordinates = {row["t"] for row in hourly_w[:commit_n_p]}
+        all_component_results.extend(
+            item for item in hourly_w.component_results
+            if item.period in committed_coordinates)
         committed_p += commit_n_p
         if obj_w == obj_w and len(hourly_w) > 0:
             obj_accum += obj_w * (commit_n_p / len(hourly_w))
@@ -2228,7 +2264,8 @@ def solve_all(inp: dict, assets: dict, profiles: dict, gas_limits: dict) -> tupl
     complete = committed_p == H_total_p and aggregate.has_incumbent
     rows = SolvedRows(all_hourly, solver_diagnostics=aggregate,
                       window_diagnostics=window_diagnostics,
-                      iis_reports=iis_reports, extraction_completed=complete)
+                      iis_reports=iis_reports, extraction_completed=complete,
+                      component_results=all_component_results)
     return rows, total_swall, obj_accum if complete else float("nan")
 
 
@@ -2874,6 +2911,15 @@ def build_result_store(hourly: list, assets: dict, inp: dict, solve_time: float,
         "monthly_summary": monthly,
         "stochastic_summary": None
     }
+
+    # Full-precision Stage-3A records are carried explicitly by SolvedRows.
+    # This additive field does not alter the rounded legacy hourly payload.
+    result["component_results"] = [
+        item.__dict__.copy() if hasattr(item, "__dict__") else dict(item)
+        for item in getattr(hourly, "component_results", [])
+    ]
+    result["diagnostics"]["component_engine"] = str(
+        (inp.get("solver_settings") or {}).get("component_engine", "legacy"))
 
     # Stage 2 canonical publication path. Legacy output is rounded during
     # extraction, so reconciliation intentionally uses persisted tolerances.
