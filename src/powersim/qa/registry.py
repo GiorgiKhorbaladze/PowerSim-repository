@@ -36,6 +36,7 @@ def run_qa(
                 list(component_results),
                 component_duration_hours,
                 tolerance=tolerance,
+                resolved_input=resolved_input,
             )
         )
 

@@ -4,10 +4,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from powersim.components import BuildContext, stage3a_registry
+from powersim.components import BuildContext, stage3b_registry
 from powersim.contracts import IssueSeverity
 
-MIGRATED_KINDS = frozenset({"wind", "solar", "hydro_ror", "import"})
+MIGRATED_KINDS = frozenset({"thermal", "wind", "solar", "hydro_ror", "import"})
 
 
 def build_stage3a_context(
@@ -20,6 +20,8 @@ def build_stage3a_context(
     offset_hours=0.0,
     capabilities=None,
     compatibility_mode: bool = True,
+    initial_state=None,
+    availability_resolver=None,
 ) -> BuildContext:
     requested = capabilities
     if requested is None:
@@ -35,6 +37,8 @@ def build_stage3a_context(
         offset_hours=offset_hours,
         capabilities=frozenset(requested),
         compatibility_mode=compatibility_mode,
+        legacy_initial_state=dict(initial_state or {}),
+        availability_resolver=availability_resolver,
     )
 
 
@@ -43,7 +47,7 @@ class SharedComponentSession:
     context: BuildContext
 
     def __post_init__(self):
-        registry = stage3a_registry()
+        registry = stage3b_registry()
         by_kind = {kind: [] for kind in registry.kinds}
         for asset in self.context.assets.values():
             if asset.get("type") in MIGRATED_KINDS:

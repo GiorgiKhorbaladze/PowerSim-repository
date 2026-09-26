@@ -33,6 +33,15 @@ class ComponentResult:
     curtailed_mw: float | None = None
     curtailed_mwh: float | None = None
     cost_usd: float | None = None
+    # UC fields are intentionally optional so passive components retain the
+    # compact Stage-3A record shape.  Thermal components populate these from
+    # canonical solver extraction; QA combines them with resolved inputs.
+    commitment: float | None = None
+    startup: float | None = None
+    shutdown: float | None = None
+    startup_hot: float | None = None
+    pmin_mw: float | None = None
+    pmax_mw: float | None = None
 
 
 @dataclass(frozen=True)
@@ -40,4 +49,3 @@ class ComponentQAMetadata:
     kind: str
     checks: tuple[str, ...]
     convention: str = "positive injection supplies the electricity balance"
-
