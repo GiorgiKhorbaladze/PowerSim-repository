@@ -1114,6 +1114,7 @@ def solve_window(
                                                    solver_cfg.get("_co2_price_usd_per_t", 0) or 0))
         shared_session = SharedComponentSession(shared_context)
         shared_asset_ids = shared_session.asset_ids
+    shared_bess_ids = set(shared_asset_ids).intersection(bess_ids)
 
     def gen_lb(m, g, t):
         if g in shared_asset_ids:
@@ -1412,6 +1413,8 @@ def solve_window(
 
     if bess_ids:
         def bess_soc(m, b, t):
+            if b in shared_bess_ids:
+                return pyo.Constraint.Skip
             a  = assets[b]
             ec = float(a["eta_charge"])
             ed = float(a["eta_discharge"])
@@ -1427,12 +1430,20 @@ def solve_window(
             return m.soc[b,t] == soc_prev * (1.0 - sd * dt) \
                    + (ec * m.ch[b,t] - m.dis[b,t] / max(ed,0.001) - aux) * dt
         def bess_soc_lb(m, b, t):
+            if b in shared_bess_ids:
+                return pyo.Constraint.Skip
             return m.soc[b,t] >= float(assets[b]["soc_min"]) * float(assets[b]["energy_mwh"])
         def bess_soc_ub(m, b, t):
+            if b in shared_bess_ids:
+                return pyo.Constraint.Skip
             return m.soc[b,t] <= float(assets[b]["soc_max"]) * float(assets[b]["energy_mwh"])
         def bess_ch_ub(m, b, t):
+            if b in shared_bess_ids:
+                return pyo.Constraint.Skip
             return m.ch[b,t] <= _bess_charge_cap(b) * m.xch[b,t]
         def bess_dis_ub(m, b, t):
+            if b in shared_bess_ids:
+                return pyo.Constraint.Skip
             return m.dis[b,t] <= _bess_discharge_cap(b) * (1 - m.xch[b,t])
         m.BessSOC   = pyo.Constraint(m.BESS, m.T, rule=bess_soc)
         m.BessSOCLB = pyo.Constraint(m.BESS, m.T, rule=bess_soc_lb)
