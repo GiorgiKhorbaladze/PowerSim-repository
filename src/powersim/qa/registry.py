@@ -7,8 +7,8 @@ DEFAULT_CHECKS = (FiniteValuesCheck(), ElectricityBalanceCheck(), BasicBoundsChe
 
 
 def run_qa(resolved_input: Any, result: Any, checks: Iterable[Any] = DEFAULT_CHECKS,
-           tolerance: TolerancePolicy = DEFAULT_TOLERANCES) -> QAReport:
-    results=[check.run(resolved_input,result,tolerance) for check in checks]
+           tolerance: TolerancePolicy = DEFAULT_TOLERANCES, *, persisted: bool = False) -> QAReport:
+    results=[check.run(resolved_input,result,tolerance,persisted=persisted) for check in checks]
     executed=[check.status for check in results if check.status != QAStatus.NOT_RUN]
     if not executed: status=QAStatus.NOT_RUN
     elif QAStatus.FAIL in executed: status=QAStatus.FAIL

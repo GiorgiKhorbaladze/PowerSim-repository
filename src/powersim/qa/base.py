@@ -7,4 +7,5 @@ from .tolerance import TolerancePolicy
 
 class QACheck(Protocol):
     check_id: str
-    def run(self, resolved_input: Any, result: Any, tolerance: TolerancePolicy) -> QACheckResult: ...
+    def run(self, resolved_input: Any, result: Any, tolerance: TolerancePolicy,
+            *, persisted: bool = False) -> QACheckResult: ...

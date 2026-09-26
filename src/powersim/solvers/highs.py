@@ -13,7 +13,7 @@ from .status import actual_mip_gap, normalize_termination
 
 class HighsBackend:
     name = "highs"
-    _supported = {"mip_gap", "time_limit_s", "threads", "log_to_console"}
+    _supported = {"mip_gap", "time_limit_s", "threads", "log_to_console", "warm_start"}
 
     def available(self) -> bool:
         try:
@@ -40,7 +40,9 @@ class HighsBackend:
         solver = Highs()
         mapping = {"mip_gap": "mip_rel_gap", "time_limit_s": "time_limit", "threads": "threads", "log_to_console": "log_to_console"}
         for key, value in effective.items():
-            solver.highs_options[mapping[key]] = value
+            if key != "warm_start":
+                solver.highs_options[mapping[key]] = value
+        solver.config.warmstart = bool(effective.get("warm_start", False))
         solver.config.load_solution = False
         started = utc_now(); tick = time.perf_counter()
         try:

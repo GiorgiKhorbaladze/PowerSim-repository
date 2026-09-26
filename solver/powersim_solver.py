@@ -46,6 +46,18 @@ import pandas as pd
 import pyomo.environ as pyo
 warnings.filterwarnings("ignore")
 
+
+class SolvedRows(list):
+    """List-compatible extraction payload carrying this solve's explicit context."""
+
+    def __init__(self, rows=(), *, solver_diagnostics=None, window_diagnostics=None,
+                 iis_reports=None, extraction_completed=True):
+        super().__init__(rows)
+        self.solver_diagnostics = solver_diagnostics
+        self.window_diagnostics = list(window_diagnostics or [])
+        self.iis_reports = list(iis_reports or [])
+        self.extraction_completed = extraction_completed
+
 # ── Schema coupling (Stage 1 patch) ───────────────────────────────────
 # The schema module owns the version constant and the output validator.
 # We import it defensively so the solver still runs if the schema is in
@@ -1758,10 +1770,10 @@ def solve_window(
         "mip_gap": float(solver_cfg.get("mip_gap", 0.005)),
         "threads": int(solver_cfg.get("threads", 0)),
         "log_to_console": False,
+        "warm_start": bool(warm_start),
     }
     outcome = solve_model(m, backend, solve_options)
     diagnostics = outcome.diagnostics
-    solve_window._solver_diagnostics = diagnostics
     result = outcome.raw_result
     backend_used = diagnostics.backend
     solve_wall_s = diagnostics.orchestration_runtime_s or 0.0
@@ -1797,7 +1809,8 @@ def solve_window(
                 "bess": {}, "hydro": {}, "dr": {}, "pumped_hydro": {},
             })
         fin_state = {"_iis_report": iis_report} if iis_report else {}
-        return hourly_w_empty, fin_state, solve_wall_s, float("nan")
+        return SolvedRows(hourly_w_empty, solver_diagnostics=diagnostics,
+                          extraction_completed=False), fin_state, solve_wall_s, float("nan")
 
     def pv(var, *keys):
         try: v = pyo.value(var[keys]); return float(v) if v else 0.0
@@ -2024,7 +2037,7 @@ def solve_window(
         obj_val = float(pyo.value(m.OBJ))
     except Exception:
         obj_val = float("nan")
-    return hourly_w, fin_state, solve_wall_s, obj_val
+    return SolvedRows(hourly_w, solver_diagnostics=diagnostics), fin_state, solve_wall_s, obj_val
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -2074,14 +2087,18 @@ def solve_all(inp: dict, assets: dict, profiles: dict, gas_limits: dict) -> tupl
             init_state={}, solver_cfg=solver_cfg, offset_h=start_h, dt=dt_h)
         if fin_state.get("_iis_report"):
             iis_reports.append(fin_state["_iis_report"])
-        solve_all._iis_reports = iis_reports   # piggyback for build_result_store
-        return hourly, swall, obj_val
+        window_record = _window_diagnostic(hourly.solver_diagnostics, 1, 0, H_total_p)
+        rows = SolvedRows(hourly, solver_diagnostics=hourly.solver_diagnostics,
+                          window_diagnostics=[window_record], iis_reports=iis_reports,
+                          extraction_completed=hourly.extraction_completed)
+        return rows, swall, obj_val
 
     n_windows = math.ceil((H_total_p - window_p) / step_p) + 1
     print(f"⚙️  Rolling Horizon: {H_total_h}h ÷ {window_h}h window × {step_h}h step "
           f"= {n_windows} windows  (dt={r_min}min, warm_start={warm_start_enabled})")
 
     all_hourly, state, total_swall, obj_accum = [], {}, 0.0, 0.0
+    window_diagnostics = []
     committed_p = 0
     prev_hint: dict | None = None
 
@@ -2149,9 +2166,14 @@ def solve_all(inp: dict, assets: dict, profiles: dict, gas_limits: dict) -> tupl
             init_state=state, solver_cfg=solver_cfg_win, offset_h=window_offset_h,
             dt=dt_h, warm_start=prev_hint if warm_start_enabled else None,
             commit_periods=commit_n_p)
+        window_diagnostics.append(_window_diagnostic(
+            hourly_w.solver_diagnostics, w + 1, start_p, end_p))
         if state.get("_iis_report"):
             iis_reports.append({**state["_iis_report"], "window": w+1})
         total_swall += swall
+        if not hourly_w.solver_diagnostics.has_incumbent:
+            print(f"   ❌ window {w+1} has no usable incumbent; rolling solve aborted")
+            break
         all_hourly.extend(hourly_w[:commit_n_p])
         committed_p += commit_n_p
         if obj_w == obj_w and len(hourly_w) > 0:
@@ -2199,10 +2221,54 @@ def solve_all(inp: dict, assets: dict, profiles: dict, gas_limits: dict) -> tupl
                     hint["u"][(g, j)] = v
             prev_hint = hint
 
-    print(f"\n   ✅ Total: {committed_p} periods ({committed_p*dt_h:.0f}h), "
+    completion_mark = "✅" if committed_p == H_total_p else "❌ INCOMPLETE"
+    print(f"\n   {completion_mark} Total: {committed_p} periods ({committed_p*dt_h:.0f}h), "
           f"{total_swall:.0f}s ({total_swall/60:.1f} min)")
-    solve_all._iis_reports = iis_reports       # piggyback for build_result_store
-    return all_hourly, total_swall, obj_accum
+    aggregate = _aggregate_solver_diagnostics(window_diagnostics, obj_accum)
+    complete = committed_p == H_total_p and aggregate.has_incumbent
+    rows = SolvedRows(all_hourly, solver_diagnostics=aggregate,
+                      window_diagnostics=window_diagnostics,
+                      iis_reports=iis_reports, extraction_completed=complete)
+    return rows, total_swall, obj_accum if complete else float("nan")
+
+
+def _window_diagnostic(diagnostics, number: int, start_period: int, end_period: int) -> dict:
+    return {"window": number, "start_period": start_period, "end_period": end_period,
+            "diagnostics": diagnostics.model_dump(mode="json")}
+
+
+def _aggregate_solver_diagnostics(windows: list[dict], objective: float):
+    """Aggregate deterministically; any failed window dominates later success."""
+    from powersim.contracts import QAStatus, ResultValidity, SolverDiagnostics, SolverStatus
+    from powersim.solvers import actual_mip_gap
+    if not windows:
+        return SolverDiagnostics(backend="unknown", termination_condition="no windows solved",
+            normalized_status=SolverStatus.SOLVER_ERROR, has_incumbent=False,
+            result_validity=ResultValidity.INVALID, qa_status=QAStatus.NOT_RUN)
+    diagnostics = [w["diagnostics"] for w in windows]
+    severity = {"solver_error": 7, "numerical_error": 6, "infeasible": 5, "unbounded": 4,
+                "time_limit": 3, "feasible": 2, "optimal": 1}
+    worst_record = max(windows, key=lambda w: severity[w["diagnostics"]["normalized_status"]])
+    worst = worst_record["diagnostics"]
+    all_incumbents = all(d["has_incumbent"] for d in diagnostics)
+    failure = worst["normalized_status"] in {"solver_error", "numerical_error", "infeasible", "unbounded"}
+    has_incumbent = all_incumbents and not failure
+    bounds = [d.get("best_bound") for d in diagnostics]
+    best_bound = sum(bounds) if has_incumbent and all(v is not None for v in bounds) else None
+    incumbent = objective if has_incumbent and objective == objective else None
+    return SolverDiagnostics(backend=worst["backend"], backend_version=worst.get("backend_version"),
+        requested_backend=worst.get("requested_backend"), termination_condition=(
+            f"rolling aggregate: window {worst_record['window']} "
+            f"{worst['termination_condition']}"), normalized_status=worst["normalized_status"],
+        incumbent_objective=incumbent, best_bound=best_bound,
+        actual_mip_gap=actual_mip_gap(incumbent, best_bound),
+        requested_mip_gap=worst.get("requested_mip_gap"),
+        runtime_s=sum(d.get("runtime_s") or 0 for d in diagnostics) or None,
+        orchestration_runtime_s=sum(d.get("orchestration_runtime_s") or 0 for d in diagnostics),
+        has_incumbent=has_incumbent, result_validity=ResultValidity.INVALID, qa_status=QAStatus.NOT_RUN,
+        effective_options=worst.get("effective_options") or {},
+        solve_started_at=diagnostics[0].get("solve_started_at"), solve_finished_at=diagnostics[-1].get("solve_finished_at"),
+        metadata={"window_count": len(windows), "failed_window": worst_record["window"] if failure else None})
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -2720,16 +2786,11 @@ def build_result_store(hourly: list, assets: dict, inp: dict, solve_time: float,
             "data_source_fingerprint": fingerprint,
         },
         "diagnostics": {
-            "solver_status":           (getattr(getattr(solve_window, "_solver_diagnostics", None), "normalized_status", None).value
-                                         if getattr(getattr(solve_window, "_solver_diagnostics", None), "normalized_status", None)
-                                         else "solver_error"),
-            "solver_diagnostics":      (getattr(solve_window, "_solver_diagnostics").model_dump(mode="json")
-                                         if getattr(solve_window, "_solver_diagnostics", None) else None),
+            "solver_status":           "pending_qa",
+            "solver_diagnostics":      None,
             "solver_version":          SOLVER_VERSION,
             "solve_time_s":            round(solve_time, 2),
-            "mip_gap_pct":             ((getattr(solve_window, "_solver_diagnostics").actual_mip_gap * 100)
-                                         if getattr(solve_window, "_solver_diagnostics", None) is not None
-                                         and getattr(solve_window, "_solver_diagnostics").actual_mip_gap is not None else None),
+            "mip_gap_pct":             None,
             "infeasible_flag":         total_unserv > 0.1,
             "unserved_hours":          sum(1 for h in hourly if h["unserved_mwh"] > 0.1),
             "reserve_shortfall_hours": {rid: sum(1 for h in hourly if h["reserve_shortfall"].get(rid,0) > 0.1) for rid in res_ids},
@@ -2742,7 +2803,7 @@ def build_result_store(hourly: list, assets: dict, inp: dict, solve_time: float,
             "n_reserves":              len(res_ids),
             "output_schema_warnings":  [],    # filled in after validation below
             # v1.4: IIS infeasibility report (null on feasible runs).
-            "iis":                     getattr(solve_all, "_iis_reports", None) or None,
+            "iis":                     getattr(hourly, "iis_reports", None) or None,
             # v1.5 Hydro Stage 1 — inflow unit normalization provenance.
             "hydro_inflow_unit_used":         (inp.get("_hydro_inflow_diagnostic") or {}).get("unit_declared"),
             "hydro_inflow_conversion_applied": bool((inp.get("_hydro_inflow_diagnostic") or {}).get("conversion_applied")),
@@ -2813,6 +2874,36 @@ def build_result_store(hourly: list, assets: dict, inp: dict, solve_time: float,
         "monthly_summary": monthly,
         "stochastic_summary": None
     }
+
+    # Stage 2 canonical publication path. Legacy output is rounded during
+    # extraction, so reconciliation intentionally uses persisted tolerances.
+    from powersim.contracts import QAStatus, ResultValidity, SolverDiagnostics, SolverStatus
+    from powersim.qa import run_qa
+    from powersim.results import evaluate_publication, finalized_diagnostics
+    solver_diagnostics = getattr(hourly, "solver_diagnostics", None)
+    if solver_diagnostics is None:
+        solver_diagnostics = SolverDiagnostics(backend="unknown", termination_condition="diagnostics unavailable",
+            normalized_status=SolverStatus.SOLVER_ERROR, has_incumbent=False,
+            result_validity=ResultValidity.INVALID, qa_status=QAStatus.NOT_RUN,
+            metadata={"unavailability_reason":"caller did not provide solve execution context"})
+    qa_report = run_qa(inp, result, persisted=True)
+    finite_check = next((check for check in qa_report.checks if check.check_id == "finite_values"), None)
+    required_finite = finite_check is not None and finite_check.status == QAStatus.PASS
+    decision = evaluate_publication(solver_diagnostics, qa_report,
+        extraction_completed=bool(getattr(hourly, "extraction_completed", False)),
+        required_values_finite=required_finite)
+    solver_diagnostics = finalized_diagnostics(solver_diagnostics, qa_report.status, decision.publishable)
+    result["qa"] = qa_report.model_dump(mode="json")
+    result["publication"] = {"publishable":decision.publishable, "reasons":list(decision.reasons)}
+    result["diagnostics"].update({
+        "solver_status":solver_diagnostics.normalized_status.value,
+        "solver_diagnostics":solver_diagnostics.model_dump(mode="json"),
+        "window_diagnostics":getattr(hourly, "window_diagnostics", []),
+        "mip_gap_pct":solver_diagnostics.actual_mip_gap * 100 if solver_diagnostics.actual_mip_gap is not None else None,
+        "result_validity":solver_diagnostics.result_validity.value,
+        "qa_status":solver_diagnostics.qa_status.value,
+        "qa_tolerance_mode":"persisted",
+    })
 
     # ── Output-side validation hook (Stage-1 patch) ────────────────────
     try:
@@ -3194,7 +3285,8 @@ if __name__ == "__main__":
     # Print summary
     sm = results["system_summary"]
     print(f"\n{'='*60}")
-    print(f"✅ Solved!")
+    print("✅ Solved and publishable!" if results.get("publication", {}).get("publishable")
+          else "❌ Run is invalid and not publishable; inspect diagnostics.")
     print(f"   Total Cost:  ${sm['total_cost_usd']:>14,.0f}")
     print(f"   Total Energy:{sm['total_energy_mwh']:>14,.0f} MWh")
     print(f"   Avg λ:       ${sm['avg_lambda_usd_mwh']:>10.3f}/MWh")

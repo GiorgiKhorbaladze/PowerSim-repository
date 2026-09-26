@@ -14,4 +14,4 @@ The only normalized values are `optimal`, `feasible`, `time_limit`, `infeasible`
 
 Mapping order ensures a time limit remains `time_limit`, whether or not it has an incumbent. Incumbent availability is an independent flag. Ambiguous states fail closed rather than claiming feasibility. `solved` is not a solver status.
 
-Infeasible, unbounded, numerical-error, solver-error, and any no-incumbent outcome is invalid. A time-limited incumbent may proceed to extraction and QA, but can be at most valid-with-warnings.
+Infeasible, unbounded, numerical-error, solver-error, and any no-incumbent outcome is invalid. A time-limited incumbent may proceed to extraction and QA, but can be at most valid-with-warnings. For rolling horizons, the highest-severity window status is the aggregate status; all windows must have incumbents, and a no-incumbent window aborts the run. Consequently a later success cannot hide an earlier failure.

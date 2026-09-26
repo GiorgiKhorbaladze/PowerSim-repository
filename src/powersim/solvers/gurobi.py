@@ -9,7 +9,7 @@ from .highs import HighsBackend
 
 class GurobiBackend(HighsBackend):
     name = "gurobi"
-    _supported = {"mip_gap", "time_limit_s", "threads", "log_to_console"}
+    _supported = {"mip_gap", "time_limit_s", "threads", "log_to_console", "warm_start"}
 
     def available(self) -> bool:
         try:
@@ -25,6 +25,14 @@ class GurobiBackend(HighsBackend):
         except Exception:
             return None
 
+    def configure_solver(self, solver: Any, effective: dict[str, Any]) -> None:
+        mapping = {"mip_gap":"MIPGap", "time_limit_s":"TimeLimit", "threads":"Threads",
+                   "log_to_console":"OutputFlag", "warm_start":"LPWarmStart"}
+        for key, value in effective.items():
+            if key == "log_to_console": value = int(bool(value))
+            elif key == "warm_start": value = 2 if value else 0
+            solver.gurobi_options[mapping[key]] = value
+
     def solve(self, model: Any, options: dict[str, Any] | None = None, *, requested_backend: str | None = None):
         # Kept independent of workflow code while sharing diagnostics semantics.
         from pyomo.contrib.appsi.solvers.gurobi import Gurobi
@@ -34,8 +42,8 @@ class GurobiBackend(HighsBackend):
         import math, time
         if not self.available(): raise SolverUnavailableError("Gurobi is unavailable or unlicensed")
         effective = self.normalize_options(options or {}); solver = Gurobi()
-        mapping = {"mip_gap":"MIPGap", "time_limit_s":"TimeLimit", "threads":"Threads", "log_to_console":"OutputFlag"}
-        for key, value in effective.items(): solver.gurobi_options[mapping[key]] = int(bool(value)) if key == "log_to_console" else value
+        self.configure_solver(solver, effective)
+        solver.config.warmstart = bool(effective.get("warm_start", False))
         solver.config.load_solution = False; started = utc_now(); tick = time.perf_counter()
         try:
             raw = solver.solve(model); elapsed = time.perf_counter()-tick

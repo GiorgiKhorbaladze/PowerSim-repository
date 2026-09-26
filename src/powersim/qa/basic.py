@@ -10,13 +10,13 @@ from .tolerance import TolerancePolicy
 def _rows(result: Any) -> list[dict[str, Any]]:
     if hasattr(result, "model_dump"): result = result.model_dump(mode="python")
     if not isinstance(result, dict): return []
-    rows = result.get("hourly") or result.get("hourly_results") or result.get("intervals") or []
+    rows = result.get("hourly") or result.get("hourly_results") or result.get("hourly_system") or result.get("intervals") or []
     return list(rows) if isinstance(rows, (list, tuple)) else []
 
 
 class FiniteValuesCheck:
     check_id = "finite_values"
-    def run(self, resolved_input: Any, result: Any, tolerance: TolerancePolicy) -> QACheckResult:
+    def run(self, resolved_input: Any, result: Any, tolerance: TolerancePolicy, *, persisted: bool = False) -> QACheckResult:
         bad: list[str] = []; checked = 0
         def visit(value: Any, path: str) -> None:
             nonlocal checked
@@ -31,12 +31,12 @@ class FiniteValuesCheck:
         visit(result, "result")
         return QACheckResult(check_id=self.check_id, status=QAStatus.FAIL if bad else QAStatus.PASS,
             message=f"found {len(bad)} non-finite value(s)" if bad else f"all {checked} numeric values are finite",
-            witness={"paths": bad}, checked_count=checked, max_violation=None)
+            witness={"paths": bad, "tolerance_mode": "persisted" if persisted else "internal"}, checked_count=checked, max_violation=None)
 
 
 class ElectricityBalanceCheck:
     check_id = "electricity_balance"
-    def run(self, resolved_input: Any, result: Any, tolerance: TolerancePolicy) -> QACheckResult:
+    def run(self, resolved_input: Any, result: Any, tolerance: TolerancePolicy, *, persisted: bool = False) -> QACheckResult:
         rows = _rows(result)
         if not rows:
             return QACheckResult(check_id=self.check_id, status=QAStatus.NOT_RUN,
@@ -47,19 +47,25 @@ class ElectricityBalanceCheck:
             duration_h = float(row.get("period_minutes", 60.0)) / 60.0
             unserved_mw = float(row.get("unserved_mwh", 0.0)) / duration_h
             lhs = float(row["generation_mw"]) + unserved_mw
-            rhs = float(row["load_mw"]) + float(row.get("storage_charge_mw", 0.0))
+            # Stage-2 compatibility convention: generation_mw is net supply;
+            # storage charging/pumping is already subtracted by extraction.
+            rhs = float(row["load_mw"])
             violation = abs(lhs-rhs); checked += 1
-            if violation >= worst: worst=violation; witness={"interval":row.get("t",index),"supply":lhs,"demand":rhs}
+            if violation >= worst:
+                worst=violation
+                witness={"interval":row.get("t",index),"supply":lhs,"demand":rhs,"duration_h":duration_h}
         if not checked:
             return QACheckResult(check_id=self.check_id,status=QAStatus.NOT_RUN,message="balance fields are unavailable",witness={})
-        scale=max(abs(witness.get("supply",0)),abs(witness.get("demand",0)),1.0); limit=tolerance.limit(scale)
+        scale=max(abs(witness.get("supply",0)),abs(witness.get("demand",0)),1.0)
+        limit=tolerance.balance_limit(scale, witness["duration_h"], persisted=persisted)
+        witness["tolerance_mode"] = "persisted" if persisted else "internal"
         return QACheckResult(check_id=self.check_id,status=QAStatus.FAIL if worst>limit else QAStatus.PASS,
             message=f"maximum balance residual is {worst:g} MW",witness=witness,tolerance=limit,max_violation=worst,checked_count=checked)
 
 
 class BasicBoundsCheck:
     check_id = "basic_bounds"
-    def run(self, resolved_input: Any, result: Any, tolerance: TolerancePolicy) -> QACheckResult:
+    def run(self, resolved_input: Any, result: Any, tolerance: TolerancePolicy, *, persisted: bool = False) -> QACheckResult:
         rows=_rows(result)
         if not rows: return QACheckResult(check_id=self.check_id,status=QAStatus.NOT_RUN,message="canonical interval results are unavailable")
         bad=[]; checked=0
@@ -69,11 +75,13 @@ class BasicBoundsCheck:
                     checked+=1
                     if float(row[key]) < -tolerance.internal_absolute: bad.append({"interval":row.get("t",i),"field":key,"value":row[key]})
         return QACheckResult(check_id=self.check_id,status=QAStatus.FAIL if bad else QAStatus.PASS,
-            message=f"found {len(bad)} negative domain value(s)" if bad else "basic non-negative domains hold",witness={"worst":bad[:10]},checked_count=checked)
+            message=f"found {len(bad)} negative domain value(s)" if bad else "basic non-negative domains hold",
+            witness={"worst":bad[:10], "tolerance_mode":"persisted" if persisted else "internal"},checked_count=checked)
 
 
 class ObjectiveReconstructionCheck:
     check_id = "objective_reconstruction"
-    def run(self, resolved_input: Any, result: Any, tolerance: TolerancePolicy) -> QACheckResult:
+    def run(self, resolved_input: Any, result: Any, tolerance: TolerancePolicy, *, persisted: bool = False) -> QACheckResult:
         return QACheckResult(check_id=self.check_id,status=QAStatus.NOT_RUN,
-            message="deferred until Stage 3 canonical component cost extraction",witness={})
+            message="deferred until Stage 3 canonical component cost extraction",
+            witness={"tolerance_mode":"persisted" if persisted else "internal"})
