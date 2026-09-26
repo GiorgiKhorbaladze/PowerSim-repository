@@ -87,7 +87,10 @@ def _gse_kpi():
     r = jl("out/final/gse_168h/powersim_results.json")
     assert r["system_summary"]["total_unserved_mwh"] == 0
     assert r["metadata"]["closure_ok"] is True
-    assert r["diagnostics"]["solver_status"] == "solved"
+    # Stage 2 exposes the typed, truthful normalized solver status.  This
+    # deterministic HiGHS case is proven optimal; "solved" was a pre-Stage-2
+    # UI label and is not a valid SolverStatus contract value.
+    assert r["diagnostics"]["solver_status"] == "optimal"
 run("gse_168h_kpi_correct", _gse_kpi)
 
 print("\n▶ STEP 6 — sub-hourly 15-min × 24h")

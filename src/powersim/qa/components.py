@@ -107,7 +107,11 @@ def check_component_results(
             },
         )
 
-        if result.component_kind == "import" or result.curtailed_mw is None:
+        # VRE curtailment is available generation that was not injected.
+        # Demand response uses ``curtailed_*`` to mean deliberately reduced
+        # demand, which is represented as a positive supply injection.  Its
+        # accounting is checked separately below.
+        if result.component_kind in {"import", "dr"} or result.curtailed_mw is None:
             continue
 
         curtailed = float(result.curtailed_mw)
@@ -221,6 +225,34 @@ def check_component_results(
             _record(buckets, "component.pumped_hydro_bounds", passed=violation <= limit, violation=violation, tolerance=limit, witness={"asset_id":asset_id,"period":item.period,"soc_mwh":soc})
             violation = min(float(item.injection_mw), float(item.withdrawal_mw))
             _record(buckets, "component.pumped_hydro_mode", passed=violation <= limit, violation=violation, tolerance=limit, witness={"asset_id":asset_id,"period":item.period})
+
+    dr_by_asset: dict[str, list[ComponentResult]] = defaultdict(list)
+    for item in results:
+        if item.component_kind == "dr":
+            dr_by_asset[item.asset_id].append(item)
+    for asset_id, observations in dr_by_asset.items():
+        asset = asset_map.get(asset_id, {})
+        observations.sort(key=lambda item: item.period)
+        cap = float(asset.get("pmax_curtail", 0) or 0)
+        total_energy = 0.0
+        for item in observations:
+            curtailed = float(item.curtailed_mw or 0)
+            limit = tolerance.limit(max(1.0, cap, curtailed, float(item.injection_mw)))
+            violation = max(0.0, curtailed - cap, abs(float(item.injection_mw) - curtailed))
+            _record(buckets, "component.demand_response_bounds", passed=violation <= limit, violation=violation, tolerance=limit,
+                    witness={"asset_id": asset_id, "period": item.period, "curtailed_mw": curtailed, "injection_mw": item.injection_mw, "available_mw": item.available_mw})
+            total_energy += float(item.curtailed_mwh or 0)
+            expected_cost = float(asset.get("price_per_mwh", 0) or 0) * float(item.curtailed_mwh or 0)
+            cost_violation = abs(float(item.cost_usd or 0) - expected_cost)
+            _record(buckets, "component.demand_response_cost", passed=cost_violation <= tolerance.limit(max(1.0, abs(expected_cost))), violation=cost_violation,
+                    tolerance=tolerance.limit(max(1.0, abs(expected_cost))), witness={"asset_id": asset_id, "period": item.period, "cost_usd": item.cost_usd, "expected_cost_usd": expected_cost})
+        hours = float(asset.get("hours_per_year_max", 8760) or 0)
+        horizon_hours = len(observations) * duration_hours
+        cap_mwh = cap * hours * min(1.0, horizon_hours / 8760.0)
+        annual_violation = max(0.0, total_energy - cap_mwh)
+        annual_limit = tolerance.limit(max(1.0, cap_mwh, total_energy))
+        _record(buckets, "component.demand_response_energy_cap", passed=annual_violation <= annual_limit, violation=annual_violation, tolerance=annual_limit,
+                witness={"asset_id": asset_id, "curtailed_mwh": total_energy, "cap_mwh": cap_mwh, "horizon_hours": horizon_hours})
 
     checks: list[QACheckResult] = []
     for check_id in sorted(buckets):
