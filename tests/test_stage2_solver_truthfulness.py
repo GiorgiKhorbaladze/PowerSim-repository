@@ -58,7 +58,7 @@ def test_highs_optimal_infeasible_unbounded_and_provenance():
 
 
 def test_deterministic_extraction_runs_qa_and_finalizes_publication():
-    from solver.powersim_solver import SolvedRows, build_asset_map, build_result_store, solve_all
+    from solver.powersim_solver import SolvedRows, _aggregate_solver_diagnostics, build_asset_map, build_result_store, solve_all
     inp={"assets":[{"id":"g","type":"thermal","committable":False,"pmin":0,"pmax":10,"mc":1,"vom":0}],
          "profiles":{"demand":[5.0]},"study_horizon":{"horizon_hours":1},"reserve_products":[],
          "solver_settings":{"solver":"highs"}}
@@ -75,13 +75,23 @@ def test_deterministic_extraction_runs_qa_and_finalizes_publication():
     invalid=build_result_store(invalid_rows,assets,inp,elapsed,float("nan"))
     assert invalid["publication"]["publishable"] is False
     assert invalid["diagnostics"]["result_validity"] == "invalid"
+    window={"window":1,"start_period":0,"end_period":1,
+            "diagnostics":rows.solver_diagnostics.model_dump(mode="json")}
+    second={**window,"window":2,"start_period":1,"end_period":2}
+    rolling_diagnostics=_aggregate_solver_diagnostics([window,second],objective)
+    rolling_rows=SolvedRows(rows,solver_diagnostics=rolling_diagnostics,
+        window_diagnostics=[window,second],extraction_completed=True)
+    rolling=build_result_store(rolling_rows,assets,inp,elapsed,objective)
+    assert rolling["diagnostics"]["mip_gap_pct"] is None
 
 
 def test_gurobi_conditionally():
     pyo=pytest.importorskip("pyomo.environ"); backend=__import__("powersim.solvers.gurobi",fromlist=["GurobiBackend"]).GurobiBackend()
     if not backend.available(): pytest.skip("Gurobi unavailable or unlicensed")
-    model=pyo.ConcreteModel(); model.x=pyo.Var(bounds=(1,None)); model.o=pyo.Objective(expr=model.x)
-    assert backend.solve(model).diagnostics.normalized_status.value == "optimal"
+    model=pyo.ConcreteModel(); model.x=pyo.Var(bounds=(1,None),initialize=3); model.o=pyo.Objective(expr=model.x)
+    result=backend.solve(model,{"warm_start":True}).diagnostics
+    assert result.normalized_status.value == "optimal"
+    assert result.metadata["warm_start_values_submitted"] == 1
 
 
 def test_qa_and_publication_gate():
@@ -132,12 +142,18 @@ def test_persisted_rounding_tolerance_is_explicit_and_prevents_false_failure():
 
 
 def test_gurobi_warm_start_option_reaches_backend():
+    pyo=pytest.importorskip("pyomo.environ")
     from powersim.solvers.gurobi import GurobiBackend
     class FakeSolver:
-        gurobi_options={}
+        def __init__(self): self.gurobi_options={}; self.starts=[]; self.instance=None
+        def set_instance(self,model): self.instance=model
+        def set_var_attr(self,var,attribute,value): self.starts.append((var,attribute,value))
     solver=FakeSolver()
-    GurobiBackend().configure_solver(solver,{"warm_start":True})
+    model=pyo.ConcreteModel(); model.x=pyo.Var(initialize=7); model.y=pyo.Var()
+    backend=GurobiBackend(); backend.configure_solver(solver,{"warm_start":True})
+    count=backend.apply_warm_start(solver,model)
     assert solver.gurobi_options["LPWarmStart"] == 2
+    assert count == 1 and solver.starts[0][1:] == ("Start",7.0)
 
 
 def test_rolling_aggregate_failure_cannot_be_hidden_by_later_success():
@@ -151,6 +167,19 @@ def test_rolling_aggregate_failure_cannot_be_hidden_by_later_success():
     assert aggregate.normalized_status.value == "infeasible"
     assert not aggregate.has_incumbent and aggregate.result_validity.value == "invalid"
     assert aggregate.metadata["failed_window"] == 1
+
+
+def test_multiple_optimal_windows_preserve_window_gaps_but_have_no_aggregate_gap():
+    from solver.powersim_solver import _aggregate_solver_diagnostics
+    first=diagnostics(incumbent_objective=100,best_bound=90,actual_mip_gap=.1)
+    second=diagnostics(incumbent_objective=80,best_bound=76,actual_mip_gap=.05)
+    windows=[{"window":1,"start_period":0,"end_period":2,"diagnostics":first.model_dump(mode="json")},
+             {"window":2,"start_period":1,"end_period":3,"diagnostics":second.model_dump(mode="json")}]
+    aggregate=_aggregate_solver_diagnostics(windows,150)
+    assert aggregate.normalized_status.value == "optimal" and aggregate.has_incumbent
+    assert aggregate.incumbent_objective is aggregate.best_bound is aggregate.actual_mip_gap is None
+    assert aggregate.metadata["aggregate_gap_available"] is False
+    assert [w["diagnostics"]["actual_mip_gap"] for w in windows] == [.1,.05]
 
 
 def test_solved_rows_keep_run_diagnostics_isolated():

@@ -2237,10 +2237,9 @@ def _window_diagnostic(diagnostics, number: int, start_period: int, end_period: 
             "diagnostics": diagnostics.model_dump(mode="json")}
 
 
-def _aggregate_solver_diagnostics(windows: list[dict], objective: float):
+def _aggregate_solver_diagnostics(windows: list[dict], _objective: float):
     """Aggregate deterministically; any failed window dominates later success."""
     from powersim.contracts import QAStatus, ResultValidity, SolverDiagnostics, SolverStatus
-    from powersim.solvers import actual_mip_gap
     if not windows:
         return SolverDiagnostics(backend="unknown", termination_condition="no windows solved",
             normalized_status=SolverStatus.SOLVER_ERROR, has_incumbent=False,
@@ -2253,22 +2252,23 @@ def _aggregate_solver_diagnostics(windows: list[dict], objective: float):
     all_incumbents = all(d["has_incumbent"] for d in diagnostics)
     failure = worst["normalized_status"] in {"solver_error", "numerical_error", "infeasible", "unbounded"}
     has_incumbent = all_incumbents and not failure
-    bounds = [d.get("best_bound") for d in diagnostics]
-    best_bound = sum(bounds) if has_incumbent and all(v is not None for v in bounds) else None
-    incumbent = objective if has_incumbent and objective == objective else None
     return SolverDiagnostics(backend=worst["backend"], backend_version=worst.get("backend_version"),
         requested_backend=worst.get("requested_backend"), termination_condition=(
             f"rolling aggregate: window {worst_record['window']} "
             f"{worst['termination_condition']}"), normalized_status=worst["normalized_status"],
-        incumbent_objective=incumbent, best_bound=best_bound,
-        actual_mip_gap=actual_mip_gap(incumbent, best_bound),
+        # Overlapping rolling-window objectives and bounds are not one global
+        # primal/dual pair. Preserve them per-window, never synthesize a gap.
+        incumbent_objective=None, best_bound=None, actual_mip_gap=None,
         requested_mip_gap=worst.get("requested_mip_gap"),
         runtime_s=sum(d.get("runtime_s") or 0 for d in diagnostics) or None,
         orchestration_runtime_s=sum(d.get("orchestration_runtime_s") or 0 for d in diagnostics),
         has_incumbent=has_incumbent, result_validity=ResultValidity.INVALID, qa_status=QAStatus.NOT_RUN,
         effective_options=worst.get("effective_options") or {},
         solve_started_at=diagnostics[0].get("solve_started_at"), solve_finished_at=diagnostics[-1].get("solve_finished_at"),
-        metadata={"window_count": len(windows), "failed_window": worst_record["window"] if failure else None})
+        metadata={"window_count": len(windows), "failed_window": worst_record["window"] if failure else None,
+                  "aggregate_gap_available":False,
+                  "aggregate_gap_unavailable_reason":
+                      "overlapping rolling windows do not define a single global primal/bound pair"})
 
 
 # ══════════════════════════════════════════════════════════════════════

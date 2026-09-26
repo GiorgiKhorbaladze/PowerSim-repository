@@ -33,6 +33,19 @@ class GurobiBackend(HighsBackend):
             elif key == "warm_start": value = 2 if value else 0
             solver.gurobi_options[mapping[key]] = value
 
+    def apply_warm_start(self, solver: Any, model: Any) -> int:
+        """Submit finite Pyomo values through APPSI's supported Start attribute."""
+        import math
+        from pyomo.environ import Var
+        solver.set_instance(model)
+        submitted = 0
+        for variable in model.component_data_objects(Var, active=True, descend_into=True):
+            value = variable.value
+            if value is not None and math.isfinite(float(value)):
+                solver.set_var_attr(variable, "Start", float(value))
+                submitted += 1
+        return submitted
+
     def solve(self, model: Any, options: dict[str, Any] | None = None, *, requested_backend: str | None = None):
         # Kept independent of workflow code while sharing diagnostics semantics.
         from pyomo.contrib.appsi.solvers.gurobi import Gurobi
@@ -43,9 +56,9 @@ class GurobiBackend(HighsBackend):
         if not self.available(): raise SolverUnavailableError("Gurobi is unavailable or unlicensed")
         effective = self.normalize_options(options or {}); solver = Gurobi()
         self.configure_solver(solver, effective)
-        solver.config.warmstart = bool(effective.get("warm_start", False))
         solver.config.load_solution = False; started = utc_now(); tick = time.perf_counter()
         try:
+            warm_start_count = self.apply_warm_start(solver, model) if effective.get("warm_start") else 0
             raw = solver.solve(model); elapsed = time.perf_counter()-tick
             termination = str(raw.termination_condition); status = normalize_termination(raw.termination_condition)
             finite = lambda v: float(v) if v is not None and math.isfinite(float(v)) else None
@@ -57,12 +70,14 @@ class GurobiBackend(HighsBackend):
             if has_incumbent: solver.load_vars()
             backend_runtime = finite(getattr(raw,"wallclock_time",None))
             metadata = {"actual_gap_source":"incumbent_and_bound" if actual_mip_gap(incumbent,bound) is not None else None}
+            metadata["warm_start_values_submitted"] = warm_start_count
             if metadata_status: metadata["status_downgrade_reason"]=f"{metadata_status} reported without a finite incumbent"
             if backend_runtime is None: metadata["runtime_unavailable_reason"]="APPSI result did not expose backend wallclock_time"
         except Exception as exc:
             elapsed=time.perf_counter()-tick; raw=None; termination=f"exception: {type(exc).__name__}: {exc}"
             status=normalize_termination(exc); incumbent=bound=None; has_incumbent=False; backend_runtime=None
-            metadata={"exception_type":type(exc).__name__,"runtime_unavailable_reason":"solve raised before backend runtime was reported"}
+            metadata={"exception_type":type(exc).__name__,"runtime_unavailable_reason":"solve raised before backend runtime was reported",
+                      "warm_start_values_submitted":locals().get("warm_start_count",0)}
         diagnostics=SolverDiagnostics(backend=self.name,backend_version=self.version(),requested_backend=requested_backend or self.name,
             termination_condition=termination,normalized_status=status,incumbent_objective=incumbent,best_bound=bound,
             actual_mip_gap=actual_mip_gap(incumbent,bound),requested_mip_gap=effective.get("mip_gap"),runtime_s=backend_runtime,
