@@ -2,6 +2,7 @@ name: Python checks
 
 on:
   push:
+    branches: [main]
   pull_request:
 
 jobs:
@@ -29,6 +30,8 @@ jobs:
           python scripts/generate_contract_schemas.py
           git diff --exit-code -- schemas/v1
           python -m pytest tests/test_stage1_contracts.py
+      - name: Stage 2 solver truthfulness and QA checks
+        run: python -m pytest tests/test_stage2_solver_truthfulness.py
       - name: Compile check (schema + solver + scripts + tests)
         run: |
           python -m py_compile schema/powersim_schema.py \

@@ -43,12 +43,51 @@
           "title": "Check Id",
           "type": "string"
         },
+        "checked_count": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Checked Count"
+        },
+        "max_violation": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Violation"
+        },
         "message": {
           "title": "Message",
           "type": "string"
         },
         "status": {
           "$ref": "#/$defs/QAStatus"
+        },
+        "tolerance": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tolerance"
         },
         "witness": {
           "additionalProperties": true,
@@ -152,6 +191,11 @@
           "default": null,
           "title": "Best Bound"
         },
+        "effective_options": {
+          "additionalProperties": true,
+          "title": "Effective Options",
+          "type": "object"
+        },
         "has_incumbent": {
           "title": "Has Incumbent",
           "type": "boolean"
@@ -167,6 +211,11 @@
           ],
           "default": null,
           "title": "Incumbent Objective"
+        },
+        "metadata": {
+          "additionalProperties": true,
+          "title": "Metadata",
+          "type": "object"
         },
         "normalized_status": {
           "$ref": "#/$defs/SolverStatus"
@@ -186,6 +235,18 @@
         },
         "qa_status": {
           "$ref": "#/$defs/QAStatus"
+        },
+        "requested_backend": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Requested Backend"
         },
         "requested_mip_gap": {
           "anyOf": [
@@ -215,6 +276,30 @@
           ],
           "default": null,
           "title": "Runtime S"
+        },
+        "solve_finished_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Solve Finished At"
+        },
+        "solve_started_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Solve Started At"
         },
         "termination_condition": {
           "title": "Termination Condition",

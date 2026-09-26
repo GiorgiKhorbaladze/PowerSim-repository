@@ -46,6 +46,18 @@ import pandas as pd
 import pyomo.environ as pyo
 warnings.filterwarnings("ignore")
 
+
+class SolvedRows(list):
+    """List-compatible extraction payload carrying this solve's explicit context."""
+
+    def __init__(self, rows=(), *, solver_diagnostics=None, window_diagnostics=None,
+                 iis_reports=None, extraction_completed=True):
+        super().__init__(rows)
+        self.solver_diagnostics = solver_diagnostics
+        self.window_diagnostics = list(window_diagnostics or [])
+        self.iis_reports = list(iis_reports or [])
+        self.extraction_completed = extraction_completed
+
 # ── Schema coupling (Stage 1 patch) ───────────────────────────────────
 # The schema module owns the version constant and the output validator.
 # We import it defensively so the solver still runs if the schema is in
@@ -1750,89 +1762,33 @@ def solve_window(
     # ── Solve ──────────────────────────────────────────────────────────
     m.dual = pyo.Suffix(direction=pyo.Suffix.IMPORT)
     backend = str(solver_cfg.get("solver", "auto")).lower()
-
-    def _make_highs():
-        try:
-            from pyomo.contrib.appsi.solvers.highs import HiGHS as _C
-        except ImportError:
-            from pyomo.contrib.appsi.solvers.highs import Highs as _C
-        s = _C()
-        s.highs_options["time_limit"]     = float(solver_cfg.get("time_limit_s", 300))
-        s.highs_options["mip_rel_gap"]    = float(solver_cfg.get("mip_gap", 0.005))
-        s.highs_options["log_to_console"] = False
-        return s, "highs"
-
-    def _make_gurobi():
-        from pyomo.contrib.appsi.solvers.gurobi import Gurobi as _G
-        s = _G()
-        # Probe availability — Gurobi class imports cleanly even without a
-        # license; the runtime check tells us if we actually have a solver.
-        av = s.available()
-        ok_flags = ("FullLicense", "LimitedLicense", "available",
-                    "Available", "NotFound")   # names vary by Pyomo version
-        if str(av).split(".")[-1] in ("NotFound", "BadLicense"):
-            raise RuntimeError(f"Gurobi not usable ({av})")
-        s.gurobi_options["TimeLimit"] = float(solver_cfg.get("time_limit_s", 300))
-        s.gurobi_options["MIPGap"]    = float(solver_cfg.get("mip_gap", 0.005))
-        s.gurobi_options["Threads"]   = int(solver_cfg.get("threads", 0))
-        s.gurobi_options["OutputFlag"]= 0
-        if warm_start:
-            s.gurobi_options["LPWarmStart"] = 2
-        return s, "gurobi"
-
-    solver = None; backend_used = "appsi_highs"
-    try:
-        if backend == "gurobi":
-            solver, backend_used = _make_gurobi()
-        elif backend == "highs":
-            solver, backend_used = _make_highs()
-        else:  # auto — prefer Gurobi when usable, else HiGHS
-            try:
-                solver, backend_used = _make_gurobi()
-            except Exception:
-                solver, backend_used = _make_highs()
-    except Exception:
-        solver = pyo.SolverFactory("appsi_highs"); backend_used = "appsi_highs"
-
-    t0     = time.time()
-    # Pyomo 6.10 dropped the load_solutions kwarg from appsi.Highs.solve().
-    # Try the old signature first; fall back silently for newer versions.
-    # If the solver detects infeasibility, we wrap the exception so the
-    # IIS diagnostic still runs and callers receive a structured report
-    # rather than a Python traceback.
-    result = None
-    infeasible = False
-    try:
-        try:
-            result = solver.solve(m, load_solutions=True)
-        except TypeError:
-            result = solver.solve(m)
-    except Exception as e:
-        msg = str(e).lower()
-        if any(tag in msg for tag in ("infeasib", "no solution", "not found")):
-            infeasible = True
-            print(f"⚠️  solver declared infeasibility: {e}")
-        else:
-            raise
-    solve_wall_s = time.time() - t0
+    # Stage 2 compatibility seam: model construction remains legacy, while
+    # backend selection, option validation and solve diagnostics are canonical.
+    from powersim.solvers import solve_model
+    solve_options = {
+        "time_limit_s": float(solver_cfg.get("time_limit_s", 300)),
+        "mip_gap": float(solver_cfg.get("mip_gap", 0.005)),
+        "threads": int(solver_cfg.get("threads", 0)),
+        "log_to_console": False,
+        "warm_start": bool(warm_start),
+    }
+    outcome = solve_model(m, backend, solve_options)
+    diagnostics = outcome.diagnostics
+    result = outcome.raw_result
+    backend_used = diagnostics.backend
+    solve_wall_s = diagnostics.orchestration_runtime_s or 0.0
+    infeasible = diagnostics.normalized_status.value == "infeasible"
+    unusable = not diagnostics.has_incumbent
 
     # ── v1.4: IIS diagnostics on infeasibility ──────────────────────────
     iis_report: dict | None = None
-    if not infeasible and result is not None:
-        try:
-            tc_enum = str(getattr(result, "termination_condition", "") or
-                          getattr(getattr(result, "solver", {}), "termination_condition", "")).lower()
-        except Exception:
-            tc_enum = ""
-        infeasible = any(tag in tc_enum for tag in ("infeasib", "unknown"))
     if infeasible and solver_cfg.get("iis_on_infeasible", False):
         iis_report = _compute_iis(m, assets, demand_w, profiles_w,
                                   gas_limits, reserve_prods, backend_used)
         print("⚠️  IIS report written; attach to diagnostics.iis")
-    if infeasible:
-        # Return a sparse hourly_w with zeros so downstream reporting can
-        # still produce a JSON (with diagnostics.iis populated).  Caller
-        # should check `diagnostics.iis` and `diagnostics.solver_status`.
+    if unusable:
+        # The legacy shape is retained for callers, but canonical diagnostics
+        # mark it invalid/no-incumbent and the publication gate rejects it.
         n_gen  = len(disp_ids)
         empty_disp = {g: 0.0 for g in disp_ids}
         empty_comm = {g: 0.0 for g in committable}
@@ -1853,7 +1809,8 @@ def solve_window(
                 "bess": {}, "hydro": {}, "dr": {}, "pumped_hydro": {},
             })
         fin_state = {"_iis_report": iis_report} if iis_report else {}
-        return hourly_w_empty, fin_state, solve_wall_s, float("nan")
+        return SolvedRows(hourly_w_empty, solver_diagnostics=diagnostics,
+                          extraction_completed=False), fin_state, solve_wall_s, float("nan")
 
     def pv(var, *keys):
         try: v = pyo.value(var[keys]); return float(v) if v else 0.0
@@ -2080,7 +2037,7 @@ def solve_window(
         obj_val = float(pyo.value(m.OBJ))
     except Exception:
         obj_val = float("nan")
-    return hourly_w, fin_state, solve_wall_s, obj_val
+    return SolvedRows(hourly_w, solver_diagnostics=diagnostics), fin_state, solve_wall_s, obj_val
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -2130,14 +2087,18 @@ def solve_all(inp: dict, assets: dict, profiles: dict, gas_limits: dict) -> tupl
             init_state={}, solver_cfg=solver_cfg, offset_h=start_h, dt=dt_h)
         if fin_state.get("_iis_report"):
             iis_reports.append(fin_state["_iis_report"])
-        solve_all._iis_reports = iis_reports   # piggyback for build_result_store
-        return hourly, swall, obj_val
+        window_record = _window_diagnostic(hourly.solver_diagnostics, 1, 0, H_total_p)
+        rows = SolvedRows(hourly, solver_diagnostics=hourly.solver_diagnostics,
+                          window_diagnostics=[window_record], iis_reports=iis_reports,
+                          extraction_completed=hourly.extraction_completed)
+        return rows, swall, obj_val
 
     n_windows = math.ceil((H_total_p - window_p) / step_p) + 1
     print(f"⚙️  Rolling Horizon: {H_total_h}h ÷ {window_h}h window × {step_h}h step "
           f"= {n_windows} windows  (dt={r_min}min, warm_start={warm_start_enabled})")
 
     all_hourly, state, total_swall, obj_accum = [], {}, 0.0, 0.0
+    window_diagnostics = []
     committed_p = 0
     prev_hint: dict | None = None
 
@@ -2205,9 +2166,14 @@ def solve_all(inp: dict, assets: dict, profiles: dict, gas_limits: dict) -> tupl
             init_state=state, solver_cfg=solver_cfg_win, offset_h=window_offset_h,
             dt=dt_h, warm_start=prev_hint if warm_start_enabled else None,
             commit_periods=commit_n_p)
+        window_diagnostics.append(_window_diagnostic(
+            hourly_w.solver_diagnostics, w + 1, start_p, end_p))
         if state.get("_iis_report"):
             iis_reports.append({**state["_iis_report"], "window": w+1})
         total_swall += swall
+        if not hourly_w.solver_diagnostics.has_incumbent:
+            print(f"   ❌ window {w+1} has no usable incumbent; rolling solve aborted")
+            break
         all_hourly.extend(hourly_w[:commit_n_p])
         committed_p += commit_n_p
         if obj_w == obj_w and len(hourly_w) > 0:
@@ -2255,10 +2221,54 @@ def solve_all(inp: dict, assets: dict, profiles: dict, gas_limits: dict) -> tupl
                     hint["u"][(g, j)] = v
             prev_hint = hint
 
-    print(f"\n   ✅ Total: {committed_p} periods ({committed_p*dt_h:.0f}h), "
+    completion_mark = "✅" if committed_p == H_total_p else "❌ INCOMPLETE"
+    print(f"\n   {completion_mark} Total: {committed_p} periods ({committed_p*dt_h:.0f}h), "
           f"{total_swall:.0f}s ({total_swall/60:.1f} min)")
-    solve_all._iis_reports = iis_reports       # piggyback for build_result_store
-    return all_hourly, total_swall, obj_accum
+    aggregate = _aggregate_solver_diagnostics(window_diagnostics, obj_accum)
+    complete = committed_p == H_total_p and aggregate.has_incumbent
+    rows = SolvedRows(all_hourly, solver_diagnostics=aggregate,
+                      window_diagnostics=window_diagnostics,
+                      iis_reports=iis_reports, extraction_completed=complete)
+    return rows, total_swall, obj_accum if complete else float("nan")
+
+
+def _window_diagnostic(diagnostics, number: int, start_period: int, end_period: int) -> dict:
+    return {"window": number, "start_period": start_period, "end_period": end_period,
+            "diagnostics": diagnostics.model_dump(mode="json")}
+
+
+def _aggregate_solver_diagnostics(windows: list[dict], _objective: float):
+    """Aggregate deterministically; any failed window dominates later success."""
+    from powersim.contracts import QAStatus, ResultValidity, SolverDiagnostics, SolverStatus
+    if not windows:
+        return SolverDiagnostics(backend="unknown", termination_condition="no windows solved",
+            normalized_status=SolverStatus.SOLVER_ERROR, has_incumbent=False,
+            result_validity=ResultValidity.INVALID, qa_status=QAStatus.NOT_RUN)
+    diagnostics = [w["diagnostics"] for w in windows]
+    severity = {"solver_error": 7, "numerical_error": 6, "infeasible": 5, "unbounded": 4,
+                "time_limit": 3, "feasible": 2, "optimal": 1}
+    worst_record = max(windows, key=lambda w: severity[w["diagnostics"]["normalized_status"]])
+    worst = worst_record["diagnostics"]
+    all_incumbents = all(d["has_incumbent"] for d in diagnostics)
+    failure = worst["normalized_status"] in {"solver_error", "numerical_error", "infeasible", "unbounded"}
+    has_incumbent = all_incumbents and not failure
+    return SolverDiagnostics(backend=worst["backend"], backend_version=worst.get("backend_version"),
+        requested_backend=worst.get("requested_backend"), termination_condition=(
+            f"rolling aggregate: window {worst_record['window']} "
+            f"{worst['termination_condition']}"), normalized_status=worst["normalized_status"],
+        # Overlapping rolling-window objectives and bounds are not one global
+        # primal/dual pair. Preserve them per-window, never synthesize a gap.
+        incumbent_objective=None, best_bound=None, actual_mip_gap=None,
+        requested_mip_gap=worst.get("requested_mip_gap"),
+        runtime_s=sum(d.get("runtime_s") or 0 for d in diagnostics) or None,
+        orchestration_runtime_s=sum(d.get("orchestration_runtime_s") or 0 for d in diagnostics),
+        has_incumbent=has_incumbent, result_validity=ResultValidity.INVALID, qa_status=QAStatus.NOT_RUN,
+        effective_options=worst.get("effective_options") or {},
+        solve_started_at=diagnostics[0].get("solve_started_at"), solve_finished_at=diagnostics[-1].get("solve_finished_at"),
+        metadata={"window_count": len(windows), "failed_window": worst_record["window"] if failure else None,
+                  "aggregate_gap_available":False,
+                  "aggregate_gap_unavailable_reason":
+                      "overlapping rolling windows do not define a single global primal/bound pair"})
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -2776,10 +2786,11 @@ def build_result_store(hourly: list, assets: dict, inp: dict, solve_time: float,
             "data_source_fingerprint": fingerprint,
         },
         "diagnostics": {
-            "solver_status":           "solved",
+            "solver_status":           "pending_qa",
+            "solver_diagnostics":      None,
             "solver_version":          SOLVER_VERSION,
             "solve_time_s":            round(solve_time, 2),
-            "mip_gap_pct":             float(s_cfg.get("mip_gap",0.005)) * 100,
+            "mip_gap_pct":             None,
             "infeasible_flag":         total_unserv > 0.1,
             "unserved_hours":          sum(1 for h in hourly if h["unserved_mwh"] > 0.1),
             "reserve_shortfall_hours": {rid: sum(1 for h in hourly if h["reserve_shortfall"].get(rid,0) > 0.1) for rid in res_ids},
@@ -2792,7 +2803,7 @@ def build_result_store(hourly: list, assets: dict, inp: dict, solve_time: float,
             "n_reserves":              len(res_ids),
             "output_schema_warnings":  [],    # filled in after validation below
             # v1.4: IIS infeasibility report (null on feasible runs).
-            "iis":                     getattr(solve_all, "_iis_reports", None) or None,
+            "iis":                     getattr(hourly, "iis_reports", None) or None,
             # v1.5 Hydro Stage 1 — inflow unit normalization provenance.
             "hydro_inflow_unit_used":         (inp.get("_hydro_inflow_diagnostic") or {}).get("unit_declared"),
             "hydro_inflow_conversion_applied": bool((inp.get("_hydro_inflow_diagnostic") or {}).get("conversion_applied")),
@@ -2863,6 +2874,36 @@ def build_result_store(hourly: list, assets: dict, inp: dict, solve_time: float,
         "monthly_summary": monthly,
         "stochastic_summary": None
     }
+
+    # Stage 2 canonical publication path. Legacy output is rounded during
+    # extraction, so reconciliation intentionally uses persisted tolerances.
+    from powersim.contracts import QAStatus, ResultValidity, SolverDiagnostics, SolverStatus
+    from powersim.qa import run_qa
+    from powersim.results import evaluate_publication, finalized_diagnostics
+    solver_diagnostics = getattr(hourly, "solver_diagnostics", None)
+    if solver_diagnostics is None:
+        solver_diagnostics = SolverDiagnostics(backend="unknown", termination_condition="diagnostics unavailable",
+            normalized_status=SolverStatus.SOLVER_ERROR, has_incumbent=False,
+            result_validity=ResultValidity.INVALID, qa_status=QAStatus.NOT_RUN,
+            metadata={"unavailability_reason":"caller did not provide solve execution context"})
+    qa_report = run_qa(inp, result, persisted=True)
+    finite_check = next((check for check in qa_report.checks if check.check_id == "finite_values"), None)
+    required_finite = finite_check is not None and finite_check.status == QAStatus.PASS
+    decision = evaluate_publication(solver_diagnostics, qa_report,
+        extraction_completed=bool(getattr(hourly, "extraction_completed", False)),
+        required_values_finite=required_finite)
+    solver_diagnostics = finalized_diagnostics(solver_diagnostics, qa_report.status, decision.publishable)
+    result["qa"] = qa_report.model_dump(mode="json")
+    result["publication"] = {"publishable":decision.publishable, "reasons":list(decision.reasons)}
+    result["diagnostics"].update({
+        "solver_status":solver_diagnostics.normalized_status.value,
+        "solver_diagnostics":solver_diagnostics.model_dump(mode="json"),
+        "window_diagnostics":getattr(hourly, "window_diagnostics", []),
+        "mip_gap_pct":solver_diagnostics.actual_mip_gap * 100 if solver_diagnostics.actual_mip_gap is not None else None,
+        "result_validity":solver_diagnostics.result_validity.value,
+        "qa_status":solver_diagnostics.qa_status.value,
+        "qa_tolerance_mode":"persisted",
+    })
 
     # ── Output-side validation hook (Stage-1 patch) ────────────────────
     try:
@@ -3172,7 +3213,7 @@ def run_stochastic(inp: dict) -> dict:
             "total_curtailed_mwh": sm.get("total_curtailed_mwh", 0),
             "total_gas_mm3": sm.get("total_gas_mm3", 0),
             "reserve_shortfall": sm.get("reserve_shortfall_mwh", {}),
-            "solve_status": diag.get("solver_status", "solved"),
+            "solve_status": diag.get("solver_status", "solver_error"),
             "closure_ok": result.get("metadata", {}).get("closure_ok"),
         })
     exp_obj = sum(float(r["probability"]) * float(r.get("total_objective_cost_usd") or 0) for r in rows)
@@ -3244,7 +3285,8 @@ if __name__ == "__main__":
     # Print summary
     sm = results["system_summary"]
     print(f"\n{'='*60}")
-    print(f"✅ Solved!")
+    print("✅ Solved and publishable!" if results.get("publication", {}).get("publishable")
+          else "❌ Run is invalid and not publishable; inspect diagnostics.")
     print(f"   Total Cost:  ${sm['total_cost_usd']:>14,.0f}")
     print(f"   Total Energy:{sm['total_energy_mwh']:>14,.0f} MWh")
     print(f"   Avg λ:       ${sm['avg_lambda_usd_mwh']:>10.3f}/MWh")

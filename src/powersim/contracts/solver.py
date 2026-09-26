@@ -42,6 +42,11 @@ class SolverDiagnostics(ContractModel):
     has_incumbent: bool
     result_validity: ResultValidity
     qa_status: QAStatus
+    requested_backend: str | None = None
+    effective_options: dict[str, Any] = Field(default_factory=dict)
+    solve_started_at: str | None = None
+    solve_finished_at: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def incumbent_consistency(self) -> "SolverDiagnostics":

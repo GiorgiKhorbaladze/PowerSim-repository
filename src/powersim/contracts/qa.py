@@ -17,6 +17,9 @@ class QACheckResult(ContractModel):
     status: QAStatus
     message: str
     witness: dict[str, Any] = Field(default_factory=dict)
+    tolerance: float | None = Field(default=None, ge=0)
+    max_violation: float | None = Field(default=None, ge=0)
+    checked_count: int | None = Field(default=None, ge=0)
 
 
 class QAReport(ContractModel):
