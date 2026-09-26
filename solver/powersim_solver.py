@@ -1109,7 +1109,9 @@ def solve_window(
                                                offset_hours=offset_h,
                                                initial_state=init_state,
                                                availability_resolver=lambda asset, index: get_pmax_t(
-                                                   asset, index, profiles_w, offset_h, dt))
+                                                   asset, index, profiles_w, offset_h, dt),
+                                               co2_price_usd_per_t=float(
+                                                   solver_cfg.get("_co2_price_usd_per_t", 0) or 0))
         shared_session = SharedComponentSession(shared_context)
         shared_asset_ids = shared_session.asset_ids
 

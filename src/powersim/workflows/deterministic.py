@@ -22,6 +22,7 @@ def build_stage3a_context(
     compatibility_mode: bool = True,
     initial_state=None,
     availability_resolver=None,
+    co2_price_usd_per_t: float = 0.0,
 ) -> BuildContext:
     requested = capabilities
     if requested is None:
@@ -39,6 +40,7 @@ def build_stage3a_context(
         compatibility_mode=compatibility_mode,
         legacy_initial_state=dict(initial_state or {}),
         availability_resolver=availability_resolver,
+        co2_price_usd_per_t=float(co2_price_usd_per_t or 0.0),
     )
 
 

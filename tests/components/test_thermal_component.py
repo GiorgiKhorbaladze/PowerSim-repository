@@ -64,3 +64,29 @@ def test_thermal_ramp_is_scaled_by_period_duration():
     corrupt[1] = replace(corrupt[1], injection_mw=float(corrupt[0].injection_mw) + 21)
     checks = check_component_results(corrupt, 0.25, resolved_input=_input(True))
     assert next(check for check in checks if check.check_id == "component.thermal_ramp_up").status.value == "fail"
+
+
+def test_thermal_canonical_results_reconstruct_start_no_load_and_co2_costs():
+    inp = _input(True)
+    asset = inp["assets"][0]
+    asset.update({
+        "startup_cost_hot": 10,
+        "startup_cost_cold": 20,
+        "hot_start_threshold_h": 3,
+        "co2_factor_t_per_mwh": 0.5,
+    })
+    inp["co2_price_usd_per_t"] = 30
+    assets = legacy.build_asset_map(inp)
+    rows, _, _ = legacy.solve_all(inp, assets, inp["profiles"], {})
+    thermal = [item for item in rows.component_results if item.component_kind == "thermal"]
+    assert all(
+        item.cost_usd == pytest.approx(
+            (item.variable_cost_usd or 0) + (item.startup_cost_usd or 0)
+            + (item.no_load_cost_usd or 0) + (item.co2_cost_usd or 0)
+        )
+        for item in thermal
+    )
+    assert sum(item.co2_t or 0 for item in thermal) == pytest.approx(60.0)
+    assert sum(item.co2_cost_usd or 0 for item in thermal) == pytest.approx(1800.0)
+    assert any((item.startup_cost_usd or 0) > 0 for item in thermal)
+    assert all(item.no_load_cost_usd is not None for item in thermal)

@@ -59,6 +59,10 @@ class BuildContext:
     # Transitional parity seam for asset availability semantics that have not
     # yet been extracted into a component (for example ambient derating).
     availability_resolver: Any = None
+    # Study-level cost inputs needed to reconstruct component economics from
+    # canonical solution values.  Components never infer these from the live
+    # objective expression.
+    co2_price_usd_per_t: float = 0.0
 
     def require_capabilities(self, supported: Iterable[str], asset_id: str) -> None:
         unsupported = self.capabilities.difference(supported)

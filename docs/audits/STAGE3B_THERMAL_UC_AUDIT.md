@@ -15,7 +15,8 @@ for thermal assets in that path:
   present.
 
 The component extracts canonical full-precision thermal observations, including
-commitment, startup/shutdown and active pmin/pmax bounds. Independent QA
+commitment, startup/shutdown, active pmin/pmax bounds, variable/startup/no-load
+costs, CO2 tonnes and CO2 cost. Independent QA
 reconstructs thermal bounds, consecutive-period UC transitions and time-scaled
 ramps from resolved input plus those canonical observations. It does not read
 live Pyomo constraints.
@@ -25,8 +26,8 @@ live Pyomo constraints.
 The legacy deterministic objective remains authoritative in this migration.
 This deliberately preserves current no-load, startup, hot/cold start,
 piecewise heat-rate and CO2 objective behavior without a risk of double
-counting. The shared component emits audit-only variable-cost terms; they are
-not added to the Pyomo objective.
+counting. The shared component reconstructs all of these terms as audit-only
+canonical results and cost terms; they are not added to the Pyomo objective.
 
 Piecewise heat-rate formulation and CO2 cost ownership are therefore **not yet
 migrated**, and this stage does not claim they are. They require objective
