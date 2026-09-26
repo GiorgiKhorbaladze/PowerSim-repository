@@ -1106,11 +1106,16 @@ def solve_window(
     if component_engine == "shared":
         from powersim.workflows.deterministic import SharedComponentSession, build_stage3a_context
         shared_context = build_stage3a_context(m, T, dt, profiles_w, assets,
-                                               offset_hours=offset_h)
+                                               offset_hours=offset_h,
+                                               initial_state=init_state,
+                                               availability_resolver=lambda asset, index: get_pmax_t(
+                                                   asset, index, profiles_w, offset_h, dt))
         shared_session = SharedComponentSession(shared_context)
         shared_asset_ids = shared_session.asset_ids
 
     def gen_lb(m, g, t):
+        if g in shared_asset_ids:
+            return pyo.Constraint.Skip
         if g in committable:
             return m.p[g,t] >= float(assets[g].get("pmin",0)) * m.u[g,t]
         return m.p[g,t] >= 0
@@ -1130,11 +1135,16 @@ def solve_window(
 
     # ── UC logic: u[t] - u[t-1] = y[t] - z[t] ────────────────────────
     def uc_logic(m, g, t):
+        if g in shared_asset_ids:
+            return pyo.Constraint.Skip
         u_prev = init_state.get(g, {}).get("u", 0) if t == 1 else m.u[g, t-1]
         return m.u[g,t] - u_prev == m.y[g,t] - m.z[g,t]
     m.UCLogic = pyo.Constraint(m.GC, m.T, rule=uc_logic)
 
-    def yz_ub(m, g, t): return m.y[g,t] + m.z[g,t] <= 1
+    def yz_ub(m, g, t):
+        if g in shared_asset_ids:
+            return pyo.Constraint.Skip
+        return m.y[g,t] + m.z[g,t] <= 1
     m.YZUB = pyo.Constraint(m.GC, m.T, rule=yz_ub)
 
     # v1.5 Thermal Stage 3 — multi-stage startup linking constraints.
@@ -1151,8 +1161,12 @@ def solve_window(
             prev_on = int((init_state.get(g, {}) or {}).get("periods_on", 0))
             return 1.0 if prev_on >= (1 - tk) else 0.0
         def _ms_hot_ub_y(m, g, t):
+            if g in shared_asset_ids:
+                return pyo.Constraint.Skip
             return m.y_hot[g, t] <= m.y[g, t]
         def _ms_hot_ub_hist(m, g, t):
+            if g in shared_asset_ids:
+                return pyo.Constraint.Skip
             hth = m._ms_hot_threshold[g]
             return m.y_hot[g, t] <= sum(_u_hist(m, g, t, k) for k in range(1, hth + 1))
         m.MSHotUBy   = pyo.Constraint(m.MSStart, m.T, rule=_ms_hot_ub_y)
@@ -1163,6 +1177,8 @@ def solve_window(
 
     # ── Minimum Up Time ────────────────────────────────────────────────
     def min_up(m, g, t):
+        if g in shared_asset_ids:
+            return pyo.Constraint.Skip
         mut_p = _hours_to_periods(float(assets[g].get("min_up", 0)))
         if mut_p < 2: return pyo.Constraint.Skip
         end = min(t + mut_p - 1, T[-1])
@@ -1171,6 +1187,8 @@ def solve_window(
 
     # ── Minimum Down Time ──────────────────────────────────────────────
     def min_dn(m, g, t):
+        if g in shared_asset_ids:
+            return pyo.Constraint.Skip
         mdt_p = _hours_to_periods(float(assets[g].get("min_down", 0)))
         if mdt_p < 2: return pyo.Constraint.Skip
         end = min(t + mdt_p - 1, T[-1])
@@ -1183,6 +1201,8 @@ def solve_window(
     # Symmetric for OFF / min_down.  These constraints are no-ops on the
     # very first window (init_state has no periods_on/off info).
     for g in committable:
+        if g in shared_asset_ids:
+            continue
         prev = init_state.get(g, {}) if isinstance(init_state, dict) else {}
         u0   = int(prev.get("u", 0))
         on0  = int(prev.get("periods_on", 0))
@@ -1204,6 +1224,8 @@ def solve_window(
 
     # ── Ramp constraints (ramp_up/down are MW per HOUR → MW per period = ramp*dt)
     def ramp_up_c(m, g, t):
+        if g in shared_asset_ids:
+            return pyo.Constraint.Skip
         ru = float(assets[g].get("ramp_up", 9999))
         if ru >= 9999: return pyo.Constraint.Skip
         if t == 1:
@@ -1212,6 +1234,8 @@ def solve_window(
             return m.p[g,t] - float(prev) <= ru * dt
         return m.p[g,t] - m.p[g,t-1] <= ru * dt
     def ramp_dn_c(m, g, t):
+        if g in shared_asset_ids:
+            return pyo.Constraint.Skip
         rd = float(assets[g].get("ramp_down", 9999))
         if rd >= 9999: return pyo.Constraint.Skip
         if t == 1:

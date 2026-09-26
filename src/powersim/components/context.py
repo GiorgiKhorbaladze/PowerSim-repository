@@ -53,6 +53,12 @@ class BuildContext:
     validation_issues: list[ValidationIssue] = field(default_factory=list)
     offset_hours: float = 0.0
     compatibility_mode: bool = True
+    # Boundary data is an input to stateful components, never inferred from
+    # model constraints.  Legacy dictionaries are retained during migration.
+    legacy_initial_state: dict[str, dict[str, Any]] = field(default_factory=dict)
+    # Transitional parity seam for asset availability semantics that have not
+    # yet been extracted into a component (for example ambient derating).
+    availability_resolver: Any = None
 
     def require_capabilities(self, supported: Iterable[str], asset_id: str) -> None:
         unsupported = self.capabilities.difference(supported)

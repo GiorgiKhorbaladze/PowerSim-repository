@@ -42,6 +42,7 @@ def check_component_results(
     results: list[ComponentResult],
     duration_hours: float,
     tolerance: TolerancePolicy | None = None,
+    resolved_input=None,
 ) -> list[QACheckResult]:
     """Return canonical QA checks for shared component results.
 
@@ -145,6 +146,42 @@ def check_component_results(
                 "expected_mwh": expected_mwh,
             },
         )
+
+    # Thermal UC QA uses only resolved input and canonical extraction.  It
+    # intentionally does not inspect the Pyomo model or its live constraints.
+    raw_assets = (resolved_input or {}).get("assets", []) if isinstance(resolved_input, dict) else []
+    asset_map = {str(a.get("id")): a for a in raw_assets if isinstance(a, dict) and a.get("id") is not None}
+    thermal_by_asset: dict[str, list[ComponentResult]] = defaultdict(list)
+    for item in results:
+        if item.component_kind == "thermal":
+            thermal_by_asset[item.asset_id].append(item)
+    for asset_id, observations in thermal_by_asset.items():
+        asset = asset_map.get(asset_id, {})
+        observations.sort(key=lambda item: item.period)
+        pmin, pmax = float(asset.get("pmin", 0) or 0), float(asset.get("pmax", 0) or 0)
+        ramp_up, ramp_down = float(asset.get("ramp_up", 9999) or 9999), float(asset.get("ramp_down", 9999) or 9999)
+        for item in observations:
+            u, dispatch = float(item.commitment if item.commitment is not None else 1.0), float(item.injection_mw)
+            lo, hi = pmin * u, pmax * u
+            limit = tolerance.limit(max(1.0, abs(lo), abs(hi), abs(dispatch)))
+            violation = max(0.0, lo - dispatch, dispatch - hi)
+            _record(buckets, "component.thermal_bounds", passed=violation <= limit, violation=violation, tolerance=limit,
+                    witness={"asset_id": asset_id, "period": item.period, "dispatch_mw": dispatch, "commitment": u, "pmin_mw": lo, "pmax_mw": hi})
+        for previous, current in zip(observations, observations[1:]):
+            delta = float(current.injection_mw) - float(previous.injection_mw)
+            for check_id, rate, violation in (
+                ("component.thermal_ramp_up", ramp_up, max(0.0, delta - ramp_up * duration_hours)),
+                ("component.thermal_ramp_down", ramp_down, max(0.0, -delta - ramp_down * duration_hours)),
+            ):
+                if rate < 9999:
+                    limit = tolerance.limit(max(1.0, rate * duration_hours, abs(delta)))
+                    _record(buckets, check_id, passed=violation <= limit, violation=violation, tolerance=limit,
+                            witness={"asset_id": asset_id, "period": current.period, "delta_mw": delta, "limit_mw": rate * duration_hours})
+            expected = float(current.commitment or 0) - float(previous.commitment or 0)
+            actual = float(current.startup or 0) - float(current.shutdown or 0)
+            violation, limit = abs(expected - actual), tolerance.limit(1.0)
+            _record(buckets, "component.thermal_uc_transition", passed=violation <= limit, violation=violation, tolerance=limit,
+                    witness={"asset_id": asset_id, "period": current.period, "commitment_delta": expected, "startup_minus_shutdown": actual})
 
     checks: list[QACheckResult] = []
     for check_id in sorted(buckets):
