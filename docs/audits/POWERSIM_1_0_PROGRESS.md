@@ -6,8 +6,8 @@
 | --- | --- |
 | Completed stage | Stage 3B thermal operational-constraint migration merged in PR #71 |
 | In progress | Stage 3C - BESS, pumped hydro and demand response |
-| Shared components | thermal UC constraints/economics, BESS core, wind, solar, simplified run-of-river, import |
-| Components still legacy | thermal objective ownership, BESS depth/end-target extensions, pumped hydro, demand response, reservoir hydro, gas coupling, reserves, network |
+| Shared components | thermal UC constraints/economics, BESS core, pumped hydro core, wind, solar, simplified run-of-river, import |
+| Components still legacy | thermal objective ownership, BESS depth/end-target extensions, demand response, reservoir hydro, gas coupling, reserves, network |
 | Release readiness | Not release-ready; capability claims remain constrained by the architecture audit. |
 
 ## Stage 3B acceptance intent
@@ -25,8 +25,8 @@ documented limitation rather than a claim of completed migration.
 ## Next work
 
 1. Complete BESS depth/end-target parity and chronological independent QA.
-2. Migrate pumped hydro and demand response on separate, reviewable PRs.
-3. Move thermal cost assembly only after objective reconstruction parity passes.
+2. Migrate demand response on a separate, reviewable PR.
+3. Move reservoir hydro, cascade behavior and gas coupling to Stage 3D.
 
 ## Blockers
 

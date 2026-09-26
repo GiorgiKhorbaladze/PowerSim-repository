@@ -205,6 +205,23 @@ def check_component_results(
             _record(buckets, "component.bess_mode", passed=mode_violation <= limit, violation=mode_violation, tolerance=limit,
                     witness={"asset_id": asset_id, "period": item.period, "charge_mw": item.withdrawal_mw, "discharge_mw": item.injection_mw})
 
+    ph_by_asset: dict[str, list[ComponentResult]] = defaultdict(list)
+    for item in results:
+        if item.component_kind == "pumped_hydro":
+            ph_by_asset[item.asset_id].append(item)
+    for asset_id, observations in ph_by_asset.items():
+        asset = asset_map.get(asset_id, {})
+        cap = float(asset.get("energy_mwh", 0) or 0)
+        lower, upper = float(asset.get("soc_min", 0) or 0) * cap, float(asset.get("soc_max", 1) or 1) * cap
+        gen_cap, pump_cap = float(asset.get("pmax", 0) or 0), float(asset.get("pump_mw", 0) or 0)
+        for item in observations:
+            soc = float(item.state_of_charge_mwh or 0)
+            violation = max(0.0, lower-soc, soc-upper, float(item.injection_mw)-gen_cap, float(item.withdrawal_mw)-pump_cap, -float(item.injection_mw), -float(item.withdrawal_mw))
+            limit = tolerance.limit(max(1.0, cap, gen_cap, pump_cap))
+            _record(buckets, "component.pumped_hydro_bounds", passed=violation <= limit, violation=violation, tolerance=limit, witness={"asset_id":asset_id,"period":item.period,"soc_mwh":soc})
+            violation = min(float(item.injection_mw), float(item.withdrawal_mw))
+            _record(buckets, "component.pumped_hydro_mode", passed=violation <= limit, violation=violation, tolerance=limit, witness={"asset_id":asset_id,"period":item.period})
+
     checks: list[QACheckResult] = []
     for check_id in sorted(buckets):
         bucket = buckets[check_id]

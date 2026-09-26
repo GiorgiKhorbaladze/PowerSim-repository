@@ -8,6 +8,7 @@ from .solar import SolarComponent
 from .wind import WindComponent
 from .thermal import ThermalComponent
 from .bess import BESSComponent
+from .pumped_hydro import PumpedHydroComponent
 
 
 def stage3a_registry() -> ComponentRegistry:
@@ -32,7 +33,13 @@ def stage3c_registry() -> ComponentRegistry:
     return registry
 
 
+def stage3c_pumped_hydro_registry() -> ComponentRegistry:
+    registry = stage3c_registry()
+    registry.register("pumped_hydro", PumpedHydroComponent)
+    return registry
+
+
 __all__ = ["BoundaryState", "BuildContext", "Component", "ComponentQAMetadata",
            "ComponentRegistry", "ComponentResult", "CostTerm", "ValidationIssue",
            "WindComponent", "SolarComponent", "RunOfRiverComponent", "ExchangeComponent",
-           "ThermalComponent", "BESSComponent", "UnsupportedComponentOperation", "stage3a_registry", "stage3b_registry", "stage3c_registry"]
+           "ThermalComponent", "BESSComponent", "PumpedHydroComponent", "UnsupportedComponentOperation", "stage3a_registry", "stage3b_registry", "stage3c_registry", "stage3c_pumped_hydro_registry"]
