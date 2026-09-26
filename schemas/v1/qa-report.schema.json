@@ -7,12 +7,51 @@
           "title": "Check Id",
           "type": "string"
         },
+        "checked_count": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Checked Count"
+        },
+        "max_violation": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Violation"
+        },
         "message": {
           "title": "Message",
           "type": "string"
         },
         "status": {
           "$ref": "#/$defs/QAStatus"
+        },
+        "tolerance": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tolerance"
         },
         "witness": {
           "additionalProperties": true,

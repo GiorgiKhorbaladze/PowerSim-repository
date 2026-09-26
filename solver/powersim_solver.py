@@ -1750,89 +1750,33 @@ def solve_window(
     # ── Solve ──────────────────────────────────────────────────────────
     m.dual = pyo.Suffix(direction=pyo.Suffix.IMPORT)
     backend = str(solver_cfg.get("solver", "auto")).lower()
-
-    def _make_highs():
-        try:
-            from pyomo.contrib.appsi.solvers.highs import HiGHS as _C
-        except ImportError:
-            from pyomo.contrib.appsi.solvers.highs import Highs as _C
-        s = _C()
-        s.highs_options["time_limit"]     = float(solver_cfg.get("time_limit_s", 300))
-        s.highs_options["mip_rel_gap"]    = float(solver_cfg.get("mip_gap", 0.005))
-        s.highs_options["log_to_console"] = False
-        return s, "highs"
-
-    def _make_gurobi():
-        from pyomo.contrib.appsi.solvers.gurobi import Gurobi as _G
-        s = _G()
-        # Probe availability — Gurobi class imports cleanly even without a
-        # license; the runtime check tells us if we actually have a solver.
-        av = s.available()
-        ok_flags = ("FullLicense", "LimitedLicense", "available",
-                    "Available", "NotFound")   # names vary by Pyomo version
-        if str(av).split(".")[-1] in ("NotFound", "BadLicense"):
-            raise RuntimeError(f"Gurobi not usable ({av})")
-        s.gurobi_options["TimeLimit"] = float(solver_cfg.get("time_limit_s", 300))
-        s.gurobi_options["MIPGap"]    = float(solver_cfg.get("mip_gap", 0.005))
-        s.gurobi_options["Threads"]   = int(solver_cfg.get("threads", 0))
-        s.gurobi_options["OutputFlag"]= 0
-        if warm_start:
-            s.gurobi_options["LPWarmStart"] = 2
-        return s, "gurobi"
-
-    solver = None; backend_used = "appsi_highs"
-    try:
-        if backend == "gurobi":
-            solver, backend_used = _make_gurobi()
-        elif backend == "highs":
-            solver, backend_used = _make_highs()
-        else:  # auto — prefer Gurobi when usable, else HiGHS
-            try:
-                solver, backend_used = _make_gurobi()
-            except Exception:
-                solver, backend_used = _make_highs()
-    except Exception:
-        solver = pyo.SolverFactory("appsi_highs"); backend_used = "appsi_highs"
-
-    t0     = time.time()
-    # Pyomo 6.10 dropped the load_solutions kwarg from appsi.Highs.solve().
-    # Try the old signature first; fall back silently for newer versions.
-    # If the solver detects infeasibility, we wrap the exception so the
-    # IIS diagnostic still runs and callers receive a structured report
-    # rather than a Python traceback.
-    result = None
-    infeasible = False
-    try:
-        try:
-            result = solver.solve(m, load_solutions=True)
-        except TypeError:
-            result = solver.solve(m)
-    except Exception as e:
-        msg = str(e).lower()
-        if any(tag in msg for tag in ("infeasib", "no solution", "not found")):
-            infeasible = True
-            print(f"⚠️  solver declared infeasibility: {e}")
-        else:
-            raise
-    solve_wall_s = time.time() - t0
+    # Stage 2 compatibility seam: model construction remains legacy, while
+    # backend selection, option validation and solve diagnostics are canonical.
+    from powersim.solvers import solve_model
+    solve_options = {
+        "time_limit_s": float(solver_cfg.get("time_limit_s", 300)),
+        "mip_gap": float(solver_cfg.get("mip_gap", 0.005)),
+        "threads": int(solver_cfg.get("threads", 0)),
+        "log_to_console": False,
+    }
+    outcome = solve_model(m, backend, solve_options)
+    diagnostics = outcome.diagnostics
+    solve_window._solver_diagnostics = diagnostics
+    result = outcome.raw_result
+    backend_used = diagnostics.backend
+    solve_wall_s = diagnostics.orchestration_runtime_s or 0.0
+    infeasible = diagnostics.normalized_status.value == "infeasible"
+    unusable = not diagnostics.has_incumbent
 
     # ── v1.4: IIS diagnostics on infeasibility ──────────────────────────
     iis_report: dict | None = None
-    if not infeasible and result is not None:
-        try:
-            tc_enum = str(getattr(result, "termination_condition", "") or
-                          getattr(getattr(result, "solver", {}), "termination_condition", "")).lower()
-        except Exception:
-            tc_enum = ""
-        infeasible = any(tag in tc_enum for tag in ("infeasib", "unknown"))
     if infeasible and solver_cfg.get("iis_on_infeasible", False):
         iis_report = _compute_iis(m, assets, demand_w, profiles_w,
                                   gas_limits, reserve_prods, backend_used)
         print("⚠️  IIS report written; attach to diagnostics.iis")
-    if infeasible:
-        # Return a sparse hourly_w with zeros so downstream reporting can
-        # still produce a JSON (with diagnostics.iis populated).  Caller
-        # should check `diagnostics.iis` and `diagnostics.solver_status`.
+    if unusable:
+        # The legacy shape is retained for callers, but canonical diagnostics
+        # mark it invalid/no-incumbent and the publication gate rejects it.
         n_gen  = len(disp_ids)
         empty_disp = {g: 0.0 for g in disp_ids}
         empty_comm = {g: 0.0 for g in committable}
@@ -2776,10 +2720,16 @@ def build_result_store(hourly: list, assets: dict, inp: dict, solve_time: float,
             "data_source_fingerprint": fingerprint,
         },
         "diagnostics": {
-            "solver_status":           "solved",
+            "solver_status":           (getattr(getattr(solve_window, "_solver_diagnostics", None), "normalized_status", None).value
+                                         if getattr(getattr(solve_window, "_solver_diagnostics", None), "normalized_status", None)
+                                         else "solver_error"),
+            "solver_diagnostics":      (getattr(solve_window, "_solver_diagnostics").model_dump(mode="json")
+                                         if getattr(solve_window, "_solver_diagnostics", None) else None),
             "solver_version":          SOLVER_VERSION,
             "solve_time_s":            round(solve_time, 2),
-            "mip_gap_pct":             float(s_cfg.get("mip_gap",0.005)) * 100,
+            "mip_gap_pct":             ((getattr(solve_window, "_solver_diagnostics").actual_mip_gap * 100)
+                                         if getattr(solve_window, "_solver_diagnostics", None) is not None
+                                         and getattr(solve_window, "_solver_diagnostics").actual_mip_gap is not None else None),
             "infeasible_flag":         total_unserv > 0.1,
             "unserved_hours":          sum(1 for h in hourly if h["unserved_mwh"] > 0.1),
             "reserve_shortfall_hours": {rid: sum(1 for h in hourly if h["reserve_shortfall"].get(rid,0) > 0.1) for rid in res_ids},
@@ -3172,7 +3122,7 @@ def run_stochastic(inp: dict) -> dict:
             "total_curtailed_mwh": sm.get("total_curtailed_mwh", 0),
             "total_gas_mm3": sm.get("total_gas_mm3", 0),
             "reserve_shortfall": sm.get("reserve_shortfall_mwh", {}),
-            "solve_status": diag.get("solver_status", "solved"),
+            "solve_status": diag.get("solver_status", "solver_error"),
             "closure_ok": result.get("metadata", {}).get("closure_ok"),
         })
     exp_obj = sum(float(r["probability"]) * float(r.get("total_objective_cost_usd") or 0) for r in rows)
