@@ -7,4 +7,4 @@ class RunOfRiverComponent(PassiveInjectionComponent):
     kind = "hydro_ror"
 
     def default_profile_value(self) -> float:
-        return float(self.asset.get("cf", 0.65) or 0.65)
+        return float(self.asset.get("cf", 0.65))
