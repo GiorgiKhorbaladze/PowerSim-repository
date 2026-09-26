@@ -160,12 +160,47 @@ class ThermalComponent:
 
     def objective_terms(self, context: BuildContext) -> list[CostTerm]:
         # Audit-only terms.  The legacy objective remains authoritative in
-        # this transition and includes piecewise heat-rate/CO2 exactly once.
+        # this transition; these records mirror its per-period thermal terms
+        # without adding them to a second objective.
         m, aid, dt = context.builder, self.asset_id, context.duration_hours
-        mc = float(self.asset.get("_dispMC", self.asset.get("mc", 0)) or 0) + float(self.asset.get("vom", 0) or 0)
-        terms = [CostTerm(aid, "variable_cost", expression=mc * m.p[aid, t] * dt) for t in context.periods]
+        terms = []
+        for t in context.periods:
+            terms.extend((
+                CostTerm(aid, "variable_cost", expression=self._variable_cost_expression(m, t, dt)),
+                CostTerm(aid, "startup_cost", expression=self._startup_cost_expression(m, t)),
+                CostTerm(aid, "no_load_cost", expression=self._no_load_cost_expression(m, t, dt)),
+                CostTerm(aid, "co2_cost", expression=self._co2_cost_expression(m, t, dt, context.co2_price_usd_per_t)),
+            ))
         context.cost_terms.extend(terms)
         return terms
+
+    def _variable_cost_expression(self, model: Any, period: int, dt: float):
+        curve = self.asset.get("heat_rate_curve")
+        if isinstance(curve, list) and len(curve) >= 2 and hasattr(model, "hrc_lam"):
+            fuel_price = float(self.asset.get("fuel_price", 0) or 0)
+            return fuel_price * 0.9478 * dt * sum(
+                model.hrc_lam[self.asset_id, index, period] * float(point[0]) * float(point[1])
+                for index, point in enumerate(curve)
+            )
+        marginal_cost = float(self.asset.get("_dispMC", self.asset.get("mc", 0)) or 0)
+        return (marginal_cost + float(self.asset.get("vom", 0) or 0)) * model.p[self.asset_id, period] * dt
+
+    def _startup_cost_expression(self, model: Any, period: int):
+        if not self.asset.get("_committable"):
+            return 0.0
+        if hasattr(model, "y_hot") and self.asset_id in getattr(model, "MSStart", ()):
+            hot = float(self.asset.get("startup_cost_hot", 0) or 0)
+            cold = float(self.asset.get("startup_cost_cold", 0) or 0)
+            return hot * model.y_hot[self.asset_id, period] + cold * (model.y[self.asset_id, period] - model.y_hot[self.asset_id, period])
+        return float(self.asset.get("startup_cost", 0) or 0) * model.y[self.asset_id, period]
+
+    def _no_load_cost_expression(self, model: Any, period: int, dt: float):
+        if not self.asset.get("_committable"):
+            return 0.0
+        return float(self.asset.get("no_load_cost", 0) or 0) * model.u[self.asset_id, period] * dt
+
+    def _co2_cost_expression(self, model: Any, period: int, dt: float, price: float):
+        return float(self.asset.get("co2_factor_t_per_mwh", 0) or 0) * model.p[self.asset_id, period] * dt * price
 
     def boundary_state(self, solution: Any, at: int) -> BoundaryState:
         import pyomo.environ as pyo
@@ -182,12 +217,19 @@ class ThermalComponent:
             dispatch = float(pyo.value(m.p[aid, t]) or 0)
             resolver = context.availability_resolver
             available = float(resolver(self.asset, index) if resolver else pmax)
+            variable_cost = float(pyo.value(self._variable_cost_expression(m, t, context.duration_hours)) or 0)
+            startup_cost = float(pyo.value(self._startup_cost_expression(m, t)) or 0)
+            no_load_cost = float(pyo.value(self._no_load_cost_expression(m, t, context.duration_hours)) or 0)
+            co2_t = dispatch * context.duration_hours * float(self.asset.get("co2_factor_t_per_mwh", 0) or 0)
+            co2_cost = co2_t * context.co2_price_usd_per_t
             out.append(ComponentResult(aid, self.kind, context.period_coordinate(index), available_mw=available * u,
-                injection_mw=dispatch, cost_usd=None, commitment=u,
+                injection_mw=dispatch, cost_usd=variable_cost + startup_cost + no_load_cost + co2_cost, commitment=u,
                 startup=float(pyo.value(m.y[aid, t]) or 0) if committable else 0.0,
                 shutdown=float(pyo.value(m.z[aid, t]) or 0) if committable else 0.0,
                 startup_hot=float(pyo.value(m.y_hot[aid, t]) or 0) if committable and hasattr(m, "y_hot") and aid in getattr(m, "MSStart", ()) else None,
-                pmin_mw=pmin * u, pmax_mw=available * u))
+                pmin_mw=pmin * u, pmax_mw=available * u,
+                variable_cost_usd=variable_cost, startup_cost_usd=startup_cost,
+                no_load_cost_usd=no_load_cost, co2_t=co2_t, co2_cost_usd=co2_cost))
         return out
 
     def qa_spec(self) -> ComponentQAMetadata:

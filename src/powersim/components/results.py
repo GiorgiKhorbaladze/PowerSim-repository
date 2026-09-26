@@ -42,6 +42,11 @@ class ComponentResult:
     startup_hot: float | None = None
     pmin_mw: float | None = None
     pmax_mw: float | None = None
+    variable_cost_usd: float | None = None
+    startup_cost_usd: float | None = None
+    no_load_cost_usd: float | None = None
+    co2_t: float | None = None
+    co2_cost_usd: float | None = None
 
 
 @dataclass(frozen=True)
