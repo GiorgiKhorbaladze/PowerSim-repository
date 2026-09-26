@@ -3,7 +3,7 @@ from typing import Any
 
 from pydantic import Field
 
-from .common import ContractModel
+from .common import ContractModel, FrozenDict
 
 
 class IssueSeverity(str, Enum):
@@ -16,7 +16,7 @@ class ValidationIssue(ContractModel):
     severity: IssueSeverity
     path: str
     message: str
-    context: dict[str, Any] = Field(default_factory=dict)
+    context: FrozenDict = Field(default_factory=FrozenDict)
 
 
 class StructuredError(ContractModel):
@@ -29,3 +29,10 @@ class StructuredError(ContractModel):
 class ContractMigrationError(ValueError):
     """Raised when a contract cannot be migrated without ambiguity or loss."""
 
+
+class ScenarioOverlayError(ValueError):
+    """A scenario attempted to mutate protected project identity."""
+
+    def __init__(self, issue: ValidationIssue):
+        self.issue = issue
+        super().__init__(issue.message)

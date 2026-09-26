@@ -4,15 +4,19 @@ PowerSim contract `1.0.0` is the typed boundary for projects, immutable resolved
 
 ## Project and resolution
 
-A project declares metadata, units, time, assets, profiles, the DC network, reserve products, solver settings, and scenario overlays. An overlay is recursively merged into a copy of the base mapping; lists and scalar values are replaced, never edited in place. Resolution returns a frozen `ResolvedInputContract`. Canonical, sorted UTF-8 JSON is SHA-256 fingerprinted, including explicit `null` values.
+A project declares metadata, units, time, assets, profiles, the DC network, reserve products, solver settings, and scenario overlays. An overlay is recursively merged into a copy of the base mapping; lists and scalar values are replaced, never edited in place. Project identity, `contract_version`, version/revision lineage, and `workflow_model_version` are protected fields; an overlay targeting one produces a structured `protected_scenario_overlay` error.
+
+Resolution defensively copies the project and returns a deeply immutable `ResolvedInputContract`: mappings become immutable mappings, sequences become tuples, and nested contract models are frozen. Published metadata, settings, profile values, network collections, provenance, and legacy payloads therefore cannot be mutated behind the fingerprint. Canonical, sorted UTF-8 JSON is SHA-256 fingerprinted, including explicit `null` values.
 
 Cross-reference validation reports structured `{code, severity, path, message, context}` issues for duplicate IDs and dangling profile or bus references. Field validation covers capacity bounds, enum values, time resolution, and branch values.
+
+Native v1 models reject unknown fields. `AssetContract.legacy_extensions` is the sole explicit compatibility container for historical asset keys that do not yet have typed v1 meaning. Its contents are immutable and are not interpreted as supported physics.
 
 ## Units and time
 
 Canonical power, energy, duration, and resolution units are `MW`, `MWh`, `hours`, and `minutes`. Currency is a declared identifier. Water and gas each declare volume and rate unit strings because adapters must not guess physical semantics.
 
-Time includes an IANA timezone, study year, resolution in minutes, its equivalent interval duration in hours, start, periods, and calendar policy. `non_leap` requires a non-leap year and exactly the implied full-year periods. `explicit_periods` supports partial and other intentional horizons. Leap-year full calendars are not yet supported by the `non_leap` policy.
+Time includes an IANA timezone, study year, resolution in minutes, its equivalent interval duration in hours, start, periods, and calendar policy. `non_leap` requires a non-leap year, a resolution that divides all 525,600 minutes exactly, and exactly the implied full-year periods. `explicit_periods` supports partial and other intentional horizons. Leap-year full calendars are not yet supported by the `non_leap` policy.
 
 ## DC network
 
@@ -20,5 +24,6 @@ Normalized snapshots contain only `susceptance_mw_per_rad`. Branches declare IDs
 
 ## Independent statuses
 
-Solver status is exactly `optimal`, `feasible`, `time_limit`, `infeasible`, `unbounded`, `numerical_error`, or `solver_error`. QA status is independently `pass`, `warn`, `fail`, or `not_run`; result validity is independently `valid`, `valid_with_warnings`, or `invalid`; run lifecycle is independently typed. A time limit remains a time limit whether an incumbent exists. Unavailable objective, bound, gap, and runtime values are `null`, not zero.
+Solver status is exactly `optimal`, `feasible`, `time_limit`, `infeasible`, `unbounded`, `numerical_error`, or `solver_error`. QA status is independently `pass`, `warn`, `fail`, or `not_run`; result validity is independently `valid`, `valid_with_warnings`, or `invalid`; run lifecycle is independently typed. A time limit remains a time limit whether an incumbent exists. Optimal/feasible require an incumbent; infeasible, unbounded, numerical error, and solver error prohibit one and require invalid results. Any result without an incumbent is invalid and has null objective/gap observations.
 
+The result envelope retains validity and QA status for API convenience, but they must equal the corresponding authoritative solver diagnostics. QA `fail` or `not_run` requires invalidity; `warn` cannot be unqualified `valid`; and `pass` may be valid when solver/incumbent conditions permit. Unavailable objective, bound, gap, and runtime values are `null`, not zero.

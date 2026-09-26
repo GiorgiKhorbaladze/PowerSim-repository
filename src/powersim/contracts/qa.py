@@ -2,6 +2,7 @@ from enum import Enum
 from typing import Any
 from pydantic import Field
 from .common import ContractModel
+from powersim.version import CONTRACT_VERSION
 
 
 class QAStatus(str, Enum):
@@ -19,7 +20,6 @@ class QACheckResult(ContractModel):
 
 
 class QAReport(ContractModel):
-    contract_version: str = "1.0.0"
+    contract_version: str = CONTRACT_VERSION
     status: QAStatus
     checks: list[QACheckResult] = Field(default_factory=list)
-

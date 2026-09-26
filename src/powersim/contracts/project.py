@@ -8,19 +8,20 @@ from typing import Any
 from pydantic import Field, model_validator
 
 from powersim.version import CONTRACT_VERSION
-from .common import ContractModel, Provenance, TimeContract, UnitSystem
+from .common import ContractModel, FrozenDict, Provenance, TimeContract, UnitSystem
+from .errors import IssueSeverity, ScenarioOverlayError, ValidationIssue
 
 
 class AssetContract(ContractModel):
-    model_config = {"extra": "allow"}
     id: str = Field(min_length=1)
     kind: str = Field(min_length=1)
     enabled: bool = True
     bus: str | None = None
-    profile_references: list[str] = Field(default_factory=list)
+    profile_references: tuple[str, ...] = ()
     capacity_min_mw: float | None = Field(default=None, ge=0)
     capacity_max_mw: float | None = Field(default=None, ge=0)
     provenance: Provenance | None = None
+    legacy_extensions: FrozenDict = Field(default_factory=FrozenDict)
 
     @model_validator(mode="after")
     def bounds(self) -> "AssetContract":
@@ -32,7 +33,7 @@ class AssetContract(ContractModel):
 class ProfileContract(ContractModel):
     id: str
     unit: str
-    values: list[float]
+    values: tuple[float, ...]
     provenance: Provenance | None = None
 
 
@@ -65,8 +66,8 @@ class BranchContract(ContractModel):
 
 
 class NetworkContract(ContractModel):
-    buses: list[BusContract] = Field(default_factory=list)
-    branches: list[BranchContract] = Field(default_factory=list)
+    buses: tuple[BusContract, ...] = ()
+    branches: tuple[BranchContract, ...] = ()
 
 
 class ProjectVersionContract(ContractModel):
@@ -78,7 +79,7 @@ class ProjectVersionContract(ContractModel):
 class ScenarioContract(ContractModel):
     id: str
     name: str | None = None
-    overlay: dict[str, Any] = Field(default_factory=dict)
+    overlay: FrozenDict = Field(default_factory=FrozenDict)
 
 
 class ProjectContract(ContractModel):
@@ -113,9 +114,15 @@ def resolve_scenario(project: ProjectContract, scenario_id: str | None = None):
         matches = [s for s in project.scenarios if s.id == scenario_id]
         if len(matches) != 1:
             raise ValueError(f"unknown or duplicate scenario: {scenario_id}")
+        protected = sorted({"id", "contract_version", "version", "workflow_model_version"} & set(matches[0].overlay))
+        if protected:
+            raise ScenarioOverlayError(ValidationIssue(
+                code="protected_scenario_overlay", severity=IssueSeverity.ERROR,
+                path="scenarios.overlay", message="scenario overlay cannot modify project identity or version lineage",
+                context={"fields": protected, "scenario_id": scenario_id},
+            ))
         raw = _deep_overlay(raw, matches[0].overlay)
     raw["project_id"] = raw.pop("id")
     raw["scenario_id"] = scenario_id
     raw.pop("version", None)
     return ResolvedInputContract.model_validate(raw)
-

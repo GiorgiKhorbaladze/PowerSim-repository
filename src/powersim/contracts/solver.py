@@ -45,9 +45,22 @@ class SolverDiagnostics(ContractModel):
 
     @model_validator(mode="after")
     def incumbent_consistency(self) -> "SolverDiagnostics":
-        if not self.has_incumbent and self.incumbent_objective is not None:
-            raise ValueError("incumbent_objective requires has_incumbent=true")
-        if self.normalized_status in {SolverStatus.INFEASIBLE, SolverStatus.UNBOUNDED, SolverStatus.SOLVER_ERROR} and self.has_incumbent:
-            raise ValueError(f"{self.normalized_status.value} cannot declare an incumbent")
+        status = self.normalized_status
+        if status in {SolverStatus.OPTIMAL, SolverStatus.FEASIBLE} and not self.has_incumbent:
+            raise ValueError(f"{status.value} requires an incumbent")
+        no_incumbent_statuses = {
+            SolverStatus.INFEASIBLE, SolverStatus.UNBOUNDED,
+            SolverStatus.NUMERICAL_ERROR, SolverStatus.SOLVER_ERROR,
+        }
+        if status in no_incumbent_statuses and self.has_incumbent:
+            raise ValueError(f"{status.value} cannot declare an incumbent")
+        if not self.has_incumbent:
+            if self.incumbent_objective is not None:
+                raise ValueError("incumbent_objective requires has_incumbent=true")
+            if self.actual_mip_gap is not None:
+                raise ValueError("actual_mip_gap requires has_incumbent=true")
+            if self.result_validity != ResultValidity.INVALID:
+                raise ValueError("a result without an incumbent must be invalid")
+        if status in no_incumbent_statuses and self.result_validity != ResultValidity.INVALID:
+            raise ValueError(f"{status.value} requires invalid result validity")
         return self
-

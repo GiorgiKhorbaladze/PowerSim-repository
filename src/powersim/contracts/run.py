@@ -4,6 +4,7 @@ from typing import Any
 from pydantic import Field
 from .common import ContractModel
 from .solver import SolverDiagnostics
+from powersim.version import CONTRACT_VERSION
 
 
 class RunStatus(str, Enum):
@@ -21,10 +22,9 @@ class RunEvent(ContractModel):
 
 
 class RunContract(ContractModel):
-    contract_version: str = "1.0.0"
+    contract_version: str = CONTRACT_VERSION
     id: str
     snapshot_fingerprint: str
     status: RunStatus = RunStatus.DRAFT
     solver_diagnostics: SolverDiagnostics | None = None
     events: list[RunEvent] = Field(default_factory=list)
-

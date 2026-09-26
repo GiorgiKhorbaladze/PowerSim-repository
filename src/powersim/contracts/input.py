@@ -3,7 +3,7 @@ from typing import Any
 from pydantic import ConfigDict, Field
 
 from powersim.version import CONTRACT_VERSION, WORKFLOW_MODEL_VERSION
-from .common import ContractModel, TimeContract, UnitSystem
+from .common import ContractModel, FrozenDict, TimeContract, UnitSystem
 from .project import AssetContract, NetworkContract, ProfileContract
 
 
@@ -13,13 +13,12 @@ class ResolvedInputContract(ContractModel):
     workflow_model_version: str = WORKFLOW_MODEL_VERSION
     project_id: str
     scenario_id: str | None = None
-    metadata: dict[str, Any] = Field(default_factory=dict)
+    metadata: FrozenDict = Field(default_factory=FrozenDict)
     units: UnitSystem
     time: TimeContract
     assets: tuple[AssetContract, ...] = ()
     profiles: tuple[ProfileContract, ...] = ()
     network: NetworkContract = Field(default_factory=NetworkContract)
-    reserve_products: tuple[dict[str, Any], ...] = ()
-    solver_settings: dict[str, Any] = Field(default_factory=dict)
-    legacy_payload: dict[str, Any] | None = None
-
+    reserve_products: tuple[FrozenDict, ...] = ()
+    solver_settings: FrozenDict = Field(default_factory=FrozenDict)
+    legacy_payload: FrozenDict | None = None

@@ -1,7 +1,7 @@
 {
   "$defs": {
     "AssetContract": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "bus": {
           "anyOf": [
@@ -56,7 +56,13 @@
           "title": "Kind",
           "type": "string"
         },
+        "legacy_extensions": {
+          "additionalProperties": true,
+          "title": "Legacy Extensions",
+          "type": "object"
+        },
         "profile_references": {
+          "default": [],
           "items": {
             "type": "string"
           },
@@ -216,6 +222,7 @@
       "additionalProperties": false,
       "properties": {
         "branches": {
+          "default": [],
           "items": {
             "$ref": "#/$defs/BranchContract"
           },
@@ -223,6 +230,7 @@
           "type": "array"
         },
         "buses": {
+          "default": [],
           "items": {
             "$ref": "#/$defs/BusContract"
           },

@@ -93,7 +93,7 @@ def adapt_legacy_input(data: dict[str, Any], *, preserve_legacy_validation: bool
             extras = {k: v for k, v in raw.items() if k not in excluded}
             assets.append(AssetContract(id=str(raw.get("id", "")), kind=raw.get("type", "legacy_unknown"), bus=raw.get("bus"),
                  profile_references=refs, capacity_min_mw=raw.get("pmin"), capacity_max_mw=raw.get("pmax"),
-                 provenance=Provenance(source="legacy", source_version=schema_version), **extras))
+                 provenance=Provenance(source="legacy", source_version=schema_version), legacy_extensions=extras))
         resolved = ResolvedInputContract(project_id=str(meta.get("project_id", "legacy-import")), metadata=meta,
             units=UnitSystem(currency=str(meta.get("currency", "legacy_currency")),
                 water=FlowUnitMetadata(volume_unit="Mm3", rate_unit=(data.get("profile_bundle") or {}).get("hydro_inflow_unit", "legacy_unspecified")),
@@ -105,4 +105,3 @@ def adapt_legacy_input(data: dict[str, Any], *, preserve_legacy_validation: bool
         issues.append(ValidationIssue(code="legacy_adaptation_failed", severity="error", path="", message=str(exc)))
         return LegacyAdaptation(resolved_input=None, issues=issues)
     return LegacyAdaptation(resolved_input=resolved, issues=issues)
-
