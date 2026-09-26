@@ -1115,6 +1115,7 @@ def solve_window(
         shared_session = SharedComponentSession(shared_context)
         shared_asset_ids = shared_session.asset_ids
     shared_bess_ids = set(shared_asset_ids).intersection(bess_ids)
+    shared_ph_ids = set(shared_asset_ids).intersection(ph_ids)
 
     def gen_lb(m, g, t):
         if g in shared_asset_ids:
@@ -1540,6 +1541,8 @@ def solve_window(
                       for h in ph_ids}
 
         def ph_soc_bal(m, h, t):
+            if h in shared_ph_ids:
+                return pyo.Constraint.Skip
             a = assets[h]
             ep_hi = float(a["efficiency_pump"])
             ep_lo = float(a.get("efficiency_pump_deep", ep_hi * 0.85))
@@ -1557,9 +1560,13 @@ def solve_window(
         m.PhSOC = pyo.Constraint(m.PH, m.T, rule=ph_soc_bal)
 
         def ph_soc_lb(m, h, t):
+            if h in shared_ph_ids:
+                return pyo.Constraint.Skip
             a = assets[h]
             return m.ph_soc[h, t] >= float(a["soc_min"]) * float(a["energy_mwh"])
         def ph_soc_ub(m, h, t):
+            if h in shared_ph_ids:
+                return pyo.Constraint.Skip
             a = assets[h]
             return m.ph_soc[h, t] <= float(a["soc_max"]) * float(a["energy_mwh"])
         m.PhSOCLB = pyo.Constraint(m.PH, m.T, rule=ph_soc_lb)
@@ -1567,6 +1574,8 @@ def solve_window(
 
         # Segment selection: z_hi=1 iff SOC ≥ threshold·cap.  Big-M links.
         def ph_seg_link(m, h, t):
+            if h in shared_ph_ids:
+                return pyo.Constraint.Skip
             a = assets[h]
             thr = float(a.get("soc_deep_threshold", 0.3)) * float(a["energy_mwh"])
             bigM = float(a["energy_mwh"])
@@ -1578,27 +1587,43 @@ def solve_window(
         #   pmp_hi ≤ pump · (1 − mode) · z_hi,  pmp_lo ≤ pump · (1 − mode) · (1 − z_hi)
         # Big-M lifts the product to linear: the stricter bound is via pmax.
         def gen_hi_ub(m, h, t):
+            if h in shared_ph_ids:
+                return pyo.Constraint.Skip
             pmx = float(assets[h]["pmax"])
             return m.ph_gen_hi[h, t] <= pmx * m.ph_mode[h, t]
         def gen_lo_ub(m, h, t):
+            if h in shared_ph_ids:
+                return pyo.Constraint.Skip
             pmx = float(assets[h]["pmax"])
             return m.ph_gen_lo[h, t] <= pmx * m.ph_mode[h, t]
         def gen_seg_hi(m, h, t):
+            if h in shared_ph_ids:
+                return pyo.Constraint.Skip
             pmx = float(assets[h]["pmax"])
             return m.ph_gen_hi[h, t] <= pmx * m.ph_zhi[h, t]
         def gen_seg_lo(m, h, t):
+            if h in shared_ph_ids:
+                return pyo.Constraint.Skip
             pmx = float(assets[h]["pmax"])
             return m.ph_gen_lo[h, t] <= pmx * (1 - m.ph_zhi[h, t])
         def pmp_mode_hi(m, h, t):
+            if h in shared_ph_ids:
+                return pyo.Constraint.Skip
             pmp = float(assets[h]["pump_mw"])
             return m.ph_pmp_hi[h, t] <= pmp * (1 - m.ph_mode[h, t])
         def pmp_mode_lo(m, h, t):
+            if h in shared_ph_ids:
+                return pyo.Constraint.Skip
             pmp = float(assets[h]["pump_mw"])
             return m.ph_pmp_lo[h, t] <= pmp * (1 - m.ph_mode[h, t])
         def pmp_seg_hi(m, h, t):
+            if h in shared_ph_ids:
+                return pyo.Constraint.Skip
             pmp = float(assets[h]["pump_mw"])
             return m.ph_pmp_hi[h, t] <= pmp * m.ph_zhi[h, t]
         def pmp_seg_lo(m, h, t):
+            if h in shared_ph_ids:
+                return pyo.Constraint.Skip
             pmp = float(assets[h]["pump_mw"])
             return m.ph_pmp_lo[h, t] <= pmp * (1 - m.ph_zhi[h, t])
 
