@@ -65,6 +65,13 @@ def check_component_results(
             "generation_deep_mw": result.generation_deep_mw,
             "pumping_high_mw": result.pumping_high_mw,
             "pumping_deep_mw": result.pumping_deep_mw,
+            "state_of_water_mm3": result.state_of_water_mm3,
+            "previous_state_of_water_mm3": result.previous_state_of_water_mm3,
+            "water_inflow_mm3h": result.water_inflow_mm3h,
+            "water_release_mm3h": result.water_release_mm3h,
+            "water_spill_mm3h": result.water_spill_mm3h,
+            "water_cascade_inflow_mm3h": result.water_cascade_inflow_mm3h,
+            "water_efficiency_mwh_per_mm3": result.water_efficiency_mwh_per_mm3,
         }
         finite = all(value is None or math.isfinite(float(value)) for value in values.values())
         negatives = {
@@ -274,6 +281,49 @@ def check_component_results(
             expected_cost=float(asset.get("vom",.1) or 0)*float(item.injection_mw)*duration_hours
             cost_violation=abs(float(item.cost_usd or 0)-expected_cost)
             _record(buckets,"component.pumped_hydro_cost",passed=cost_violation <= tolerance.limit(max(1.0,abs(expected_cost))),violation=cost_violation,tolerance=tolerance.limit(max(1.0,abs(expected_cost))),witness={"asset_id":asset_id,"period":item.period,"cost_usd":item.cost_usd,"expected_cost_usd":expected_cost})
+
+    reservoir_by_asset: dict[str, list[ComponentResult]] = defaultdict(list)
+    for item in results:
+        if item.component_kind == "hydro_reg":
+            reservoir_by_asset[item.asset_id].append(item)
+    for asset_id, observations in reservoir_by_asset.items():
+        asset, hydro = asset_map.get(asset_id, {}), (asset_map.get(asset_id, {}).get("hydro") or {})
+        observations.sort(key=lambda item: item.period)
+        lower, upper = float(hydro.get("reservoir_min", 0) or 0), float(hydro.get("reservoir_max", 0) or 0)
+        pmax = float(asset.get("pmax", 0) or 0)
+        minimum_release = float(hydro.get("min_release_mm3h", 0) or 0)
+        spill_price = float(hydro.get("spill_cost_usd_per_mm3", hydro.get("spill_cost", 0)) or 0)
+        for index, item in enumerate(observations):
+            storage = float(item.state_of_water_mm3 or 0)
+            injection = float(item.injection_mw)
+            inflow = float(item.water_inflow_mm3h or 0)
+            release = float(item.water_release_mm3h or 0)
+            spill = float(item.water_spill_mm3h or 0)
+            cascade = float(item.water_cascade_inflow_mm3h or 0)
+            efficiency = float(item.water_efficiency_mwh_per_mm3 or 0)
+            limit = tolerance.limit(max(1.0, upper, pmax, abs(storage)))
+            bounds_violation = max(0.0, lower - storage, storage - upper, -injection, injection - pmax, -spill)
+            _record(buckets, "component.reservoir_bounds", passed=bounds_violation <= limit, violation=bounds_violation, tolerance=limit,
+                    witness={"asset_id":asset_id,"period":item.period,"storage_mm3":storage,"injection_mw":injection})
+            release_violation = abs(release - injection / max(efficiency, .001))
+            _record(buckets, "component.reservoir_release_conversion", passed=release_violation <= limit, violation=release_violation, tolerance=limit,
+                    witness={"asset_id":asset_id,"period":item.period,"release_mm3h":release,"injection_mw":injection,"efficiency_mwh_per_mm3":efficiency})
+            prior = item.previous_state_of_water_mm3
+            if prior is None:
+                prior = float(hydro.get("reservoir_init", 0) or 0) if index == 0 else float(observations[index - 1].state_of_water_mm3 or 0)
+            expected = float(prior) + (inflow + cascade - release - spill) * duration_hours
+            balance_violation = abs(storage - expected)
+            balance_limit = tolerance.limit(max(1.0, upper, abs(storage), abs(expected)))
+            _record(buckets, "component.reservoir_water_balance", passed=balance_violation <= balance_limit, violation=balance_violation, tolerance=balance_limit,
+                    witness={"asset_id":asset_id,"period":item.period,"storage_mm3":storage,"prior_storage_mm3":prior,"expected_storage_mm3":expected,"inflow_mm3h":inflow,"release_mm3h":release,"spill_mm3h":spill,"cascade_mm3h":cascade,"duration_hours":duration_hours})
+            if minimum_release > 0:
+                release_min_violation = max(0.0, minimum_release - release - spill)
+                _record(buckets, "component.reservoir_min_release", passed=release_min_violation <= limit, violation=release_min_violation, tolerance=limit,
+                        witness={"asset_id":asset_id,"period":item.period,"minimum_release_mm3h":minimum_release,"release_mm3h":release,"spill_mm3h":spill})
+            expected_cost = spill_price * spill * duration_hours
+            cost_violation = abs(float(item.spill_cost_usd or 0) - expected_cost)
+            _record(buckets, "component.reservoir_spill_cost", passed=cost_violation <= tolerance.limit(max(1.0, abs(expected_cost))), violation=cost_violation, tolerance=tolerance.limit(max(1.0, abs(expected_cost))),
+                    witness={"asset_id":asset_id,"period":item.period,"spill_cost_usd":item.spill_cost_usd,"expected_spill_cost_usd":expected_cost})
 
     dr_by_asset: dict[str, list[ComponentResult]] = defaultdict(list)
     for item in results:
