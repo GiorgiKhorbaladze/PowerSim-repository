@@ -4,11 +4,11 @@
 
 | Item | Status |
 | --- | --- |
-| Completed stage | Stage 3D reservoir-hydro, cascades and gas coupling - merged in PR #81. Stage 4A reserve engine is in review. |
+| Completed stage | Stage 3D reservoir-hydro, cascades and gas coupling - merged in PR #81. Stage 4A reserve engine - merged in PR #82. Stage 4B DC network hardening is in review. |
 | Merged migration PRs | #69 Stage 3A, #71 Thermal UC, #72 thermal economics, #73 BESS core, #74 pumped-hydro core, #75 demand-response core, #76 DR QA/publication corrective, #77 Stage 3C closure hardening, #79 reservoir-hydro core, #80 cascade migration, #81 Stage 3D closure. |
 | Shared components | Wind, solar, simplified run-of-river, imports, thermal UC/economics, BESS with independently auditable canonical boundary state, pumped hydro with auditable segment flows and VOM, demand response with structured validation and publication gating, reservoir hydro/cascades with independent water-balance QA, and canonical gas accounting. Stage 4A adds canonical reserve allocations and independent reserve QA. |
-| Components still legacy-owned | Thermal objective ownership; BESS depth-cost/end-target extensions; reservoir `end_level_penalty`; DC-network hardening, stochastic, adequacy and expansion. Pumped hydro and DR remain unsupported reserve providers. |
-| Release readiness | Not release-ready. Stage 4A is in review; Stage 4B DC network hardening and Stage 4C deterministic integration follow. |
+| Components still legacy-owned | Thermal objective ownership; BESS depth-cost/end-target extensions; reservoir `end_level_penalty`; stochastic, adequacy and expansion. Pumped hydro and DR remain unsupported reserve providers. |
+| Release readiness | Not release-ready. Stage 4B is in review; Stage 4C deterministic integration follows. |
 
 ## Stage 3B acceptance intent
 
@@ -64,7 +64,7 @@ requires explicit modelling approval before a PowerSim 1.0 correction.
 
 ## Next work
 
-1. Stage 4B: DC network hardening after Stage 4A merge.
+1. Stage 4C: deterministic integration after Stage 4B merge.
 
 ## Stage 3D reservoir core and cascades - merged in PRs #79 and #80
 
@@ -113,6 +113,16 @@ resolved input plus extracted records; QA failure blocks publication.
 The existing thermal, reservoir-hydro, run-of-river, import and BESS provider
 scope remains preserved. Pumped hydro and demand response are explicitly
 filtered rather than represented as validated reserve providers.
+
+## Stage 4B DC network hardening - pending merge
+
+Validated network mode is explicit and fail-closed: it requires buses,
+branches, one reference bus, a valid bus for every asset and an explicit load
+mapping. Branch flow uses only `susceptance_mw_per_rad`; legacy `x_pu` is
+accepted only together with `base_mva` and is converted deterministically.
+Canonical results publish signed flow, bus angle and nodal injection. QA
+reconstructs flow, limits, nodal balance and reference angle without reading
+live Pyomo constraints. AC voltage, reactive-power and losses are not claimed.
 
 ### Confirmed legacy soft end-level penalty defect
 
