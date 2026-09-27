@@ -77,6 +77,9 @@ class ComponentResult:
     water_cascade_inflow_mm3h: float | None = None
     water_efficiency_mwh_per_mm3: float | None = None
     spill_cost_usd: float | None = None
+    # Physical gas consumed in this period, in Mm3.  This is deliberately a
+    # volume rather than an hourly rate so sub-hourly QA cannot omit dt.
+    gas_consumption_mm3: float | None = None
 
 
 @dataclass(frozen=True)
