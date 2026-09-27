@@ -4,11 +4,11 @@
 
 | Item | Status |
 | --- | --- |
-| Completed stage | Stage 3C closure and corrective hardening is in progress on the current PR. |
-| Merged migration PRs | #69 Stage 3A, #71 Thermal UC, #72 thermal economics, #73 BESS core, #74 pumped-hydro core, #75 demand-response core, #76 DR QA/publication corrective. |
-| Shared components | Wind, solar, simplified run-of-river, imports, thermal UC/economics, BESS core, pumped hydro core, and demand response. |
+| Completed stage | Stage 3C closure and corrective hardening - merged in PR #77. |
+| Merged migration PRs | #69 Stage 3A, #71 Thermal UC, #72 thermal economics, #73 BESS core, #74 pumped-hydro core, #75 demand-response core, #76 DR QA/publication corrective, #77 Stage 3C closure hardening. |
+| Shared components | Wind, solar, simplified run-of-river, imports, thermal UC/economics, BESS with independently auditable canonical boundary state, pumped hydro with auditable segment flows and VOM, and demand response with structured validation and publication gating. |
 | Components still legacy-owned | Thermal objective ownership; BESS depth-cost/end-target extensions; reservoir hydro, cascades, gas coupling, reserves, network, stochastic, adequacy and expansion. |
-| Release readiness | Not release-ready. Stage 3C must pass parity, independent QA and publication-gating acceptance before Stage 3D begins. |
+| Release readiness | Not release-ready. Stage 3C independent QA, parity characterization and publication-gating acceptance passed. Stage 3D is next. |
 
 ## Stage 3B acceptance intent
 
@@ -36,7 +36,7 @@ The current solver intentionally retains two existing DR budget behaviours:
 2. A rolling solve starts with the full configured annual call-out budget and
    decrements it only from committed slices.
 
-This hardening pass makes independent QA reproduce those existing semantics;
+PR #77 makes independent QA reproduce those existing semantics;
 it does not alter the annual-budget equation. Whether the two policies should
 be unified is a future modelling decision, not a refactoring change.
 
@@ -45,9 +45,10 @@ C-rate and ramp constraints. The legacy assembler still owns optional
 `depth_multiplier` / `soc_deep_threshold`, `dis_deep`, `soc_end_target` and
 `soc_end_penalty_usd_mwh` equations. The end target remains last-window-only.
 
-Pumped hydro shared core owns two-segment physical flows, SOC and VOM
-extraction. Canonical records expose high/deep generation and pumping so QA
-can reconstruct SOC independently.
+Pumped hydro shared core owns structured validation, two-segment physical
+flows, SOC and VOM extraction. Canonical records expose high/deep generation
+and pumping, plus preceding SOC, so QA can reconstruct chronological SOC and
+rolling continuity independently.
 
 ## Known modelling decision - one-sided depth selector
 
@@ -63,9 +64,8 @@ requires explicit modelling approval before a PowerSim 1.0 correction.
 
 ## Next work
 
-1. Complete and merge the Stage 3C hardening acceptance PR after full CI.
-2. Stage 3D: reservoir hydro, hydrological balances and cascades.
-3. Stage 3D: gas constraints/coupling, with independent QA and parity.
+1. Stage 3D: reservoir hydro, hydrological balances and cascades.
+2. Stage 3D: gas constraints/coupling, with independent QA and parity.
 
 ## Blockers
 
