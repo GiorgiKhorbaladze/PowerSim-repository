@@ -1105,6 +1105,9 @@ def solve_window(
     shared_asset_ids = frozenset()
     if component_engine == "shared":
         from powersim.workflows.deterministic import SharedComponentSession, build_stage3a_context
+        # Stateful components need the same terminal-window marker used by
+        # the legacy assembler.  It is data, not a constraint inspection.
+        m._powersim_is_last_window = bool(solver_cfg.get("_is_last_window", True))
         shared_context = build_stage3a_context(m, T, dt, profiles_w, assets,
                                                offset_hours=offset_h,
                                                initial_state=init_state,
@@ -1117,6 +1120,7 @@ def solve_window(
     shared_bess_ids = set(shared_asset_ids).intersection(bess_ids)
     shared_ph_ids = set(shared_asset_ids).intersection(ph_ids)
     shared_dr_ids = set(shared_asset_ids).intersection(dr_ids)
+    shared_reservoir_ids = set(shared_asset_ids).intersection(hydro_reg)
 
     def gen_lb(m, g, t):
         if g in shared_asset_ids:
@@ -1288,6 +1292,8 @@ def solve_window(
             _hydro_eff[h_id] = hydro_efficiency_at(ha_id, stor0)
 
         def hydro_bal(m, h, t):
+            if h in shared_reservoir_ids:
+                return pyo.Constraint.Skip
             ha   = assets[h]["hydro"]
             eff  = _hydro_eff[h]                          # window-level
             infl_key = assets[h].get("inflow_profile")
@@ -1329,6 +1335,8 @@ def solve_window(
         # ``hydro.min_release_mm3h`` > 0. Both routes (turbined and bypass)
         # reach the river, so either satisfies the ecological constraint.
         def _min_release_rule(m, h, t):
+            if h in shared_reservoir_ids:
+                return pyo.Constraint.Skip
             mr = float((assets[h].get("hydro") or {}).get("min_release_mm3h", 0) or 0)
             if mr <= 0:
                 return pyo.Constraint.Skip
@@ -1341,16 +1349,24 @@ def solve_window(
         # the objective rule could see them; now wire the constraints.
         if hasattr(m, "stor_target_short"):
             def _stor_target_rule(m, h, mo):
+                if h in shared_reservoir_ids:
+                    return pyo.Constraint.Skip
                 t_at  = m._stor_target_period[(h, mo)]
                 tgt   = m._stor_target_target[(h, mo)]
                 return m.stor_target_short[h, mo] >= tgt - m.stor[h, t_at]
             m.StorTargetShort = pyo.Constraint(m.StorTgt, rule=_stor_target_rule)
 
         def stor_lb(m, h, t):
+            if h in shared_reservoir_ids:
+                return pyo.Constraint.Skip
             return m.stor[h,t] >= float(assets[h]["hydro"].get("reservoir_min",0))
         def stor_ub(m, h, t):
+            if h in shared_reservoir_ids:
+                return pyo.Constraint.Skip
             return m.stor[h,t] <= float(assets[h]["hydro"].get("reservoir_max",9999))
         def stor_end(m, h):
+            if h in shared_reservoir_ids:
+                return pyo.Constraint.Skip
             return m.stor[h,T[-1]] >= float(assets[h]["hydro"].get("reservoir_end_min",
                                               assets[h]["hydro"].get("reservoir_min",0)))
         m.StorLB  = pyo.Constraint(m.GR, m.T, rule=stor_lb)

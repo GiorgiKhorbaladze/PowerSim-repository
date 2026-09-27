@@ -65,6 +65,18 @@ class ComponentResult:
     # they do not assert that the current Big-M selector is an iff relation.
     deep_discharge_mw: float | None = None
     shallow_selector: float | None = None
+    # Reservoir-hydro records use physical water quantities explicitly.  The
+    # state is Mm3, while inflow/release/spill are Mm3/h rates.  Keeping the
+    # rates alongside the period duration makes water-balance QA independent
+    # of the Pyomo constraint which produced the solution.
+    state_of_water_mm3: float | None = None
+    previous_state_of_water_mm3: float | None = None
+    water_inflow_mm3h: float | None = None
+    water_release_mm3h: float | None = None
+    water_spill_mm3h: float | None = None
+    water_cascade_inflow_mm3h: float | None = None
+    water_efficiency_mwh_per_mm3: float | None = None
+    spill_cost_usd: float | None = None
 
 
 @dataclass(frozen=True)

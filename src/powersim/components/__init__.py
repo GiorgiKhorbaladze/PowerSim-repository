@@ -10,6 +10,7 @@ from .thermal import ThermalComponent
 from .bess import BESSComponent
 from .pumped_hydro import PumpedHydroComponent
 from .demand_response import DemandResponseComponent
+from .reservoir_hydro import ReservoirHydroComponent
 
 
 def stage3a_registry() -> ComponentRegistry:
@@ -44,8 +45,13 @@ def stage3c_registry() -> ComponentRegistry:
     registry.register("dr", DemandResponseComponent)
     return registry
 
+def stage3d_reservoir_registry() -> ComponentRegistry:
+    registry = stage3c_registry()
+    registry.register("hydro_reg", ReservoirHydroComponent)
+    return registry
+
 
 __all__ = ["BoundaryState", "BuildContext", "Component", "ComponentQAMetadata",
            "ComponentRegistry", "ComponentResult", "CostTerm", "ValidationIssue",
            "WindComponent", "SolarComponent", "RunOfRiverComponent", "ExchangeComponent",
-           "ThermalComponent", "BESSComponent", "PumpedHydroComponent", "DemandResponseComponent", "UnsupportedComponentOperation", "stage3a_registry", "stage3b_registry", "stage3c_registry", "stage3c_pumped_hydro_registry"]
+           "ThermalComponent", "BESSComponent", "PumpedHydroComponent", "DemandResponseComponent", "ReservoirHydroComponent", "UnsupportedComponentOperation", "stage3a_registry", "stage3b_registry", "stage3c_registry", "stage3c_pumped_hydro_registry", "stage3d_reservoir_registry"]
