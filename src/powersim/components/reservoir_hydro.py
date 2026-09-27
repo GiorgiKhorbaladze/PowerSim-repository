@@ -51,7 +51,7 @@ class ReservoirHydroComponent:
         # objective, so it is not actually charged.  Activating it here
         # would be a material dispatch/economic change, not a migration.
         strategic_penalty = float(hydro.get("end_level_penalty", 0) or 0) > 0 and float(hydro.get("target_end_level_frac", 0) or 0) > 0
-        return not bool(hydro.get("cascade_upstream")) and not strategic_penalty
+        return not strategic_penalty
 
     def _name(self, stem: str) -> str:
         safe = re.sub(r"[^A-Za-z0-9_]", "_", self.asset_id)
@@ -119,6 +119,24 @@ class ReservoirHydroComponent:
             return float(context.profiles[profile][index])
         return float(self.asset["hydro"].get("inflow", 0) or 0)
 
+    def _cascade_inflow(self, model: Any, context: BuildContext, t: int) -> Any:
+        """Exact legacy cascade transport: delayed turbine flow plus optional spill."""
+        hydro = self.asset["hydro"]
+        upstream = hydro.get("cascade_upstream")
+        if not upstream or upstream not in context.assets:
+            return 0.0
+        periods_per_hour = max(1, int(round(1 / context.duration_hours)))
+        upstream_t = t - int(hydro.get("cascade_travel_delay_h", 0) or 0) * periods_per_hour
+        if upstream_t < context.periods[0]:
+            return 0.0
+        upstream_hydro = context.assets[upstream].get("hydro") or {}
+        upstream_initial = float(context.legacy_initial_state.get(upstream, {}).get("stor", upstream_hydro.get("reservoir_init", 700)))
+        upstream_efficiency = max(hydro_efficiency_at(upstream_hydro, upstream_initial), .001)
+        turbine = model.p[upstream, upstream_t] / upstream_efficiency
+        if hydro.get("cascade_flow_mode", "turbined_only") == "release_plus_spill":
+            turbine += model.spill[upstream, upstream_t]
+        return float(hydro.get("cascade_gain", 1.0) or 0) * turbine
+
     def add_constraints(self, context: BuildContext) -> None:
         import pyomo.environ as pyo
         m, aid, periods, dt, hydro = context.builder, self.asset_id, context.periods, context.duration_hours, self.asset["hydro"]
@@ -126,7 +144,7 @@ class ReservoirHydroComponent:
         def balance(model, t):
             index = periods.index(t)
             previous = self._initial_storage(context) if index == 0 else model.stor[aid, t - 1]
-            return model.stor[aid, t] == previous + (self._inflow(context, index) - model.p[aid, t] / efficiency - model.spill[aid, t]) * dt
+            return model.stor[aid, t] == previous + (self._inflow(context, index) + self._cascade_inflow(model, context, t) - model.p[aid, t] / efficiency - model.spill[aid, t]) * dt
         m.add_component(self._name("Balance"), pyo.Constraint(periods, rule=balance))
         m.add_component(self._name("LB"), pyo.Constraint(periods, rule=lambda model, t: model.stor[aid, t] >= float(hydro.get("reservoir_min", 0))))
         m.add_component(self._name("UB"), pyo.Constraint(periods, rule=lambda model, t: model.stor[aid, t] <= float(hydro.get("reservoir_max", 9999))))
@@ -167,7 +185,8 @@ class ReservoirHydroComponent:
             spill = float(pyo.value(m.spill[aid, t]) or 0)
             storage = float(pyo.value(m.stor[aid, t]) or 0)
             previous = self._initial_storage(context) if index == 0 else float(pyo.value(m.stor[aid, t - 1]) or 0)
-            output.append(ComponentResult(aid, self.kind, context.period_coordinate(index), available_mw=float(self.asset.get("pmax", 0) or 0), injection_mw=dispatch, cost_usd=spill_price * spill * dt, state_of_water_mm3=storage, previous_state_of_water_mm3=previous, water_inflow_mm3h=self._inflow(context, index), water_release_mm3h=dispatch / max(efficiency, .001), water_spill_mm3h=spill, water_cascade_inflow_mm3h=0.0, water_efficiency_mwh_per_mm3=efficiency, spill_cost_usd=spill_price * spill * dt))
+            cascade = float(pyo.value(self._cascade_inflow(m, context, t)) or 0)
+            output.append(ComponentResult(aid, self.kind, context.period_coordinate(index), available_mw=float(self.asset.get("pmax", 0) or 0), injection_mw=dispatch, cost_usd=spill_price * spill * dt, state_of_water_mm3=storage, previous_state_of_water_mm3=previous, water_inflow_mm3h=self._inflow(context, index), water_release_mm3h=dispatch / max(efficiency, .001), water_spill_mm3h=spill, water_cascade_inflow_mm3h=cascade, water_efficiency_mwh_per_mm3=efficiency, spill_cost_usd=spill_price * spill * dt))
         return output
 
     def qa_spec(self) -> ComponentQAMetadata:

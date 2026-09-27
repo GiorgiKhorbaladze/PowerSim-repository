@@ -115,10 +115,38 @@ def test_reservoir_month_target_head_curve_and_spill_remain_in_parity():
 def test_cascade_asset_remains_legacy_until_cascade_coupler_migration():
     asset = _input(True)["assets"][0]
     asset["hydro"]["cascade_upstream"] = "upstream"
-    assert ReservoirHydroComponent.supports_shared(asset) is False
+    assert ReservoirHydroComponent.supports_shared(asset) is True
 
 
 def test_legacy_soft_end_penalty_is_excluded_from_validated_shared_core():
     asset = _input(True)["assets"][0]
     asset["hydro"].update({"target_end_level_frac": .8, "end_level_penalty": 20})
     assert ReservoirHydroComponent.supports_shared(asset) is False
+
+
+@pytest.mark.parametrize("flow_mode", ["turbined_only", "release_plus_spill"])
+def test_shared_cascade_matches_legacy_and_publishes_cascade_water(flow_mode):
+    inp = _input(True)
+    upstream = inp["assets"][0]
+    upstream["id"] = "up"
+    upstream["hydro"].update({"reservoir_init": 10, "reservoir_max": 10, "reservoir_end_min": 0})
+    downstream = {**upstream, "id": "dn", "inflow_profile": "zero",
+                  "hydro": {**upstream["hydro"], "reservoir_init": 2, "reservoir_max": 30,
+                            "cascade_upstream": "up", "cascade_travel_delay_h": 0,
+                            "cascade_gain": 1.0, "cascade_flow_mode": flow_mode}}
+    inp["assets"] = [upstream, downstream, inp["assets"][1]]
+    inp["profiles"] = {"demand": [200.0] * 4, "inflow": [1.0] * 4, "zero": [0.0] * 4}
+    legacy_input = {**inp, "solver_settings": {**inp["solver_settings"], "component_engine": "legacy"}}
+    old_assets, new_assets = solver.build_asset_map(legacy_input), solver.build_asset_map(inp)
+    old_rows, _, old_objective = solver.solve_all(legacy_input, old_assets, legacy_input["profiles"], {})
+    new_rows, _, new_objective = solver.solve_all(inp, new_assets, inp["profiles"], {})
+    assert new_objective == pytest.approx(old_objective, abs=.01)
+    assert [row["hydro"] for row in new_rows] == [row["hydro"] for row in old_rows]
+    records = [item for item in new_rows.component_results if item.asset_id == "dn"]
+    assert any((item.water_cascade_inflow_mm3h or 0) > 0 for item in records)
+    assert all(item.status.value == "pass" for item in check_component_results(new_rows.component_results, 1, resolved_input=inp))
+    corrupted = list(new_rows.component_results)
+    index = next(i for i, item in enumerate(corrupted) if item.asset_id == "dn" and (item.water_cascade_inflow_mm3h or 0) > 0)
+    corrupted[index] = replace(corrupted[index], water_cascade_inflow_mm3h=0)
+    checks = check_component_results(corrupted, 1, resolved_input=inp)
+    assert next(item for item in checks if item.check_id == "component.reservoir_cascade_transport").status.value == "fail"
