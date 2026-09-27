@@ -27,5 +27,11 @@ def test_closure_includes_bess_terms():
     assert ob['bess_degradation_cost'] > 0 and ob['bess_end_soc_penalty'] > 0
     assert ob['closure_gap_pct'] < 0.5
 
+def test_objective_reconstruction_participates_in_publication_qa():
+    inp={'assets':[{'id':'g','type':'thermal','committable':False,'pmin':0,'pmax':10,'mc':3,'vom':0}], 'profiles':{'demand':[5]}, 'study_horizon':{'horizon_hours':1}, 'reserve_products':[], 'solver_settings':{'solver':'highs'}}
+    r=_run(inp)
+    check=next(c for c in r['qa']['checks'] if c['check_id']=='objective_reconstruction')
+    assert check['status']=='pass'
+
 if __name__=='__main__':
-    test_closure_includes_reserve_shortfall_penalty(); test_closure_includes_unserved_penalty(); test_closure_includes_bess_terms(); print('objective closure tests passed')
+    test_closure_includes_reserve_shortfall_penalty(); test_closure_includes_unserved_penalty(); test_closure_includes_bess_terms(); test_objective_reconstruction_participates_in_publication_qa(); print('objective closure tests passed')
