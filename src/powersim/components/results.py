@@ -48,6 +48,23 @@ class ComponentResult:
     co2_t: float | None = None
     co2_cost_usd: float | None = None
     state_of_charge_mwh: float | None = None
+    # Stateful storage records carry the physical state immediately before
+    # this period.  This makes the first committed period of a rolling window
+    # independently auditable without reaching back into the Pyomo model.
+    previous_state_of_charge_mwh: float | None = None
+    previous_injection_mw: float | None = None
+    previous_withdrawal_mw: float | None = None
+    # Pumped-hydro uses two physical efficiency segments.  Totals alone are
+    # insufficient to reconstruct its energy balance, so extraction preserves
+    # each flow explicitly.
+    generation_high_mw: float | None = None
+    generation_deep_mw: float | None = None
+    pumping_high_mw: float | None = None
+    pumping_deep_mw: float | None = None
+    # These BESS fields expose legacy-owned depth accounting for audit only;
+    # they do not assert that the current Big-M selector is an iff relation.
+    deep_discharge_mw: float | None = None
+    shallow_selector: float | None = None
 
 
 @dataclass(frozen=True)

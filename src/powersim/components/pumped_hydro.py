@@ -1,11 +1,12 @@
 """Shared pumped-hydro core with the legacy two-head formulation."""
 from __future__ import annotations
+import math
 
 import re
 from hashlib import sha1
 from typing import Any
 
-from .context import BoundaryState, BuildContext
+from .context import BoundaryState, BuildContext, make_validation_issue
 from .ports import BoundaryStatePort, PowerInjectionPort, PowerWithdrawalPort
 from .results import ComponentQAMetadata, ComponentResult, CostTerm
 
@@ -24,7 +25,24 @@ class PumpedHydroComponent:
 
     def validate(self, context: BuildContext) -> list:
         context.require_capabilities(self.supported_capabilities, self.asset_id)
-        return []
+        issues=[]
+        def number(key, *, minimum=0, maximum=None, default=None):
+            try: value=float(self.asset.get(key, default))
+            except (TypeError, ValueError): value=float("nan")
+            if not math.isfinite(value) or value < minimum or (maximum is not None and value > maximum):
+                range_text=f"between {minimum} and {maximum}" if maximum is not None else f"at least {minimum}"
+                issues.append(make_validation_issue(self.asset_id,"invalid_pumped_hydro_parameter",f"{key} must be numeric, finite, and {range_text}",field_name=key))
+            return value
+        number("pmax"); number("pump_mw"); number("energy_mwh")
+        soc_min=number("soc_min", maximum=1); soc_max=number("soc_max", maximum=1); soc_init=number("soc_init", maximum=1)
+        for key in ("efficiency_pump", "efficiency_gen"):
+            number(key, minimum=1e-12, maximum=1)
+        for key, fallback in (("efficiency_pump_deep", self.asset.get("efficiency_pump")), ("efficiency_gen_deep", self.asset.get("efficiency_gen"))):
+            if key in self.asset: number(key, minimum=1e-12, maximum=1)
+        number("soc_deep_threshold", maximum=1, default=.3); number("vom", default=0)
+        if all(math.isfinite(v) for v in (soc_min,soc_max,soc_init)) and not (soc_min <= soc_init <= soc_max):
+            issues.append(make_validation_issue(self.asset_id,"invalid_pumped_hydro_soc_range","soc_min <= soc_init <= soc_max is required",field_name="soc_init"))
+        context.validation_issues.extend(issues); return issues
 
     def declare_parameters(self, context: BuildContext) -> None: pass
 
@@ -53,12 +71,23 @@ class PumpedHydroComponent:
             m.add_component(self._name(stem), pyo.Constraint(periods, rule=lambda model,t,variable=variable,limit=limit,selector=selector: variable[aid,t] <= limit * selector(model,t)))
         context.power_ports.extend((PowerInjectionPort(aid, {t:m.ph_gen_hi[aid,t]+m.ph_gen_lo[aid,t] for t in periods}), PowerWithdrawalPort(aid, {t:m.ph_pmp_hi[aid,t]+m.ph_pmp_lo[aid,t] for t in periods}), BoundaryStatePort(aid, m.ph_soc[aid,:])))
 
-    def objective_terms(self, context: BuildContext) -> list[CostTerm]: return []
+    def objective_terms(self, context: BuildContext) -> list[CostTerm]:
+        vom=float(self.asset.get("vom", .1) or 0)
+        terms=[CostTerm(self.asset_id,"pumped_hydro_vom",expression=vom*(context.builder.ph_gen_hi[self.asset_id,t]+context.builder.ph_gen_lo[self.asset_id,t])*context.duration_hours) for t in context.periods]
+        context.cost_terms.extend(terms); return terms
     def boundary_state(self, solution: Any, at: int) -> BoundaryState:
         import pyomo.environ as pyo
         return BoundaryState(self.asset_id, {"ph_soc":float(pyo.value(solution.ph_soc[self.asset_id,at]) or 0)})
     def extract(self, solution: Any, context: BuildContext) -> list[ComponentResult]:
         import pyomo.environ as pyo
         m, aid = solution, self.asset_id
-        return [ComponentResult(aid, self.kind, context.period_coordinate(i), injection_mw=float(pyo.value(m.ph_gen_hi[aid,t]+m.ph_gen_lo[aid,t]) or 0), withdrawal_mw=float(pyo.value(m.ph_pmp_hi[aid,t]+m.ph_pmp_lo[aid,t]) or 0), state_of_charge_mwh=float(pyo.value(m.ph_soc[aid,t]) or 0)) for i,t in enumerate(context.periods)]
-    def qa_spec(self) -> ComponentQAMetadata: return ComponentQAMetadata(self.kind, ("pumped_hydro_bounds", "pumped_hydro_mode"))
+        out=[]
+        initial=context.legacy_initial_state.get(aid, {})
+        for i,t in enumerate(context.periods):
+            gen_hi=float(pyo.value(m.ph_gen_hi[aid,t]) or 0); gen_lo=float(pyo.value(m.ph_gen_lo[aid,t]) or 0)
+            pmp_hi=float(pyo.value(m.ph_pmp_hi[aid,t]) or 0); pmp_lo=float(pyo.value(m.ph_pmp_lo[aid,t]) or 0)
+            prior=initial.get("ph_soc",float(self.asset["soc_init"])*float(self.asset["energy_mwh"])) if i == 0 else float(pyo.value(m.ph_soc[aid,t-1]) or 0)
+            cost=float(pyo.value(float(self.asset.get("vom", .1) or 0)*(m.ph_gen_hi[aid,t]+m.ph_gen_lo[aid,t])*context.duration_hours) or 0)
+            out.append(ComponentResult(aid,self.kind,context.period_coordinate(i),injection_mw=gen_hi+gen_lo,withdrawal_mw=pmp_hi+pmp_lo,state_of_charge_mwh=float(pyo.value(m.ph_soc[aid,t]) or 0),previous_state_of_charge_mwh=float(prior),generation_high_mw=gen_hi,generation_deep_mw=gen_lo,pumping_high_mw=pmp_hi,pumping_deep_mw=pmp_lo,cost_usd=cost))
+        return out
+    def qa_spec(self) -> ComponentQAMetadata: return ComponentQAMetadata(self.kind, ("pumped_hydro_bounds", "pumped_hydro_mode", "pumped_hydro_soc_recurrence", "pumped_hydro_cost"))
