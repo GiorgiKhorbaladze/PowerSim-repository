@@ -4,6 +4,7 @@ from powersim.contracts import QAReport, QAStatus
 
 from .basic import BasicBoundsCheck, ElectricityBalanceCheck, FiniteValuesCheck, ObjectiveReconstructionCheck
 from .components import check_component_results
+from .reserves import check_reserve_results
 from .tolerance import DEFAULT_TOLERANCES, TolerancePolicy
 
 DEFAULT_CHECKS = (
@@ -23,6 +24,7 @@ def run_qa(
     persisted: bool = False,
     component_results=None,
     component_duration_hours: float | None = None,
+    reserve_results=None,
 ) -> QAReport:
     results = [
         check.run(resolved_input, result, tolerance, persisted=persisted)
@@ -39,6 +41,11 @@ def run_qa(
                 resolved_input=resolved_input,
             )
         )
+    if reserve_results:
+        if component_duration_hours is None or component_duration_hours <= 0:
+            raise ValueError("component_duration_hours must be positive when reserve results are supplied")
+        results.extend(check_reserve_results(list(reserve_results), component_duration_hours,
+                                             resolved_input, tolerance))
 
     executed = [check.status for check in results if check.status != QAStatus.NOT_RUN]
     if not executed:

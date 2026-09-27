@@ -83,6 +83,31 @@ class ComponentResult:
 
 
 @dataclass(frozen=True)
+class ReserveResult:
+    """Canonical reserve allocation, separate from electricity injection.
+
+    ``provided_mw`` is the provider's raw MW allocation.  The product-level
+    requirement is met by ``effective_provided_mw`` after the declared
+    derating factor.  ``physical_capability_mw`` is the contemporaneous raw
+    capability shared by all products in the same direction, which lets QA
+    detect reserve stacking without reading the Pyomo constraints.
+    """
+
+    period: int
+    product_id: str
+    direction: str
+    provider_id: str | None = None
+    provided_mw: float = 0.0
+    effective_provided_mw: float = 0.0
+    requirement_mw: float | None = None
+    shortfall_mw: float | None = None
+    physical_capability_mw: float | None = None
+    energy_capability_mw: float | None = None
+    derating_factor: float = 1.0
+    shortfall_penalty_usd: float | None = None
+
+
+@dataclass(frozen=True)
 class ComponentQAMetadata:
     kind: str
     checks: tuple[str, ...]

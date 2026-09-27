@@ -51,12 +51,14 @@ class SolvedRows(list):
     """List-compatible extraction payload carrying this solve's explicit context."""
 
     def __init__(self, rows=(), *, solver_diagnostics=None, window_diagnostics=None,
-                 iis_reports=None, component_results=None, extraction_completed=True):
+                 iis_reports=None, component_results=None, reserve_results=None,
+                 extraction_completed=True):
         super().__init__(rows)
         self.solver_diagnostics = solver_diagnostics
         self.window_diagnostics = list(window_diagnostics or [])
         self.iis_reports = list(iis_reports or [])
         self.component_results = list(component_results or [])
+        self.reserve_results = list(reserve_results or [])
         self.extraction_completed = extraction_completed
 
 # ── Schema coupling (Stage 1 patch) ───────────────────────────────────
@@ -108,6 +110,34 @@ def resolve_resolution(inp: dict) -> tuple[int, int, float]:
         raise ValueError(f"resolution_min={r} not in (1,5,15,30,60)")
     ppy = HOURS_PER_YEAR * (60 // r)
     return r, ppy, r / 60.0
+
+
+def reserve_requirement_at(product: dict, period_index: int, profiles: dict,
+                           offset_h: float, dt: float) -> float:
+    """Resolve a product requirement without silently converting a profile to 0.
+
+    ``period_index`` is one-based within a solve window.  The solver passes
+    window-sliced profiles, matching the existing availability semantics.
+    """
+    profile_key = product.get("requirement_profile")
+    if profile_key is None:
+        value = product.get("requirement", 0.0)
+    else:
+        values = profiles.get(profile_key)
+        index = period_index - 1
+        if not isinstance(values, list) or index < 0 or index >= len(values):
+            raise ValueError(
+                f"reserve product {product.get('id', '?')!r} requirement_profile "
+                f"{profile_key!r} must cover every solved period"
+            )
+        value = values[index]
+    try:
+        requirement = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"reserve product {product.get('id', '?')!r} requirement must be numeric") from exc
+    if not math.isfinite(requirement) or requirement < 0:
+        raise ValueError(f"reserve product {product.get('id', '?')!r} requirement must be finite and non-negative")
+    return requirement
 
 
 def _compute_iis(model, assets, demand_w, profiles_w, gas_limits,
@@ -1689,14 +1719,21 @@ def solve_window(
         m.DR_Annual = pyo.Constraint(m.DR, rule=dr_annual)
 
     # ── Reserve constraints ────────────────────────────────────────────
+    reserve_requirement = {
+        rp["id"]: {t: reserve_requirement_at(rp, t, profiles_w, offset_h, dt) for t in T}
+        for rp in reserve_prods
+    }
+    reserve_duration = {
+        rp["id"]: max(1e-9, float(rp.get("reserve_duration_h", 1.0) or 1.0))
+        for rp in reserve_prods
+    }
     for rp in reserve_prods:
         rid  = rp["id"]
-        req  = float(rp["requirement"]) if isinstance(rp["requirement"],(int,float)) else 0
         elig = res_elig_g[rid]
         elig_bess = res_elig_bess.get(rid, [])
         dirn = rp.get("direction","up")
         derating = rp.get("derating_factors", {})
-        dur_h = max(1e-9, float(rp.get("reserve_duration_h", 1.0) or 1.0))
+        dur_h = reserve_duration[rid]
 
         def _reserve_up_expr(m, t, _rid=rid, _elig=elig, _belig=elig_bess, _der=derating):
             up = sum(m.res_up[_rid,g,t] * _der.get(g,1.0) for g in _elig)
@@ -1709,16 +1746,16 @@ def solve_window(
                 dn += sum(m.bess_res_down[_rid,b,t] * _der.get(b,1.0) for b in _belig)
             return dn
         if dirn == "symmetric":
-            def res_supply_up(m, t, _rid=rid, _req=req):
-                return _reserve_up_expr(m, t) + m.res_sh[_rid,t] >= _req
-            def res_supply_dn(m, t, _rid=rid, _req=req):
-                return _reserve_down_expr(m, t) + m.res_sh[_rid,t] >= _req
+            def res_supply_up(m, t, _rid=rid):
+                return _reserve_up_expr(m, t) + m.res_sh[_rid,t] >= reserve_requirement[_rid][t]
+            def res_supply_dn(m, t, _rid=rid):
+                return _reserve_down_expr(m, t) + m.res_sh[_rid,t] >= reserve_requirement[_rid][t]
             m.add_component(f"ResSupUp_{rid}", pyo.Constraint(m.T, rule=res_supply_up))
             m.add_component(f"ResSupDn_{rid}", pyo.Constraint(m.T, rule=res_supply_dn))
         else:
-            def res_supply(m, t, _rid=rid, _req=req, _dirn=dirn):
+            def res_supply(m, t, _rid=rid, _dirn=dirn):
                 sup = _reserve_up_expr(m, t) if _dirn == "up" else _reserve_down_expr(m, t)
-                return sup + m.res_sh[_rid,t] >= _req
+                return sup + m.res_sh[_rid,t] >= reserve_requirement[_rid][t]
             m.add_component(f"ResSup_{rid}", pyo.Constraint(m.T, rule=res_supply))
 
         # Headroom/footroom: p + res_up ≤ pmax·u ; p - res_down ≥ pmin·u
@@ -1788,6 +1825,49 @@ def solve_window(
                     for t in T:
                         m.bess_res_up[rid,b,t].fix(0)
                         m.bess_res_down[rid,b,t].fix(0)
+
+    # A provider's raw headroom/footroom is a shared physical quantity.  The
+    # older product-by-product constraints allowed the same MW to be sold to
+    # every reserve product.  These aggregate constraints preserve all
+    # existing product definitions while preventing that double counting.
+    for g in disp_ids:
+        up_rids = [rp["id"] for rp in reserve_prods if g in res_elig_g[rp["id"]] and rp.get("direction", "up") in ("up", "symmetric")]
+        down_rids = [rp["id"] for rp in reserve_prods if g in res_elig_g[rp["id"]] and rp.get("direction", "up") in ("down", "symmetric")]
+        if up_rids:
+            def total_res_head(m, t, _g=g, _rids=tuple(up_rids)):
+                pmx = get_pmax_t(assets[_g], t-1, profiles_w, offset_h, dt)
+                u_t = m.u[_g,t] if _g in committable else 1
+                return sum(m.res_up[rid, _g, t] for rid in _rids) <= pmx * u_t - m.p[_g,t]
+            m.add_component(f"ResTotalHead_{g}", pyo.Constraint(m.T, rule=total_res_head))
+        if down_rids:
+            def total_res_foot(m, t, _g=g, _rids=tuple(down_rids)):
+                pmin = float(assets[_g].get("pmin", 0) or 0)
+                u_t = m.u[_g,t] if _g in committable else 1
+                return sum(m.res_down[rid, _g, t] for rid in _rids) <= m.p[_g,t] - pmin * u_t
+            m.add_component(f"ResTotalFoot_{g}", pyo.Constraint(m.T, rule=total_res_foot))
+    for b in bess_ids:
+        up_rids = [rp["id"] for rp in reserve_prods if b in res_elig_bess.get(rp["id"], []) and rp.get("direction", "up") in ("up", "symmetric")]
+        down_rids = [rp["id"] for rp in reserve_prods if b in res_elig_bess.get(rp["id"], []) and rp.get("direction", "up") in ("down", "symmetric")]
+        if up_rids:
+            def total_bess_head(m, t, _b=b, _rids=tuple(up_rids)):
+                return sum(m.bess_res_up[rid, _b, t] for rid in _rids) <= _bess_discharge_cap(_b) - m.dis[_b,t]
+            def total_bess_energy(m, t, _b=b, _rids=tuple(up_rids)):
+                a = assets[_b]; eta = float(a.get("eta_discharge", 1) or 1)
+                lo = float(a.get("soc_min", 0) or 0) * float(a.get("energy_mwh", 0) or 0)
+                soc = init_state.get(_b, {}).get("soc", float(a.get("soc_init", 0) or 0) * float(a.get("energy_mwh", 0) or 0)) if t == 1 else m.soc[_b,t-1]
+                return sum(m.bess_res_up[rid, _b, t] * reserve_duration[rid] for rid in _rids) <= (soc - lo) * eta
+            m.add_component(f"BessResTotalHead_{b}", pyo.Constraint(m.T, rule=total_bess_head))
+            m.add_component(f"BessResTotalEnergyUp_{b}", pyo.Constraint(m.T, rule=total_bess_energy))
+        if down_rids:
+            def total_bess_foot(m, t, _b=b, _rids=tuple(down_rids)):
+                return sum(m.bess_res_down[rid, _b, t] for rid in _rids) <= _bess_charge_cap(_b) - m.ch[_b,t]
+            def total_bess_energy_dn(m, t, _b=b, _rids=tuple(down_rids)):
+                a = assets[_b]; eta = float(a.get("eta_charge", 1) or 1)
+                hi = float(a.get("soc_max", 1) or 1) * float(a.get("energy_mwh", 0) or 0)
+                soc = init_state.get(_b, {}).get("soc", float(a.get("soc_init", 0) or 0) * float(a.get("energy_mwh", 0) or 0)) if t == 1 else m.soc[_b,t-1]
+                return sum(m.bess_res_down[rid, _b, t] * reserve_duration[rid] for rid in _rids) <= (hi - soc) / max(eta, 1e-9)
+            m.add_component(f"BessResTotalFoot_{b}", pyo.Constraint(m.T, rule=total_bess_foot))
+            m.add_component(f"BessResTotalEnergyDown_{b}", pyo.Constraint(m.T, rule=total_bess_energy_dn))
 
     # ── Gas constraints with rolling-window carry-over ────────────────
     # Gas flow per period = gas_rate[Mm³/MWh] × p[MW] × dt[h].
@@ -1922,7 +2002,11 @@ def solve_window(
         except: return 0.0
 
     # ── Extract hourly results ─────────────────────────────────────────
+    # Reserve records are deliberately extracted as a separate canonical
+    # stream: they are capacity commitments, not energy injections.
+    from powersim.components.results import ReserveResult
     hourly_w = []
+    reserve_results = []
     for t in T:
         disp = {g: round(pv(m.p, g, t), 3) for g in disp_ids}
         comm = {g: round(pv(m.u, g, t))    for g in committable}
@@ -1997,6 +2081,59 @@ def solve_window(
                     res_up_h[rid][b] = pv(m.bess_res_up, rid, b, t)
                     res_down_h[rid][b] = pv(m.bess_res_down, rid, b, t)
         res_sh_h   = {rid: pv(m.res_sh, rid, t) for rid in res_ids}
+
+        reserve_period = int(round(offset_h / dt)) + t - 1
+        product_by_id = {rp["id"]: rp for rp in reserve_prods}
+        for rid in res_ids:
+            rp = product_by_id[rid]
+            direction = str(rp.get("direction", "up"))
+            derating = rp.get("derating_factors", {}) or {}
+            directions = ("up", "down") if direction == "symmetric" else (direction,)
+            directional_effective = []
+            for reserve_direction in directions:
+                provision = res_up_h[rid] if reserve_direction == "up" else res_down_h[rid]
+                effective = 0.0
+                for gid, raw in provision.items():
+                    factor = float(derating.get(gid, 1.0) or 0.0)
+                    effective += raw * factor
+                    asset = assets[gid]
+                    if asset.get("type") == "bess":
+                        state = (init_state.get(gid, {}).get("soc", float(asset.get("soc_init", 0) or 0) * float(asset.get("energy_mwh", 0) or 0))
+                                 if t == 1 else pv(m.soc, gid, t - 1))
+                        if reserve_direction == "up":
+                            power_cap = max(0.0, _bess_discharge_cap(gid) - pv(m.dis, gid, t))
+                            energy_cap = max(0.0, state - float(asset.get("soc_min", 0) or 0) * float(asset.get("energy_mwh", 0) or 0)) * float(asset.get("eta_discharge", 1) or 1) / reserve_duration[rid]
+                        else:
+                            power_cap = max(0.0, _bess_charge_cap(gid) - pv(m.ch, gid, t))
+                            energy_cap = max(0.0, float(asset.get("soc_max", 1) or 1) * float(asset.get("energy_mwh", 0) or 0) - state) / max(float(asset.get("eta_charge", 1) or 1), 1e-9) / reserve_duration[rid]
+                    else:
+                        dispatch = pv(m.p, gid, t)
+                        pmx = get_pmax_t(asset, t - 1, profiles_w, offset_h, dt)
+                        unit_on = pv(m.u, gid, t) if gid in committable else 1.0
+                        if reserve_direction == "up":
+                            power_cap, energy_cap = max(0.0, pmx * unit_on - dispatch), None
+                        else:
+                            power_cap, energy_cap = max(0.0, dispatch - float(asset.get("pmin", 0) or 0) * unit_on), None
+                    reserve_results.append(ReserveResult(
+                        period=reserve_period, product_id=rid, direction=reserve_direction,
+                        provider_id=gid, provided_mw=raw,
+                        effective_provided_mw=raw * factor,
+                        physical_capability_mw=power_cap,
+                        energy_capability_mw=energy_cap,
+                        derating_factor=factor,
+                    ))
+                directional_effective.append(effective)
+            # One product-level record per period. For symmetric products the
+            # limiting directional provision is reported while QA reconstructs
+            # both directional requirements from provider records.
+            system_effective = min(directional_effective) if directional_effective else 0.0
+            reserve_results.append(ReserveResult(
+                period=reserve_period, product_id=rid, direction=direction,
+                provided_mw=system_effective, effective_provided_mw=system_effective,
+                requirement_mw=reserve_requirement[rid][t],
+                shortfall_mw=res_sh_h[rid],
+                shortfall_penalty_usd=res_sh_h[rid] * float(rp.get("shortfall_penalty", 500) or 0) * dt,
+            ))
 
         # BESS
         bess_h = {}
@@ -2151,6 +2288,7 @@ def solve_window(
         hourly_w,
         solver_diagnostics=diagnostics,
         component_results=component_results,
+        reserve_results=reserve_results,
     ), fin_state, solve_wall_s, obj_val
 
 
@@ -2208,6 +2346,7 @@ def solve_all(inp: dict, assets: dict, profiles: dict, gas_limits: dict) -> tupl
             window_diagnostics=[window_record],
             iis_reports=iis_reports,
             component_results=hourly.component_results,
+            reserve_results=hourly.reserve_results,
             extraction_completed=hourly.extraction_completed,
         )
         return rows, swall, obj_val
@@ -2218,6 +2357,7 @@ def solve_all(inp: dict, assets: dict, profiles: dict, gas_limits: dict) -> tupl
 
     all_hourly, state, total_swall, obj_accum = [], {}, 0.0, 0.0
     all_component_results = []
+    all_reserve_results = []
     window_diagnostics = []
     committed_p = 0
     prev_hint: dict | None = None
@@ -2308,6 +2448,11 @@ def solve_all(inp: dict, assets: dict, profiles: dict, gas_limits: dict) -> tupl
             for result in hourly_w.component_results
             if window_base_period <= result.period < commit_end_period
         )
+        all_reserve_results.extend(
+            result
+            for result in hourly_w.reserve_results
+            if window_base_period <= result.period < commit_end_period
+        )
         committed_p += commit_n_p
         if obj_w == obj_w and len(hourly_w) > 0:
             obj_accum += obj_w * (commit_n_p / len(hourly_w))
@@ -2365,6 +2510,7 @@ def solve_all(inp: dict, assets: dict, profiles: dict, gas_limits: dict) -> tupl
         window_diagnostics=window_diagnostics,
         iis_reports=iis_reports,
         component_results=all_component_results,
+        reserve_results=all_reserve_results,
         extraction_completed=complete,
     )
     return rows, total_swall, obj_accum if complete else float("nan")
@@ -3025,18 +3171,25 @@ def build_result_store(hourly: list, assets: dict, inp: dict, solve_time: float,
             result_validity=ResultValidity.INVALID, qa_status=QAStatus.NOT_RUN,
             metadata={"unavailability_reason":"caller did not provide solve execution context"})
     component_results = list(getattr(hourly, "component_results", None) or [])
+    reserve_results = list(getattr(hourly, "reserve_results", None) or [])
     if component_results:
         from dataclasses import asdict
         result["component_results"] = [asdict(item) for item in component_results]
     else:
         result["component_results"] = []
+    if reserve_results:
+        from dataclasses import asdict
+        result["reserve_results"] = [asdict(item) for item in reserve_results]
+    else:
+        result["reserve_results"] = []
 
     qa_report = run_qa(
         inp,
         result,
         persisted=True,
         component_results=component_results,
-        component_duration_hours=dt_h if component_results else None,
+        component_duration_hours=dt_h if (component_results or reserve_results) else None,
+        reserve_results=reserve_results,
     )
     finite_check = next((check for check in qa_report.checks if check.check_id == "finite_values"), None)
     required_finite = finite_check is not None and finite_check.status == QAStatus.PASS
