@@ -140,6 +140,57 @@ def reserve_requirement_at(product: dict, period_index: int, profiles: dict,
     return requirement
 
 
+def normalize_dc_network(inp: dict, assets: dict) -> dict:
+    """Return the sole MW/radian DC-network representation used by the solver.
+
+    Network mode is intentionally opt-in and fail-closed.  Copperplate runs
+    remain available when neither buses nor branches are declared.
+    """
+    buses = list(inp.get("buses") or [])
+    lines = list(inp.get("lines") or [])
+    if not buses and not lines:
+        return {"buses": [], "lines": [], "demand_by_bus": None, "load_share_by_bus": {}}
+    if not buses or not lines:
+        raise ValueError("DC network mode requires explicit non-empty buses and lines")
+    bus_ids = [str(b.get("id", "")) for b in buses]
+    if any(not b for b in bus_ids) or len(set(bus_ids)) != len(bus_ids):
+        raise ValueError("DC network buses require unique non-empty ids")
+    slack = [b for b in buses if b.get("is_slack")]
+    if len(slack) != 1:
+        raise ValueError("DC network mode requires exactly one reference/slack bus")
+    missing_assets = [gid for gid, asset in assets.items() if asset.get("bus") not in set(bus_ids)]
+    if missing_assets:
+        raise ValueError("DC network mode requires every asset to declare a valid bus: " + ", ".join(sorted(missing_assets)))
+    demand_by_bus = inp.get("demand_by_bus")
+    load_share = dict(inp.get("load_share_by_bus") or {})
+    if not demand_by_bus and not load_share:
+        raise ValueError("DC network mode requires demand_by_bus or load_share_by_bus; equal-share default is not permitted")
+    if any(str(bus) not in set(bus_ids) for bus in (demand_by_bus or load_share)):
+        raise ValueError("DC network demand mapping references an unknown bus")
+    normal_lines = []
+    for line in lines:
+        lid = str(line.get("id", "")); fb = str(line.get("from_bus", "")); tb = str(line.get("to_bus", ""))
+        if not lid or fb not in bus_ids or tb not in bus_ids or fb == tb:
+            raise ValueError(f"DC branch {lid or '<unnamed>'!r} has invalid endpoints")
+        b = line.get("susceptance_mw_per_rad")
+        x = line.get("x_pu", line.get("reactance_pu"))
+        if b is not None and x is not None:
+            raise ValueError(f"DC branch {lid!r} must declare either susceptance_mw_per_rad or x_pu + base_mva")
+        if b is None:
+            base = line.get("base_mva", inp.get("base_mva"))
+            if x is None or base is None:
+                raise ValueError(f"DC branch {lid!r} x_pu requires explicit base_mva")
+            try: b = float(base) / float(x)
+            except (TypeError, ValueError, ZeroDivisionError) as exc: raise ValueError(f"DC branch {lid!r} has invalid x_pu/base_mva") from exc
+        try:
+            b = float(b); limit = float(line.get("normal_limit_mw", line.get("capacity_mw")))
+        except (TypeError, ValueError) as exc: raise ValueError(f"DC branch {lid!r} requires numeric susceptance and MW limit") from exc
+        if not math.isfinite(b) or b == 0 or not math.isfinite(limit) or limit <= 0:
+            raise ValueError(f"DC branch {lid!r} requires nonzero finite susceptance and positive MW limit")
+        normal_lines.append({"id": lid, "from_bus": fb, "to_bus": tb, "susceptance_mw_per_rad": b, "capacity_mw": limit})
+    return {"buses": buses, "lines": normal_lines, "demand_by_bus": demand_by_bus, "load_share_by_bus": load_share}
+
+
 def _compute_iis(model, assets, demand_w, profiles_w, gas_limits,
                  reserve_prods, backend_used: str) -> dict:
     """
@@ -1053,16 +1104,13 @@ def solve_window(
     use_dcopf = bool(buses and lines)
 
     if use_dcopf:
-        # Map asset → bus (defaults to first bus when missing).
-        slack = next((b["id"] for b in buses if b.get("is_slack")), bus_ids[0])
-        asset_bus = {gid: (assets[gid].get("bus") or bus_ids[0]) for gid in assets}
+        # Inputs are normalized and fully mapped by ``normalize_dc_network``.
+        slack = next(b["id"] for b in buses if b.get("is_slack"))
+        asset_bus = {gid: assets[gid]["bus"] for gid in assets}
         # Demand per bus.  Two formats: explicit demand_by_bus (list per bus)
         # or load_share_by_bus (fraction of total system demand).
         demand_by_bus = _net_input.get("demand_by_bus")
         load_share    = _net_input.get("load_share_by_bus") or {}
-        if not load_share and not demand_by_bus:
-            # Default: distribute load equally across buses.
-            load_share = {b: 1.0/len(bus_ids) for b in bus_ids}
         if load_share:
             tot = sum(load_share.values())
             if tot > 0: load_share = {k: v/tot for k, v in load_share.items()}
@@ -1076,11 +1124,10 @@ def solve_window(
         # Slack bus angle = 0
         def _slack(m, t): return m.theta[slack, t] == 0
         m.SlackTheta = pyo.Constraint(m.T, rule=_slack)
-        # DC flow: fl = (theta_from - theta_to) / x_pu
+        # DC flow in declared MW/radian units: f = B × (theta_from-theta_to).
         def _flow(m, lid, t):
             ln = line_dict[lid]
-            x  = float(ln.get("x_pu", 0.05))
-            return m.fl[lid, t] == (m.theta[ln["from_bus"], t] - m.theta[ln["to_bus"], t]) / x
+            return m.fl[lid, t] == float(ln["susceptance_mw_per_rad"]) * (m.theta[ln["from_bus"], t] - m.theta[ln["to_bus"], t])
         m.LineFlow = pyo.Constraint(m.L, m.T, rule=_flow)
         # Capacity bounds (both directions)
         def _cap_pos(m, lid, t):
@@ -2029,12 +2076,21 @@ def solve_window(
         # Lambda (VOLL-aware) — copperplate single λ vs nodal LMP per bus
         bus_lmp = {}
         line_flow = {}
+        bus_angle = {}
+        bus_injection = {}
         if use_dcopf:
             # Per-line MW flows (from primal m.fl).
             try:
                 for ln in lines:
                     lid = ln["id"]
-                    line_flow[lid] = round(float(pyo.value(m.fl[lid, t]) or 0.0), 2)
+                    line_flow[lid] = float(pyo.value(m.fl[lid, t]) or 0.0)
+                for b in bus_ids:
+                    bus_angle[b] = float(pyo.value(m.theta[b, t]) or 0.0)
+                    gen_b = sum(pv(m.p, g, t) for g in disp_ids if asset_bus.get(g) == b)
+                    bess_b = sum(pv(m.dis, bid, t) - pv(m.ch, bid, t) for bid in bess_ids if asset_bus.get(bid) == b) if bess_ids else 0.0
+                    dr_b = sum(pv(m.dr, d, t) for d in dr_ids if asset_bus.get(d) == b) if dr_ids else 0.0
+                    ph_b = sum(pv(m.ph_gen_hi, h, t) + pv(m.ph_gen_lo, h, t) - pv(m.ph_pmp_hi, h, t) - pv(m.ph_pmp_lo, h, t) for h in ph_ids if asset_bus.get(h) == b) if ph_ids else 0.0
+                    bus_injection[b] = gen_b + bess_b + dr_b + ph_b
             except Exception:
                 pass
             # Per-bus dual.  For MIP runs HiGHS often doesn't surface
@@ -2220,6 +2276,8 @@ def solve_window(
             "pumped_hydro":    ph_h,
             "bus_lmp":         bus_lmp,
             "line_flow":       line_flow,
+            "bus_angle_rad":  bus_angle,
+            "bus_injection_mw": bus_injection,
             "reserve_eligible_filtered": reserve_eligible_filtered,
         })
 
@@ -2311,10 +2369,7 @@ def solve_all(inp: dict, assets: dict, profiles: dict, gas_limits: dict) -> tupl
     # Pass CO₂ price + network model into solve_window via solver_cfg piggyback.
     solver_cfg["_co2_price_usd_per_t"] = float(inp.get("co2_price_usd_per_t", 0) or 0)
     solver_cfg["_network"] = {
-        "buses": inp.get("buses") or [],
-        "lines": inp.get("lines") or [],
-        "demand_by_bus": inp.get("demand_by_bus"),
-        "load_share_by_bus": inp.get("load_share_by_bus"),
+        **normalize_dc_network(inp, assets),
     }
 
     # Resolution → period duration.
@@ -3096,6 +3151,7 @@ def build_result_store(hourly: list, assets: dict, inp: dict, solve_time: float,
             "reserve_provider_types": sorted({assets[gid].get("type") for h in hourly for rid in res_ids for gid in (h.get("reserve_up", {}).get(rid, {}) | h.get("reserve_down", {}).get(rid, {}))}),
             "reserve_supply_by_type": reserve_supply_by_type,
             "reserve_shortfall_by_product": res_shortfall,
+            "dc_network": normalize_dc_network(inp, assets),
             "objective_breakdown": objective_breakdown,
         },
         "system_summary": {
@@ -3133,6 +3189,8 @@ def build_result_store(hourly: list, assets: dict, inp: dict, solve_time: float,
                 # v1.5 DC-OPF: only present when network model is on.
                 "bus_lmp":       h.get("bus_lmp", {}),
                 "line_flow":     h.get("line_flow", {}),
+                "bus_angle_rad": h.get("bus_angle_rad", {}),
+                "bus_injection_mw": h.get("bus_injection_mw", {}),
             }
             for h in hourly
         ],
