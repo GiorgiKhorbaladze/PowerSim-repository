@@ -1,14 +1,45 @@
 """Shared deterministic demand-response curtailment component."""
 from __future__ import annotations
+import math
 from typing import Any
-from .context import BoundaryState, BuildContext
+from .context import BoundaryState, BuildContext, make_validation_issue
 from .ports import PowerInjectionPort
 from .results import ComponentQAMetadata, ComponentResult, CostTerm
+from powersim.contracts import IssueSeverity
 
 class DemandResponseComponent:
     kind="dr"; contract_version="1.0"; supported_capabilities=frozenset({"deterministic","subhourly"})
     def __init__(self, asset:dict[str,Any]): self.asset,self.asset_id=asset,str(asset["id"])
-    def validate(self, context:BuildContext)->list: context.require_capabilities(self.supported_capabilities,self.asset_id); return []
+    def validate(self, context:BuildContext)->list:
+        """Validate without allowing malformed scalars to escape as float errors.
+
+        Native-v1 treated a declared but missing availability profile as full
+        availability.  The compatibility warning below preserves that legacy
+        fallback explicitly; a present profile is still checked strictly.
+        """
+        context.require_capabilities(self.supported_capabilities,self.asset_id)
+        issues=[]
+        for key, default in (("pmax_curtail", None), ("price_per_mwh", 0), ("hours_per_year_max", 8760)):
+            raw=self.asset.get(key, default)
+            try: value=float(raw)
+            except (TypeError, ValueError): value=float("nan")
+            if not math.isfinite(value) or value < 0:
+                issues.append(make_validation_issue(self.asset_id,"invalid_demand_response_parameter",f"{key} must be numeric, finite, and non-negative",field_name=key))
+        profile_key=self.asset.get("availability_profile")
+        if profile_key:
+            values=context.profiles.get(profile_key)
+            if values is None:
+                issues.append(make_validation_issue(self.asset_id,"demand_response_availability_profile_compatibility_fallback","availability_profile is absent; native-v1 compatibility treats DR as fully available",field_name="availability_profile",severity=IssueSeverity.WARNING,compatibility=True))
+            elif not isinstance(values, (list, tuple)) or len(values) < len(context.periods):
+                issues.append(make_validation_issue(self.asset_id,"invalid_demand_response_availability_profile","availability_profile must cover every required period",field_name="availability_profile"))
+            else:
+                for index, raw in enumerate(values[:len(context.periods)]):
+                    try: value=float(raw)
+                    except (TypeError, ValueError): value=float("nan")
+                    if not math.isfinite(value) or value < 0:
+                        issues.append(make_validation_issue(self.asset_id,"invalid_demand_response_availability_value","availability factors must be numeric, finite, and non-negative",field_name="availability_profile"))
+                        break
+        context.validation_issues.extend(issues); return issues
     def declare_parameters(self,context:BuildContext)->None: pass
     def declare_variables(self,context:BuildContext)->None:
         if not hasattr(context.builder,"dr"): raise ValueError("dr component requires model.dr")
@@ -31,4 +62,5 @@ class DemandResponseComponent:
     def extract(self,solution:Any,context:BuildContext)->list[ComponentResult]:
         import pyomo.environ as pyo
         return [ComponentResult(self.asset_id,self.kind,context.period_coordinate(i),injection_mw=float(pyo.value(solution.dr[self.asset_id,t]) or 0),available_mw=self._available(context,t),curtailed_mw=float(pyo.value(solution.dr[self.asset_id,t]) or 0),curtailed_mwh=float(pyo.value(solution.dr[self.asset_id,t]) or 0)*context.duration_hours,cost_usd=float(pyo.value(float(self.asset.get("price_per_mwh",0))*solution.dr[self.asset_id,t]*context.duration_hours) or 0)) for i,t in enumerate(context.periods)]
-    def qa_spec(self)->ComponentQAMetadata: return ComponentQAMetadata(self.kind,("demand_response_bounds",))
+    def qa_spec(self)->ComponentQAMetadata:
+        return ComponentQAMetadata(self.kind,("demand_response_bounds","demand_response_cost","demand_response_energy_cap"),"DR injection_mw is reduced demand supplied to the balance; curtailed_mw is the same action from the demand-accounting viewpoint")

@@ -112,12 +112,17 @@ class BESSComponent:
         for index, t in enumerate(context.periods):
             charge, discharge = float(pyo.value(m.ch[aid, t]) or 0), float(pyo.value(m.dis[aid, t]) or 0)
             soc = float(pyo.value(m.soc[aid, t]) or 0)
+            previous_soc = (context.legacy_initial_state.get(aid, {}).get("soc", float(self.asset.get("soc_init", 0) or 0) * float(self.asset.get("energy_mwh", 0) or 0)) if index == 0 else float(pyo.value(m.soc[aid, t - 1]) or 0))
+            previous_charge = (context.legacy_initial_state.get(aid, {}).get("ch_prev", 0) if index == 0 else float(pyo.value(m.ch[aid, t - 1]) or 0))
+            previous_discharge = (context.legacy_initial_state.get(aid, {}).get("dis_prev", 0) if index == 0 else float(pyo.value(m.dis[aid, t - 1]) or 0))
             cost = float(pyo.value(
                 float(self.asset.get("vom_discharge", 0) or 0) * m.dis[aid, t] * context.duration_hours
                 + float(self.asset.get("cycle_cost_per_mwh", 0) or 0) * (m.ch[aid, t] + m.dis[aid, t]) * context.duration_hours
             ) or 0)
-            out.append(ComponentResult(aid, self.kind, context.period_coordinate(index), injection_mw=discharge, withdrawal_mw=charge, available_mw=self._discharge_cap(), cost_usd=cost, state_of_charge_mwh=soc))
+            deep = float(pyo.value(m.dis_deep[aid, t]) or 0) if hasattr(m, "dis_deep") and aid in m.DeepBESS else None
+            selector = float(pyo.value(m.z_shallow[aid, t]) or 0) if hasattr(m, "z_shallow") and aid in m.DeepBESS else None
+            out.append(ComponentResult(aid, self.kind, context.period_coordinate(index), injection_mw=discharge, withdrawal_mw=charge, available_mw=self._discharge_cap(), cost_usd=cost, state_of_charge_mwh=soc, previous_state_of_charge_mwh=float(previous_soc or 0), previous_withdrawal_mw=float(previous_charge or 0), previous_injection_mw=float(previous_discharge or 0), deep_discharge_mw=deep, shallow_selector=selector))
         return out
 
     def qa_spec(self) -> ComponentQAMetadata:
-        return ComponentQAMetadata(self.kind, ("bess_soc_bounds", "bess_mode"))
+        return ComponentQAMetadata(self.kind, ("bess_bounds", "bess_mode", "bess_soc_recurrence", "bess_ramp"))
