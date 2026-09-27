@@ -4,11 +4,11 @@
 
 | Item | Status |
 | --- | --- |
-| Completed stage | Stage 3D reservoir-hydro, cascades and gas coupling - gas QA is pending review. |
-| Merged migration PRs | #69 Stage 3A, #71 Thermal UC, #72 thermal economics, #73 BESS core, #74 pumped-hydro core, #75 demand-response core, #76 DR QA/publication corrective, #77 Stage 3C closure hardening, #79 reservoir-hydro core, #80 cascade migration. |
-| Shared components | Wind, solar, simplified run-of-river, imports, thermal UC/economics, BESS with independently auditable canonical boundary state, pumped hydro with auditable segment flows and VOM, demand response with structured validation and publication gating, reservoir hydro and cascades with independent water-balance QA. Canonical gas accounting is a shared cross-cutting QA capability. |
-| Components still legacy-owned | Thermal objective ownership; BESS depth-cost/end-target extensions; reservoir `end_level_penalty`; reserves, network, stochastic, adequacy and expansion. |
-| Release readiness | Not release-ready. The Stage 3D cascade rolling-boundary correction and gas coupling QA are in review; the reserve engine follows. |
+| Completed stage | Stage 3D reservoir-hydro, cascades and gas coupling - merged in PR #81. Stage 4A reserve engine is in review. |
+| Merged migration PRs | #69 Stage 3A, #71 Thermal UC, #72 thermal economics, #73 BESS core, #74 pumped-hydro core, #75 demand-response core, #76 DR QA/publication corrective, #77 Stage 3C closure hardening, #79 reservoir-hydro core, #80 cascade migration, #81 Stage 3D closure. |
+| Shared components | Wind, solar, simplified run-of-river, imports, thermal UC/economics, BESS with independently auditable canonical boundary state, pumped hydro with auditable segment flows and VOM, demand response with structured validation and publication gating, reservoir hydro/cascades with independent water-balance QA, and canonical gas accounting. Stage 4A adds canonical reserve allocations and independent reserve QA. |
+| Components still legacy-owned | Thermal objective ownership; BESS depth-cost/end-target extensions; reservoir `end_level_penalty`; DC-network hardening, stochastic, adequacy and expansion. Pumped hydro and DR remain unsupported reserve providers. |
+| Release readiness | Not release-ready. Stage 4A is in review; Stage 4B DC network hardening and Stage 4C deterministic integration follow. |
 
 ## Stage 3B acceptance intent
 
@@ -64,7 +64,7 @@ requires explicit modelling approval before a PowerSim 1.0 correction.
 
 ## Next work
 
-1. Stage 4A: generic reserve engine with independent QA and co-optimization, after the Stage 3D corrective PRs merge.
+1. Stage 4B: DC network hardening after Stage 4A merge.
 
 ## Stage 3D reservoir core and cascades - merged in PRs #79 and #80
 
@@ -82,7 +82,7 @@ gain, and `turbined_only` / `release_plus_spill` semantics. Its canonical
 records include cascade inflow and QA reconstructs it from the resolved
 topology and upstream canonical release/spill records.
 
-### Corrective rolling-cascade boundary work - pending PR
+### Corrective rolling-cascade boundary work - merged in PR #81
 
 PR #80's shared local-window equation cannot independently prove delayed
 upstream water across a rolling boundary. PowerSim v1.0 therefore excludes
@@ -91,7 +91,7 @@ with structured validation. Non-rolling delayed cascades and rolling
 zero-delay cascades remain validated. Delayed rolling transport remains
 legacy compatibility only pending an explicit boundary-history migration.
 
-## Stage 3D gas coupling - pending merge
+## Stage 3D gas coupling - merged in PR #81
 
 Canonical thermal records carry per-period physical gas consumption in Mm3,
 reconstructed as dispatch MW × duration hours × heat-rate-derived Mm3/MWh.
@@ -99,6 +99,20 @@ Independent QA validates this conversion and reconstructed annual/monthly caps
 for resolved eligible units. Rolling 60-minute and 15-minute tests prove that
 only committed-slice gas consumption decrements the carried annual budget.
 Corrupt canonical gas volumes fail QA and publication.
+
+## Stage 4A reserve engine - pending merge
+
+Reserve products are data-driven by id and direction (`up`, `down`, or
+`symmetric`). Fixed and profile-backed requirements are fail-closed when a
+declared profile is absent or incomplete. Canonical reserve records expose
+raw and derated provision, product requirement/shortfall, provider capability
+and shortfall penalty. Independent QA reconstructs product coverage,
+eligibility, provider capability, cross-product stacking and penalty from
+resolved input plus extracted records; QA failure blocks publication.
+
+The existing thermal, reservoir-hydro, run-of-river, import and BESS provider
+scope remains preserved. Pumped hydro and demand response are explicitly
+filtered rather than represented as validated reserve providers.
 
 ### Confirmed legacy soft end-level penalty defect
 
