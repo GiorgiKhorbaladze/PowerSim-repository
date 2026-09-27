@@ -325,6 +325,32 @@ def check_component_results(
             _record(buckets, "component.reservoir_spill_cost", passed=cost_violation <= tolerance.limit(max(1.0, abs(expected_cost))), violation=cost_violation, tolerance=tolerance.limit(max(1.0, abs(expected_cost))),
                     witness={"asset_id":asset_id,"period":item.period,"spill_cost_usd":item.spill_cost_usd,"expected_spill_cost_usd":expected_cost})
 
+    # Cascade transport is checked from resolved topology and canonical water
+    # records only.  It intentionally does not read the live Pyomo balance.
+    hydro_index = {(item.asset_id, item.period): item for rows in reservoir_by_asset.values() for item in rows}
+    periods_per_hour = max(1, int(round(1 / duration_hours)))
+    for downstream, observations in reservoir_by_asset.items():
+        hydro = (asset_map.get(downstream, {}).get("hydro") or {})
+        upstream = hydro.get("cascade_upstream")
+        if not upstream:
+            continue
+        delay = int(hydro.get("cascade_travel_delay_h", 0) or 0) * periods_per_hour
+        gain = float(hydro.get("cascade_gain", 1) or 0)
+        mode = hydro.get("cascade_flow_mode", "turbined_only")
+        for item in observations:
+            source = hydro_index.get((str(upstream), item.period - delay))
+            expected = 0.0
+            if source is not None:
+                expected = float(source.water_release_mm3h or 0)
+                if mode == "release_plus_spill":
+                    expected += float(source.water_spill_mm3h or 0)
+                expected *= gain
+            actual = float(item.water_cascade_inflow_mm3h or 0)
+            limit = tolerance.limit(max(1.0, abs(expected), abs(actual)))
+            violation = abs(actual - expected)
+            _record(buckets, "component.reservoir_cascade_transport", passed=violation <= limit, violation=violation, tolerance=limit,
+                    witness={"downstream_asset_id":downstream,"upstream_asset_id":upstream,"period":item.period,"delay_periods":delay,"flow_mode":mode,"expected_cascade_mm3h":expected,"actual_cascade_mm3h":actual})
+
     dr_by_asset: dict[str, list[ComponentResult]] = defaultdict(list)
     for item in results:
         if item.component_kind == "dr":

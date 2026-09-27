@@ -7,8 +7,8 @@
 | Completed stage | Stage 3C closure and corrective hardening - merged in PR #77. |
 | Merged migration PRs | #69 Stage 3A, #71 Thermal UC, #72 thermal economics, #73 BESS core, #74 pumped-hydro core, #75 demand-response core, #76 DR QA/publication corrective, #77 Stage 3C closure hardening. |
 | Shared components | Wind, solar, simplified run-of-river, imports, thermal UC/economics, BESS with independently auditable canonical boundary state, pumped hydro with auditable segment flows and VOM, and demand response with structured validation and publication gating. |
-| Components still legacy-owned | Thermal objective ownership; BESS depth-cost/end-target extensions; reservoir cascade coupling, gas coupling, reserves, network, stochastic, adequacy and expansion. |
-| Release readiness | Not release-ready. Stage 3D reservoir-core migration is in review; cascade and gas remain next. |
+| Components still legacy-owned | Thermal objective ownership; BESS depth-cost/end-target extensions; gas coupling, reserves, network, stochastic, adequacy and expansion. |
+| Release readiness | Not release-ready. Stage 3D reservoir and cascade migration is in review; gas remains next. |
 
 ## Stage 3B acceptance intent
 
@@ -64,9 +64,7 @@ requires explicit modelling approval before a PowerSim 1.0 correction.
 
 ## Next work
 
-1. Stage 3D: migrate the existing cascade transport coupler with explicit
-   delayed water ports and independent conservation QA.
-2. Stage 3D: gas constraints/coupling, with independent QA and parity.
+1. Stage 3D: gas constraints/coupling, with independent QA and parity.
 
 ## Stage 3D reservoir core - pending merge
 
@@ -79,8 +77,10 @@ inflow/release/spill, cascade contribution, efficiency and spill cost.
 Independent QA reconstructs the water balance from resolved input and those
 records. It does not inspect the live Pyomo balance.
 
-Cascaded reservoirs deliberately remain legacy-owned until the cascade
-coupler is migrated. This avoids silently treating upstream water as zero.
+The pending cascade extension preserves existing `cascade_upstream`, delay,
+gain, and `turbined_only` / `release_plus_spill` semantics. Its canonical
+records include cascade inflow and QA reconstructs it from the resolved
+topology and upstream canonical release/spill records.
 
 ### Confirmed legacy soft end-level penalty defect
 
