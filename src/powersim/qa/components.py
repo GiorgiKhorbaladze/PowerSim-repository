@@ -72,6 +72,7 @@ def check_component_results(
             "water_spill_mm3h": result.water_spill_mm3h,
             "water_cascade_inflow_mm3h": result.water_cascade_inflow_mm3h,
             "water_efficiency_mwh_per_mm3": result.water_efficiency_mwh_per_mm3,
+            "gas_consumption_mm3": result.gas_consumption_mm3,
         }
         finite = all(value is None or math.isfinite(float(value)) for value in values.values())
         negatives = {
@@ -199,6 +200,72 @@ def check_component_results(
             violation, limit = abs(expected - actual), tolerance.limit(1.0)
             _record(buckets, "component.thermal_uc_transition", passed=violation <= limit, violation=violation, tolerance=limit,
                     witness={"asset_id": asset_id, "period": current.period, "commitment_delta": expected, "startup_minus_shutdown": actual})
+
+        gas_rate = 0.0
+        if str(asset.get("fuel_type", "gas")).lower() == "gas":
+            gas_rate = float(asset.get("heat_rate", 0) or 0) / 35000.0
+        for item in observations:
+            actual = float(item.gas_consumption_mm3 or 0)
+            expected = float(item.injection_mw) * duration_hours * gas_rate
+            violation = abs(actual - expected)
+            limit = tolerance.limit(max(1.0, abs(actual), abs(expected)))
+            _record(buckets, "component.thermal_gas_conversion", passed=violation <= limit, violation=violation, tolerance=limit,
+                    witness={"asset_id":asset_id,"period":item.period,"gas_consumption_mm3":actual,"expected_gas_consumption_mm3":expected,"duration_hours":duration_hours,"gas_rate_mm3_per_mwh":gas_rate})
+
+    # Study-level gas budgets are reconstructed from resolved eligibility and
+    # canonical thermal volumes.  No live gas constraint is consulted.
+    gas_config = (resolved_input or {}).get("gas_constraints", {}) if isinstance(resolved_input, dict) else {}
+    gas_mode = str(gas_config.get("mode", "none"))
+    eligible = {str(asset_id) for asset_id in (gas_config.get("applies_to") or [])}
+    eligible_observations = [item for asset_id, rows in thermal_by_asset.items() if asset_id in eligible for item in rows]
+    if gas_mode != "none" and eligible:
+        total = sum(float(item.gas_consumption_mm3 or 0) for item in eligible_observations)
+        annual = ((gas_config.get("annual") or {}).get("cap"))
+        if gas_mode in {"annual", "annual+monthly"} and annual is not None:
+            cap = float(annual)
+            violation = max(0.0, total - cap)
+            limit = tolerance.limit(max(1.0, cap, total))
+            _record(buckets, "component.gas_annual_cap", passed=violation <= limit, violation=violation, tolerance=limit,
+                    witness={"eligible_assets":sorted(eligible),"gas_consumption_mm3":total,"annual_cap_mm3":cap})
+        monthly_raw = gas_config.get("monthly") or {}
+        if gas_mode in {"monthly", "annual+monthly"} and monthly_raw:
+            month_names = ("jan","feb","mar","apr","may","jun","jul","aug","sep","oct","nov","dec")
+            month_hours = (744, 1416, 2160, 2880, 3624, 4344, 5088, 5832, 6552, 7296, 8016, 8760)
+            def month_from_key(key):
+                text = str(key).strip().lower()
+                if text.isdigit():
+                    month = int(text)
+                    return month if 1 <= month <= 12 else None
+                shorthand = text[:3]
+                return month_names.index(shorthand) + 1 if shorthand in month_names else None
+            caps = {month_from_key(key): float(value) for key, value in monthly_raw.items() if month_from_key(key) is not None}
+            start = int(((resolved_input or {}).get("study_horizon", {}) or {}).get("start_hour", 0) or 0)
+            consumption = {month: 0.0 for month in caps}
+            covered_hours = {month: 0.0 for month in caps}
+            covered_periods: set[tuple[int, int]] = set()
+            for item in eligible_observations:
+                hour = (start + int(item.period * duration_hours)) % 8760
+                month = next(index + 1 for index, end in enumerate(month_hours) if hour < end)
+                if month in consumption:
+                    consumption[month] += float(item.gas_consumption_mm3 or 0)
+                    period_key = (month, int(item.period))
+                    if period_key not in covered_periods:
+                        covered_periods.add(period_key)
+                        covered_hours[month] += duration_hours
+            solver_settings = (resolved_input or {}).get("solver_settings", {}) or {}
+            horizon_hours = float(((resolved_input or {}).get("study_horizon", {}) or {}).get("horizon_hours", 0) or 0)
+            rolling_window_hours = float(solver_settings.get("rolling_window_h", horizon_hours) or horizon_hours)
+            rolling = horizon_hours > rolling_window_hours
+            for month, cap in caps.items():
+                # Legacy single-window solves pro-rate a calendar-month cap
+                # to the hours represented in that window.  Rolling solves
+                # instead carry the full monthly remainder across committed
+                # slices.  This is intentionally reconstructed rather than
+                # normalized here: changing it would alter study semantics.
+                effective_cap = cap if rolling else cap * covered_hours[month] / month_hours[month - 1]
+                actual = consumption[month]; violation = max(0.0, actual - effective_cap); limit = tolerance.limit(max(1.0, effective_cap, actual))
+                _record(buckets, "component.gas_monthly_cap", passed=violation <= limit, violation=violation, tolerance=limit,
+                        witness={"month":month,"eligible_assets":sorted(eligible),"gas_consumption_mm3":actual,"monthly_cap_mm3":cap,"effective_cap_mm3":effective_cap,"rolling":rolling})
 
     bess_by_asset: dict[str, list[ComponentResult]] = defaultdict(list)
     for item in results:

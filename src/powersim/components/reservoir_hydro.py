@@ -96,6 +96,24 @@ class ReservoirHydroComponent:
         profile = self.asset.get("inflow_profile")
         if profile is not None and (profile not in context.profiles or not isinstance(context.profiles[profile], list) or len(context.profiles[profile]) < len(context.periods)):
             issues.append(make_validation_issue(self.asset_id, "invalid_reservoir_inflow_profile", "inflow_profile must resolve to a list covering all model periods", field_name="inflow_profile"))
+        # The existing cascade equation references an upstream variable in the
+        # local Pyomo window.  A non-zero delay needs committed upstream flow
+        # from an earlier rolling window, which this migration does not carry.
+        # Reject this shared combination rather than silently bootstrapping it
+        # with zero water. Non-rolling delayed cascades and zero-delay rolling
+        # cascades retain the characterized legacy equation.
+        if (
+            hydro.get("cascade_upstream")
+            and float(hydro.get("cascade_travel_delay_h", 0) or 0) > 0
+            and bool(context.legacy_initial_state.get("_powersim_rolling"))
+        ):
+            issues.append(make_validation_issue(
+                self.asset_id,
+                "unsupported_rolling_cascade_delay",
+                "shared rolling reservoir cascades require cascade_travel_delay_h=0; nonzero delayed transport is legacy compatibility only",
+                field_name="hydro.cascade_travel_delay_h",
+                compatibility=True,
+            ))
         context.validation_issues.extend(issues)
         return issues
 

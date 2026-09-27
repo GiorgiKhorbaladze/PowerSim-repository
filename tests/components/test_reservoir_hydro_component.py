@@ -118,6 +118,30 @@ def test_cascade_asset_remains_legacy_until_cascade_coupler_migration():
     assert ReservoirHydroComponent.supports_shared(asset) is True
 
 
+def test_shared_rolling_delayed_cascade_fails_closed_but_safe_combinations_run():
+    inp = _input(True, horizon_hours=4)
+    upstream = {**inp["assets"][0], "id": "up"}
+    downstream = {
+        **upstream,
+        "id": "down",
+        "hydro": {**upstream["hydro"], "cascade_upstream": "up", "cascade_travel_delay_h": 1},
+    }
+    inp["assets"] = [upstream, downstream, inp["assets"][1]]
+    inp["solver_settings"].update({"rolling_window_h": 2, "rolling_step_h": 2})
+    assets = solver.build_asset_map(inp)
+    with pytest.raises(ValueError, match="shared rolling reservoir cascades"):
+        solver.solve_all(inp, assets, inp["profiles"], {})
+
+    inp["solver_settings"].update({"rolling_window_h": 4, "rolling_step_h": 4})
+    rows, _, _ = solver.solve_all(inp, solver.build_asset_map(inp), inp["profiles"], {})
+    assert rows.solver_diagnostics.has_incumbent
+
+    inp["solver_settings"].update({"rolling_window_h": 2, "rolling_step_h": 2})
+    inp["assets"][1]["hydro"]["cascade_travel_delay_h"] = 0
+    rows, _, _ = solver.solve_all(inp, solver.build_asset_map(inp), inp["profiles"], {})
+    assert rows.solver_diagnostics.has_incumbent
+
+
 def test_legacy_soft_end_penalty_is_excluded_from_validated_shared_core():
     asset = _input(True)["assets"][0]
     asset["hydro"].update({"target_end_level_frac": .8, "end_level_penalty": 20})

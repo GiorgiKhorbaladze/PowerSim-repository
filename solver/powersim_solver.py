@@ -2271,13 +2271,16 @@ def solve_all(inp: dict, assets: dict, profiles: dict, gas_limits: dict) -> tupl
         # Inject remaining budgets into per-window gas_limits / state.
         solver_cfg_win = dict(solver_cfg)
         solver_cfg_win["_is_last_window"] = is_last_window
+        # Shared components use this marker only to reject the known unsafe
+        # nonzero-delay cascade combination. It is not a physics input.
+        state = dict(state)
+        state["_powersim_rolling"] = True
         gas_limits_window = dict(gas_limits)
         if annual_cap_full:
             gas_limits_window["_remaining_annual_mm3"] = remaining_annual
         if remaining_monthly:
             gas_limits_window["_remaining_monthly_mm3"] = dict(remaining_monthly)
         if remaining_dr_hours:
-            state = dict(state)
             state["_dr_remaining_hours"] = dict(remaining_dr_hours)
 
         commit_n_p = min(step_p, end_p - start_p)

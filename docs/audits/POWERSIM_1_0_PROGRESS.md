@@ -4,11 +4,11 @@
 
 | Item | Status |
 | --- | --- |
-| Completed stage | Stage 3C closure and corrective hardening - merged in PR #77. |
-| Merged migration PRs | #69 Stage 3A, #71 Thermal UC, #72 thermal economics, #73 BESS core, #74 pumped-hydro core, #75 demand-response core, #76 DR QA/publication corrective, #77 Stage 3C closure hardening. |
-| Shared components | Wind, solar, simplified run-of-river, imports, thermal UC/economics, BESS with independently auditable canonical boundary state, pumped hydro with auditable segment flows and VOM, and demand response with structured validation and publication gating. |
-| Components still legacy-owned | Thermal objective ownership; BESS depth-cost/end-target extensions; gas coupling, reserves, network, stochastic, adequacy and expansion. |
-| Release readiness | Not release-ready. Stage 3D reservoir and cascade migration is in review; gas remains next. |
+| Completed stage | Stage 3D reservoir-hydro, cascades and gas coupling - gas QA is pending review. |
+| Merged migration PRs | #69 Stage 3A, #71 Thermal UC, #72 thermal economics, #73 BESS core, #74 pumped-hydro core, #75 demand-response core, #76 DR QA/publication corrective, #77 Stage 3C closure hardening, #79 reservoir-hydro core, #80 cascade migration. |
+| Shared components | Wind, solar, simplified run-of-river, imports, thermal UC/economics, BESS with independently auditable canonical boundary state, pumped hydro with auditable segment flows and VOM, demand response with structured validation and publication gating, reservoir hydro and cascades with independent water-balance QA. Canonical gas accounting is a shared cross-cutting QA capability. |
+| Components still legacy-owned | Thermal objective ownership; BESS depth-cost/end-target extensions; reservoir `end_level_penalty`; reserves, network, stochastic, adequacy and expansion. |
+| Release readiness | Not release-ready. The Stage 3D cascade rolling-boundary correction and gas coupling QA are in review; the reserve engine follows. |
 
 ## Stage 3B acceptance intent
 
@@ -64,9 +64,9 @@ requires explicit modelling approval before a PowerSim 1.0 correction.
 
 ## Next work
 
-1. Stage 3D: gas constraints/coupling, with independent QA and parity.
+1. Stage 4A: generic reserve engine with independent QA and co-optimization, after the Stage 3D corrective PRs merge.
 
-## Stage 3D reservoir core - pending merge
+## Stage 3D reservoir core and cascades - merged in PRs #79 and #80
 
 The shared `hydro_reg` component now owns validated non-cascade reservoir
 physics: storage, own inflow, turbine release conversion, spill, storage
@@ -77,10 +77,28 @@ inflow/release/spill, cascade contribution, efficiency and spill cost.
 Independent QA reconstructs the water balance from resolved input and those
 records. It does not inspect the live Pyomo balance.
 
-The pending cascade extension preserves existing `cascade_upstream`, delay,
+The shared cascade extension preserves existing `cascade_upstream`, delay,
 gain, and `turbined_only` / `release_plus_spill` semantics. Its canonical
 records include cascade inflow and QA reconstructs it from the resolved
 topology and upstream canonical release/spill records.
+
+### Corrective rolling-cascade boundary work - pending PR
+
+PR #80's shared local-window equation cannot independently prove delayed
+upstream water across a rolling boundary. PowerSim v1.0 therefore excludes
+shared rolling cascades with `cascade_travel_delay_h > 0` and rejects them
+with structured validation. Non-rolling delayed cascades and rolling
+zero-delay cascades remain validated. Delayed rolling transport remains
+legacy compatibility only pending an explicit boundary-history migration.
+
+## Stage 3D gas coupling - pending merge
+
+Canonical thermal records carry per-period physical gas consumption in Mm3,
+reconstructed as dispatch MW × duration hours × heat-rate-derived Mm3/MWh.
+Independent QA validates this conversion and reconstructed annual/monthly caps
+for resolved eligible units. Rolling 60-minute and 15-minute tests prove that
+only committed-slice gas consumption decrements the carried annual budget.
+Corrupt canonical gas volumes fail QA and publication.
 
 ### Confirmed legacy soft end-level penalty defect
 

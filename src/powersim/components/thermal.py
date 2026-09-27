@@ -222,6 +222,7 @@ class ThermalComponent:
             no_load_cost = float(pyo.value(self._no_load_cost_expression(m, t, context.duration_hours)) or 0)
             co2_t = dispatch * context.duration_hours * float(self.asset.get("co2_factor_t_per_mwh", 0) or 0)
             co2_cost = co2_t * context.co2_price_usd_per_t
+            gas_mm3 = dispatch * context.duration_hours * float(self.asset.get("_gas_rate", 0) or 0)
             out.append(ComponentResult(aid, self.kind, context.period_coordinate(index), available_mw=available * u,
                 injection_mw=dispatch, cost_usd=variable_cost + startup_cost + no_load_cost + co2_cost, commitment=u,
                 startup=float(pyo.value(m.y[aid, t]) or 0) if committable else 0.0,
@@ -229,7 +230,8 @@ class ThermalComponent:
                 startup_hot=float(pyo.value(m.y_hot[aid, t]) or 0) if committable and hasattr(m, "y_hot") and aid in getattr(m, "MSStart", ()) else None,
                 pmin_mw=pmin * u, pmax_mw=available * u,
                 variable_cost_usd=variable_cost, startup_cost_usd=startup_cost,
-                no_load_cost_usd=no_load_cost, co2_t=co2_t, co2_cost_usd=co2_cost))
+                no_load_cost_usd=no_load_cost, co2_t=co2_t, co2_cost_usd=co2_cost,
+                gas_consumption_mm3=gas_mm3))
         return out
 
     def qa_spec(self) -> ComponentQAMetadata:
