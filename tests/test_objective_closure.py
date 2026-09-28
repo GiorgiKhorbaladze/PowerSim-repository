@@ -93,5 +93,25 @@ def test_corrupted_objective_reconstruction_fails_closed():
     assert decision.publishable is False
     assert {'qa_failed', 'mandatory_qa_check_not_passed:objective_reconstruction'} <= set(decision.reasons)
 
+
+def test_corrupted_full_precision_cost_stream_fails_closed():
+    """The independent check must not merely trust a copied summary total."""
+    from powersim.qa import run_qa
+    from powersim.results import evaluate_publication
+    inp={'assets':[{'id':'g','type':'thermal','committable':False,'pmin':0,'pmax':10,'mc':3,'vom':0}], 'profiles':{'demand':[5]}, 'study_horizon':{'horizon_hours':1}, 'reserve_products':[], 'solver_settings':{'solver':'highs','component_engine':'shared'}}
+    valid=_run(inp)
+    broken=deepcopy(valid)
+    broken['diagnostics']['objective_cost_streams']['g']['fuel_cost_usd'] += 1
+    report=run_qa(inp, broken)
+    check=next(c for c in report.checks if c.check_id=='objective_reconstruction')
+    assert check.status==QAStatus.FAIL
+    diag=SolverDiagnostics(backend='test', termination_condition='optimal',
+                           normalized_status=SolverStatus.OPTIMAL, has_incumbent=True,
+                           result_validity=ResultValidity.INVALID, qa_status=QAStatus.NOT_RUN)
+    decision=evaluate_publication(diag, report, extraction_completed=True,
+                                  required_values_finite=True,
+                                  required_check_ids=('objective_reconstruction',))
+    assert decision.publishable is False
+
 if __name__=='__main__':
     test_closure_includes_reserve_shortfall_penalty(); test_closure_includes_unserved_penalty(); test_closure_includes_bess_terms(); test_objective_reconstruction_participates_in_publication_qa(); print('objective closure tests passed')
