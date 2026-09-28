@@ -3253,7 +3253,10 @@ def build_result_store(hourly: list, assets: dict, inp: dict, solve_time: float,
     required_finite = finite_check is not None and finite_check.status == QAStatus.PASS
     decision = evaluate_publication(solver_diagnostics, qa_report,
         extraction_completed=bool(getattr(hourly, "extraction_completed", False)),
-        required_values_finite=required_finite)
+        required_values_finite=required_finite,
+        # A deterministic result is not publishable unless its incumbent
+        # objective has been independently reconciled from canonical output.
+        required_check_ids=("objective_reconstruction",))
     solver_diagnostics = finalized_diagnostics(solver_diagnostics, qa_report.status, decision.publishable)
     result["qa"] = qa_report.model_dump(mode="json")
     result["publication"] = {"publishable":decision.publishable, "reasons":list(decision.reasons)}

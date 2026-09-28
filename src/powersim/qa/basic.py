@@ -82,6 +82,33 @@ class BasicBoundsCheck:
 class ObjectiveReconstructionCheck:
     check_id = "objective_reconstruction"
     def run(self, resolved_input: Any, result: Any, tolerance: TolerancePolicy, *, persisted: bool = False) -> QACheckResult:
-        return QACheckResult(check_id=self.check_id,status=QAStatus.NOT_RUN,
-            message="deferred until Stage 3 canonical component cost extraction",
-            witness={"tolerance_mode":"persisted" if persisted else "internal"})
+        if hasattr(result, "model_dump"): result = result.model_dump(mode="python")
+        breakdown = ((result or {}).get("diagnostics") or {}).get("objective_breakdown") if isinstance(result, dict) else None
+        if not isinstance(breakdown, dict) or breakdown.get("pyomo_objective") is None:
+            return QACheckResult(check_id=self.check_id,status=QAStatus.NOT_RUN,
+                message="solver objective or canonical reconstruction is unavailable", witness={})
+        if "total_reconstructed" not in breakdown:
+            return QACheckResult(check_id=self.check_id,status=QAStatus.FAIL,
+                message="objective reconstruction is incomplete",
+                witness={"missing_fields": ["total_reconstructed"]})
+        try:
+            objective = float(breakdown["pyomo_objective"])
+            reconstructed = float(breakdown["total_reconstructed"])
+        except (TypeError, ValueError):
+            return QACheckResult(check_id=self.check_id,status=QAStatus.FAIL,
+                message="objective reconstruction is non-numeric", witness={"breakdown": breakdown})
+        if not math.isfinite(objective) or not math.isfinite(reconstructed):
+            return QACheckResult(check_id=self.check_id,status=QAStatus.FAIL,
+                message="objective reconstruction is non-finite", witness={"breakdown": breakdown})
+        violation = abs(objective - reconstructed)
+        # Legacy summary aggregation rounds several cost rows to whole USD.
+        # Until those rows are replaced by a full-precision canonical cost
+        # stream, retain the documented 0.5% closure tolerance rather than
+        # falsely presenting the check as exact.
+        scale = max(1.0, abs(objective), abs(reconstructed))
+        limit = max(tolerance.limit(scale, persisted=persisted), 5e-3 * scale)
+        return QACheckResult(check_id=self.check_id,status=QAStatus.PASS if violation <= limit else QAStatus.FAIL,
+            message=f"objective reconstruction residual is {violation:g} USD",
+            witness={"solver_objective_usd": objective, "reconstructed_objective_usd": reconstructed,
+                     "tolerance_mode":"persisted" if persisted else "internal"},
+            tolerance=limit,max_violation=violation,checked_count=1)
