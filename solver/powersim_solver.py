@@ -1,6 +1,3 @@
-Warning: truncated output (original token count: 47702)
-Total output lines: 3695
-
 """
 PowerSim v4.0 — Python Solver
 ==============================
@@ -1247,7 +1244,1334 @@ def solve_window(
             if tk >= 1:
                 return m.u[g, tk]
             # tk <= 0 ⇒ look in init_state: was the unit on at boundary?
-            prev_on = int((init_state.get(g, {}) or {}).get("periods_on", 0)…17702 tokens truncated…iagnostic(diagnostics, number: int, start_period: int, end_period: int) -> dict:
+            prev_on = int((init_state.get(g, {}) or {}).get("periods_on", 0))
+            return 1.0 if prev_on >= (1 - tk) else 0.0
+        def _ms_hot_ub_y(m, g, t):
+            if g in shared_asset_ids:
+                return pyo.Constraint.Skip
+            return m.y_hot[g, t] <= m.y[g, t]
+        def _ms_hot_ub_hist(m, g, t):
+            if g in shared_asset_ids:
+                return pyo.Constraint.Skip
+            hth = m._ms_hot_threshold[g]
+            return m.y_hot[g, t] <= sum(_u_hist(m, g, t, k) for k in range(1, hth + 1))
+        m.MSHotUBy   = pyo.Constraint(m.MSStart, m.T, rule=_ms_hot_ub_y)
+        m.MSHotUBhist = pyo.Constraint(m.MSStart, m.T, rule=_ms_hot_ub_hist)
+
+    # min_up / min_down are specified in HOURS; convert to periods.
+    def _hours_to_periods(h): return max(1, int(math.ceil(h / dt)))
+
+    # ── Minimum Up Time ────────────────────────────────────────────────
+    def min_up(m, g, t):
+        if g in shared_asset_ids:
+            return pyo.Constraint.Skip
+        mut_p = _hours_to_periods(float(assets[g].get("min_up", 0)))
+        if mut_p < 2: return pyo.Constraint.Skip
+        end = min(t + mut_p - 1, T[-1])
+        return sum(m.y[g,tau] for tau in range(t, end+1)) <= m.u[g,t]
+    m.MinUp = pyo.Constraint(m.GC, m.T, rule=min_up)
+
+    # ── Minimum Down Time ──────────────────────────────────────────────
+    def min_dn(m, g, t):
+        if g in shared_asset_ids:
+            return pyo.Constraint.Skip
+        mdt_p = _hours_to_periods(float(assets[g].get("min_down", 0)))
+        if mdt_p < 2: return pyo.Constraint.Skip
+        end = min(t + mdt_p - 1, T[-1])
+        return sum(m.z[g,tau] for tau in range(t, end+1)) <= 1 - m.u[g,t]
+    m.MinDn = pyo.Constraint(m.GC, m.T, rule=min_dn)
+
+    # ── Boundary state: periods_on / periods_off carry-over ───────────
+    # If the previous window left a unit ON for fewer periods than its
+    # min_up requires, this window must keep it ON for the remainder.
+    # Symmetric for OFF / min_down.  These constraints are no-ops on the
+    # very first window (init_state has no periods_on/off info).
+    for g in committable:
+        if g in shared_asset_ids:
+            continue
+        prev = init_state.get(g, {}) if isinstance(init_state, dict) else {}
+        u0   = int(prev.get("u", 0))
+        on0  = int(prev.get("periods_on", 0))
+        off0 = int(prev.get("periods_off", 0))
+        mut_p = _hours_to_periods(float(assets[g].get("min_up", 0)))
+        mdt_p = _hours_to_periods(float(assets[g].get("min_down", 0)))
+        # Force ON for remaining min-up periods when previous window
+        # finished with the unit on but hasn't met min_up yet.
+        if u0 == 1 and on0 > 0 and on0 < mut_p:
+            need_on = min(mut_p - on0, len(T))
+            for t_force in range(1, need_on + 1):
+                m.u[g, t_force].fix(1)
+        # Force OFF for remaining min-down periods when previous window
+        # finished with the unit off but hasn't met min_down yet.
+        if u0 == 0 and off0 > 0 and off0 < mdt_p:
+            need_off = min(mdt_p - off0, len(T))
+            for t_force in range(1, need_off + 1):
+                m.u[g, t_force].fix(0)
+
+    # ── Ramp constraints (ramp_up/down are MW per HOUR → MW per period = ramp*dt)
+    def ramp_up_c(m, g, t):
+        if g in shared_asset_ids:
+            return pyo.Constraint.Skip
+        ru = float(assets[g].get("ramp_up", 9999))
+        if ru >= 9999: return pyo.Constraint.Skip
+        if t == 1:
+            prev = init_state.get(g, {}).get("p") if isinstance(init_state, dict) else None
+            if prev is None: return pyo.Constraint.Skip
+            return m.p[g,t] - float(prev) <= ru * dt
+        return m.p[g,t] - m.p[g,t-1] <= ru * dt
+    def ramp_dn_c(m, g, t):
+        if g in shared_asset_ids:
+            return pyo.Constraint.Skip
+        rd = float(assets[g].get("ramp_down", 9999))
+        if rd >= 9999: return pyo.Constraint.Skip
+        if t == 1:
+            prev = init_state.get(g, {}).get("p") if isinstance(init_state, dict) else None
+            if prev is None: return pyo.Constraint.Skip
+            return float(prev) - m.p[g,t] <= rd * dt
+        return m.p[g,t-1] - m.p[g,t] <= rd * dt
+    m.RampUp = pyo.Constraint(m.G, m.T, rule=ramp_up_c)
+    m.RampDn = pyo.Constraint(m.G, m.T, rule=ramp_dn_c)
+
+    # ── Hydro Reservoir Balance ────────────────────────────────────────
+    # stor[h,t] = stor[h,t-1] + inflow_own[t] + cascade_in[t] - release[t] - spill[t]
+    # release[t] = p[h,t] / efficiency  (mode 2: release-to-energy)
+    #
+    # Stage 2 cascade model:
+    #   cascade_in[t] = cascade_gain × release_upstream[t - travel_delay_h]
+    #   (for t ≤ travel_delay_h the upstream contribution is 0 — bootstrap)
+    #
+    # Downstream cascade inflow defaults to ``turbined_only`` — water that
+    # physically spilled at the upstream dam is NOT counted (avoids the
+    # double-counting we corrected earlier). For real cascades where the
+    # downstream reservoir does receive bypass flow, set
+    # ``hydro.cascade_flow_mode = "release_plus_spill"`` on the downstream
+    # plant; the upstream spill volume is then added to cascade_in.
+    if hydro_reg:
+        # Periods per hour & upstream cascade delay in periods (was hours).
+        _per_per_h = max(1, int(round(1 / dt)))
+        # v1.5 Hydro Stage 2 — head-dependent efficiency. Pre-compute a
+        # window-level effective efficiency per reservoir from the
+        # starting storage (init_state or reservoir_init). The efficiency
+        # is held constant inside the window for LP-friendliness and
+        # refreshes naturally each rolling window.
+        _hydro_eff = {}
+        # Include cascade upstreams (may be hydro_reg in any case) so the
+        # downstream balance uses the upstream's own effective curve.
+        _need = set(hydro_reg)
+        for h_id in hydro_reg:
+            up = (assets[h_id].get("hydro") or {}).get("cascade_upstream")
+            if up and up in assets:
+                _need.add(up)
+        for h_id in _need:
+            ha_id = assets[h_id].get("hydro") or {}
+            stor0 = init_state.get(h_id, {}).get(
+                "stor", float(ha_id.get("reservoir_init", 700)))
+            _hydro_eff[h_id] = hydro_efficiency_at(ha_id, stor0)
+
+        def hydro_bal(m, h, t):
+            if h in shared_reservoir_ids:
+                return pyo.Constraint.Skip
+            ha   = assets[h]["hydro"]
+            eff  = _hydro_eff[h]                          # window-level
+            infl_key = assets[h].get("inflow_profile")
+            if infl_key and infl_key in profiles_w:
+                infl_rate = profiles_w[infl_key][t-1]     # Mm³/h rate
+            else:
+                raw_inflow = ha.get("inflow")
+                infl_rate = float(raw_inflow) if raw_inflow is not None else 0.0
+            # Release is Mm³/h rate: p[MW] / eff[MWh/Mm³] = Mm³/h.
+            release_rate = m.p[h, t] / max(eff, 0.001)
+
+            up_id = ha.get("cascade_upstream")
+            cascade_in_rate = 0
+            if up_id and up_id in assets:
+                delay_h  = int(ha.get("cascade_travel_delay_h", 0))
+                gain     = float(ha.get("cascade_gain", 1.0))
+                mode     = ha.get("cascade_flow_mode", "turbined_only")
+                t_upstream = t - delay_h * _per_per_h
+                if t_upstream >= 1:
+                    up_eff = _hydro_eff.get(up_id,
+                        float((assets[up_id].get("hydro") or {}).get("efficiency", 350)))
+                    up_turbined = m.p[up_id, t_upstream] / max(up_eff, 0.001)
+                    if mode == "release_plus_spill":
+                        cascade_in_rate = gain * (up_turbined + m.spill[up_id, t_upstream])
+                    else:                       # "turbined_only" (default)
+                        cascade_in_rate = gain * up_turbined
+
+            infl_rate_total = infl_rate + cascade_in_rate
+            if t == 1:
+                stor_prev = init_state.get(h, {}).get("stor", float(ha.get("reservoir_init", 700)))
+            else:
+                stor_prev = m.stor[h, t-1]
+            # Convert rates to per-period volumes by × dt.
+            return m.stor[h, t] == stor_prev + (infl_rate_total - release_rate - m.spill[h, t]) * dt
+        m.HydroBal = pyo.Constraint(m.GR, m.T, rule=hydro_bal)
+
+        # v1.5 Hydro Stage 2 — minimum environmental / sanitary release.
+        # Mandatory continuous flow (release + spill) for any plant with
+        # ``hydro.min_release_mm3h`` > 0. Both routes (turbined and bypass)
+        # reach the river, so either satisfies the ecological constraint.
+        def _min_release_rule(m, h, t):
+            if h in shared_reservoir_ids:
+                return pyo.Constraint.Skip
+            mr = float((assets[h].get("hydro") or {}).get("min_release_mm3h", 0) or 0)
+            if mr <= 0:
+                return pyo.Constraint.Skip
+            eff = _hydro_eff[h]
+            return m.p[h, t] / max(eff, 0.001) + m.spill[h, t] >= mr
+        m.HydroMinRelease = pyo.Constraint(m.GR, m.T, rule=_min_release_rule)
+
+        # v1.5 Hydro Stage 2 — month-end storage target constraints. The
+        # short-fall vars + per-target metadata were declared up-front so
+        # the objective rule could see them; now wire the constraints.
+        if hasattr(m, "stor_target_short"):
+            def _stor_target_rule(m, h, mo):
+                if h in shared_reservoir_ids:
+                    return pyo.Constraint.Skip
+                t_at  = m._stor_target_period[(h, mo)]
+                tgt   = m._stor_target_target[(h, mo)]
+                return m.stor_target_short[h, mo] >= tgt - m.stor[h, t_at]
+            m.StorTargetShort = pyo.Constraint(m.StorTgt, rule=_stor_target_rule)
+
+        def stor_lb(m, h, t):
+            if h in shared_reservoir_ids:
+                return pyo.Constraint.Skip
+            return m.stor[h,t] >= float(assets[h]["hydro"].get("reservoir_min",0))
+        def stor_ub(m, h, t):
+            if h in shared_reservoir_ids:
+                return pyo.Constraint.Skip
+            return m.stor[h,t] <= float(assets[h]["hydro"].get("reservoir_max",9999))
+        def stor_end(m, h):
+            if h in shared_reservoir_ids:
+                return pyo.Constraint.Skip
+            return m.stor[h,T[-1]] >= float(assets[h]["hydro"].get("reservoir_end_min",
+                                              assets[h]["hydro"].get("reservoir_min",0)))
+        m.StorLB  = pyo.Constraint(m.GR, m.T, rule=stor_lb)
+        m.StorUB  = pyo.Constraint(m.GR, m.T, rule=stor_ub)
+        # End-of-horizon storage floor is a study-wide constraint and
+        # must only bind on the LAST rolling window (or a single full
+        # solve). Rolling driver flags this via solver_cfg; default True
+        # keeps the non-rolling and single-window paths unchanged.
+        if bool(solver_cfg.get("_is_last_window", True)):
+            m.StorEnd = pyo.Constraint(m.GR, rule=stor_end)
+
+        # ── Stage 2: strategic end-of-horizon soft penalty ──────────
+        # Purpose: discourage myopic depletion over the horizon when the
+        # plant has seasonal value. If end storage falls below a target
+        # fraction of reservoir_max, a penalty of $/Mm³ is added to the
+        # objective per unit of shortfall.
+        #
+        # Formulation: end_shortfall[h] ≥ target - stor[h, T_last], ≥ 0
+        #              objective += end_level_penalty × end_shortfall[h]
+        _strategic_plants = [
+            h for h in m.GR
+            if (assets[h]["hydro"].get("end_level_penalty") or 0) > 0
+            and (assets[h]["hydro"].get("target_end_level_frac") or 0) > 0
+        ]
+        if _strategic_plants:
+            m.GR_strat = pyo.Set(initialize=_strategic_plants)
+            m.end_short = pyo.Var(m.GR_strat, domain=pyo.NonNegativeReals)
+
+            def end_short_c(m, h):
+                ha     = assets[h]["hydro"]
+                target = float(ha["target_end_level_frac"]) * float(ha.get("reservoir_max", 0))
+                return m.end_short[h] >= target - m.stor[h, T[-1]]
+            # Same reasoning as StorEnd: only bind on the last window.
+            # Intermediate windows keep m.end_short at zero (via the
+            # objective + NonNegative domain) so no shortfall is charged.
+            if bool(solver_cfg.get("_is_last_window", True)):
+                m.EndShort = pyo.Constraint(m.GR_strat, rule=end_short_c)
+
+    # ── BESS Constraints ───────────────────────────────────────────────
+    # v1.5 PLEXOS-parity additions (all optional, gated by field presence):
+    #   self_discharge_pct_per_h   — fraction of SOC lost per hour
+    #   aux_mw                     — parasitic / standby draw (MW, always on)
+    #   charge_power_mw / discharge_power_mw — asymmetric inverter sizing
+    #   c_rate_max                 — additional P/E ratio cap
+    #   ramp_up_mw_min / ramp_down_mw_min — inverter ramp on |ch| and |dis|
+    #   soc_end_target / soc_end_penalty_usd_mwh — soft end-of-horizon target
+    def _bess_charge_cap(b):
+        a = assets[b]
+        cp = float(a.get("charge_power_mw", a.get("power_mw", 0)))
+        cr = a.get("c_rate_max")
+        if cr is not None:
+            cp = min(cp, float(cr) * float(a.get("energy_mwh", 0)))
+        return cp
+
+    def _bess_discharge_cap(b):
+        a = assets[b]
+        dp = float(a.get("discharge_power_mw", a.get("power_mw", 0)))
+        cr = a.get("c_rate_max")
+        if cr is not None:
+            dp = min(dp, float(cr) * float(a.get("energy_mwh", 0)))
+        return dp
+
+    if bess_ids:
+        def bess_soc(m, b, t):
+            if b in shared_bess_ids:
+                return pyo.Constraint.Skip
+            a  = assets[b]
+            ec = float(a["eta_charge"])
+            ed = float(a["eta_discharge"])
+            sd = float(a.get("self_discharge_pct_per_h", 0) or 0) / 100.0
+            aux = float(a.get("aux_mw", 0) or 0)
+            if t == 1:
+                soc_prev = init_state.get(b, {}).get("soc",
+                           float(a["soc_init"]) * float(a["energy_mwh"]))
+            else:
+                soc_prev = m.soc[b,t-1]
+            # ch/dis are MW; × dt converts to MWh per period.
+            # Self-discharge: fraction lost over the period. aux: constant drain.
+            return m.soc[b,t] == soc_prev * (1.0 - sd * dt) \
+                   + (ec * m.ch[b,t] - m.dis[b,t] / max(ed,0.001) - aux) * dt
+        def bess_soc_lb(m, b, t):
+            if b in shared_bess_ids:
+                return pyo.Constraint.Skip
+            return m.soc[b,t] >= float(assets[b]["soc_min"]) * float(assets[b]["energy_mwh"])
+        def bess_soc_ub(m, b, t):
+            if b in shared_bess_ids:
+                return pyo.Constraint.Skip
+            return m.soc[b,t] <= float(assets[b]["soc_max"]) * float(assets[b]["energy_mwh"])
+        def bess_ch_ub(m, b, t):
+            if b in shared_bess_ids:
+                return pyo.Constraint.Skip
+            return m.ch[b,t] <= _bess_charge_cap(b) * m.xch[b,t]
+        def bess_dis_ub(m, b, t):
+            if b in shared_bess_ids:
+                return pyo.Constraint.Skip
+            return m.dis[b,t] <= _bess_discharge_cap(b) * (1 - m.xch[b,t])
+        m.BessSOC   = pyo.Constraint(m.BESS, m.T, rule=bess_soc)
+        m.BessSOCLB = pyo.Constraint(m.BESS, m.T, rule=bess_soc_lb)
+        m.BessSOCUB = pyo.Constraint(m.BESS, m.T, rule=bess_soc_ub)
+        m.BessCHUB  = pyo.Constraint(m.BESS, m.T, rule=bess_ch_ub)
+        m.BessDISUB = pyo.Constraint(m.BESS, m.T, rule=bess_dis_ub)
+
+        # ── Ramp constraints on inverter charge / discharge ────────────
+        # Inverter MW/min × 60 × dt → MW/period delta cap.
+        ramp_ch_bess = [b for b in bess_ids
+                        if float(assets[b].get("ramp_up_mw_min", 0) or 0) > 0
+                        or float(assets[b].get("ramp_down_mw_min", 0) or 0) > 0]
+        if ramp_ch_bess:
+            def _bess_ch_ramp_up(m, b, t):
+                ru = float(assets[b].get("ramp_up_mw_min", 0) or 0) * 60.0 * dt
+                if ru <= 0:
+                    return pyo.Constraint.Skip
+                if t == 1:
+                    prev = float(init_state.get(b, {}).get("ch_prev", 0))
+                    return m.ch[b,t] - prev <= ru
+                return m.ch[b,t] - m.ch[b,t-1] <= ru
+            def _bess_ch_ramp_dn(m, b, t):
+                rd = float(assets[b].get("ramp_down_mw_min", 0) or 0) * 60.0 * dt
+                if rd <= 0:
+                    return pyo.Constraint.Skip
+                if t == 1:
+                    prev = float(init_state.get(b, {}).get("ch_prev", 0))
+                    return prev - m.ch[b,t] <= rd
+                return m.ch[b,t-1] - m.ch[b,t] <= rd
+            def _bess_dis_ramp_up(m, b, t):
+                ru = float(assets[b].get("ramp_up_mw_min", 0) or 0) * 60.0 * dt
+                if ru <= 0:
+                    return pyo.Constraint.Skip
+                if t == 1:
+                    prev = float(init_state.get(b, {}).get("dis_prev", 0))
+                    return m.dis[b,t] - prev <= ru
+                return m.dis[b,t] - m.dis[b,t-1] <= ru
+            def _bess_dis_ramp_dn(m, b, t):
+                rd = float(assets[b].get("ramp_down_mw_min", 0) or 0) * 60.0 * dt
+                if rd <= 0:
+                    return pyo.Constraint.Skip
+                if t == 1:
+                    prev = float(init_state.get(b, {}).get("dis_prev", 0))
+                    return prev - m.dis[b,t] <= rd
+                return m.dis[b,t-1] - m.dis[b,t] <= rd
+            m.BessChRampU  = pyo.Constraint(m.BESS, m.T, rule=_bess_ch_ramp_up)
+            m.BessChRampD  = pyo.Constraint(m.BESS, m.T, rule=_bess_ch_ramp_dn)
+            m.BessDisRampU = pyo.Constraint(m.BESS, m.T, rule=_bess_dis_ramp_up)
+            m.BessDisRampD = pyo.Constraint(m.BESS, m.T, rule=_bess_dis_ramp_dn)
+
+        # ── End-of-horizon SOC target (soft, penalized) ────────────────
+        # NB: m.BessEndTgt and m.bess_end_short are declared up-front (just
+        # after the index sets) so the objective rule sees them.
+        if hasattr(m, "bess_end_short"):
+            def _bess_end_short(m, b):
+                a = assets[b]
+                tgt_mwh = float(a["soc_end_target"]) * float(a["energy_mwh"])
+                return m.bess_end_short[b] >= tgt_mwh - m.soc[b, T[-1]]
+            # Same reasoning as StorEnd / EndShort: bind only on the
+            # last window. m.bess_end_short stays at zero (NonNeg) in
+            # intermediate windows, so no shortfall is charged.
+            if bool(solver_cfg.get("_is_last_window", True)):
+                m.BessEndShort = pyo.Constraint(m.BessEndTgt, rule=_bess_end_short)
+
+        # v1.4: BESS depth-multiplier — split discharge into a 'deep'
+        # component that's only non-zero when SOC is below the deep
+        # threshold. We approximate with a single linking constraint:
+        #   dis_deep[b,t] ≥ dis[b,t] - pmax × z_shallow[b,t]
+        #   z_shallow is 1 iff soc ≥ thr·energy ; big-M linking
+        #   → when z_shallow=1, dis_deep unconstrained from below (=0 via dis ≥ 0)
+        #   → when z_shallow=0 (deep), dis_deep ≥ dis (whole dis is deep)
+        # Objective then pays extra (depth_multiplier-1)·vom_discharge·dis_deep.
+        deep_bess = [b for b in bess_ids if float(assets[b].get("depth_multiplier", 1) or 1) > 1]
+        if deep_bess:
+            m.DeepBESS = pyo.Set(initialize=deep_bess)
+            m.dis_deep = pyo.Var(m.DeepBESS, m.T, domain=pyo.NonNegativeReals)
+            m.z_shallow = pyo.Var(m.DeepBESS, m.T, domain=pyo.Binary)
+
+            def _soc_shallow_ub(m, b, t):
+                a = assets[b]
+                thr = float(a.get("soc_deep_threshold", 0.2)) * float(a["energy_mwh"])
+                bigM = float(a["energy_mwh"])
+                return m.soc[b, t] >= thr - bigM * (1 - m.z_shallow[b, t])
+            m.SocShallowUB = pyo.Constraint(m.DeepBESS, m.T, rule=_soc_shallow_ub)
+
+            def _dis_deep_link(m, b, t):
+                pmx = float(assets[b]["power_mw"])
+                return m.dis_deep[b, t] >= m.dis[b, t] - pmx * m.z_shallow[b, t]
+            m.BessDeepLink = pyo.Constraint(m.DeepBESS, m.T, rule=_dis_deep_link)
+
+    # ── v1.4: Pumped-hydro with 2-bin (high-head / deep) efficiency ───
+    if ph_ids:
+        BIGM_PH_MW = {h: max(float(assets[h]["pmax"]), float(assets[h]["pump_mw"])) * 1.05
+                      for h in ph_ids}
+
+        def ph_soc_bal(m, h, t):
+            if h in shared_ph_ids:
+                return pyo.Constraint.Skip
+            a = assets[h]
+            ep_hi = float(a["efficiency_pump"])
+            ep_lo = float(a.get("efficiency_pump_deep", ep_hi * 0.85))
+            eg_hi = float(a["efficiency_gen"])
+            eg_lo = float(a.get("efficiency_gen_deep", eg_hi * 0.85))
+            if t == 1:
+                soc_prev = init_state.get(h, {}).get("ph_soc",
+                           float(a["soc_init"]) * float(a["energy_mwh"]))
+            else:
+                soc_prev = m.ph_soc[h, t-1]
+            add = (ep_hi * m.ph_pmp_hi[h, t] + ep_lo * m.ph_pmp_lo[h, t]) * dt
+            sub = (m.ph_gen_hi[h, t] / max(eg_hi, 0.001)
+                   + m.ph_gen_lo[h, t] / max(eg_lo, 0.001)) * dt
+            return m.ph_soc[h, t] == soc_prev + add - sub
+        m.PhSOC = pyo.Constraint(m.PH, m.T, rule=ph_soc_bal)
+
+        def ph_soc_lb(m, h, t):
+            if h in shared_ph_ids:
+                return pyo.Constraint.Skip
+            a = assets[h]
+            return m.ph_soc[h, t] >= float(a["soc_min"]) * float(a["energy_mwh"])
+        def ph_soc_ub(m, h, t):
+            if h in shared_ph_ids:
+                return pyo.Constraint.Skip
+            a = assets[h]
+            return m.ph_soc[h, t] <= float(a["soc_max"]) * float(a["energy_mwh"])
+        m.PhSOCLB = pyo.Constraint(m.PH, m.T, rule=ph_soc_lb)
+        m.PhSOCUB = pyo.Constraint(m.PH, m.T, rule=ph_soc_ub)
+
+        # Segment selection: z_hi=1 iff SOC ≥ threshold·cap.  Big-M links.
+        def ph_seg_link(m, h, t):
+            if h in shared_ph_ids:
+                return pyo.Constraint.Skip
+            a = assets[h]
+            thr = float(a.get("soc_deep_threshold", 0.3)) * float(a["energy_mwh"])
+            bigM = float(a["energy_mwh"])
+            return m.ph_soc[h, t] >= thr - bigM * (1 - m.ph_zhi[h, t])
+        m.PhSeg = pyo.Constraint(m.PH, m.T, rule=ph_seg_link)
+
+        # Mode / segment bounds:
+        #   gen_hi ≤ pmax · mode · z_hi,   gen_lo ≤ pmax · mode · (1 - z_hi)
+        #   pmp_hi ≤ pump · (1 − mode) · z_hi,  pmp_lo ≤ pump · (1 − mode) · (1 − z_hi)
+        # Big-M lifts the product to linear: the stricter bound is via pmax.
+        def gen_hi_ub(m, h, t):
+            if h in shared_ph_ids:
+                return pyo.Constraint.Skip
+            pmx = float(assets[h]["pmax"])
+            return m.ph_gen_hi[h, t] <= pmx * m.ph_mode[h, t]
+        def gen_lo_ub(m, h, t):
+            if h in shared_ph_ids:
+                return pyo.Constraint.Skip
+            pmx = float(assets[h]["pmax"])
+            return m.ph_gen_lo[h, t] <= pmx * m.ph_mode[h, t]
+        def gen_seg_hi(m, h, t):
+            if h in shared_ph_ids:
+                return pyo.Constraint.Skip
+            pmx = float(assets[h]["pmax"])
+            return m.ph_gen_hi[h, t] <= pmx * m.ph_zhi[h, t]
+        def gen_seg_lo(m, h, t):
+            if h in shared_ph_ids:
+                return pyo.Constraint.Skip
+            pmx = float(assets[h]["pmax"])
+            return m.ph_gen_lo[h, t] <= pmx * (1 - m.ph_zhi[h, t])
+        def pmp_mode_hi(m, h, t):
+            if h in shared_ph_ids:
+                return pyo.Constraint.Skip
+            pmp = float(assets[h]["pump_mw"])
+            return m.ph_pmp_hi[h, t] <= pmp * (1 - m.ph_mode[h, t])
+        def pmp_mode_lo(m, h, t):
+            if h in shared_ph_ids:
+                return pyo.Constraint.Skip
+            pmp = float(assets[h]["pump_mw"])
+            return m.ph_pmp_lo[h, t] <= pmp * (1 - m.ph_mode[h, t])
+        def pmp_seg_hi(m, h, t):
+            if h in shared_ph_ids:
+                return pyo.Constraint.Skip
+            pmp = float(assets[h]["pump_mw"])
+            return m.ph_pmp_hi[h, t] <= pmp * m.ph_zhi[h, t]
+        def pmp_seg_lo(m, h, t):
+            if h in shared_ph_ids:
+                return pyo.Constraint.Skip
+            pmp = float(assets[h]["pump_mw"])
+            return m.ph_pmp_lo[h, t] <= pmp * (1 - m.ph_zhi[h, t])
+
+        m.PhGenHi  = pyo.Constraint(m.PH, m.T, rule=gen_hi_ub)
+        m.PhGenLo  = pyo.Constraint(m.PH, m.T, rule=gen_lo_ub)
+        m.PhGenSegHi = pyo.Constraint(m.PH, m.T, rule=gen_seg_hi)
+        m.PhGenSegLo = pyo.Constraint(m.PH, m.T, rule=gen_seg_lo)
+        m.PhPmpHi  = pyo.Constraint(m.PH, m.T, rule=pmp_mode_hi)
+        m.PhPmpLo  = pyo.Constraint(m.PH, m.T, rule=pmp_mode_lo)
+        m.PhPmpSegHi = pyo.Constraint(m.PH, m.T, rule=pmp_seg_hi)
+        m.PhPmpSegLo = pyo.Constraint(m.PH, m.T, rule=pmp_seg_lo)
+
+    # ── v1.4: DR curtailment constraints ──────────────────────────────
+    if dr_ids:
+        def dr_ub(m, d, t):
+            if d in shared_dr_ids:
+                return pyo.Constraint.Skip
+            a = assets[d]
+            pmc = float(a["pmax_curtail"])
+            avail_key = a.get("availability_profile")
+            if avail_key and avail_key in profiles_w:
+                pmc = pmc * float(profiles_w[avail_key][t-1])
+            return m.dr[d, t] <= pmc
+        m.DR_UB = pyo.Constraint(m.DR, m.T, rule=dr_ub)
+
+        # ── Annual hours cap with rolling-window carry-over ────────────
+        # init_state["_dr_remaining_hours"][asset_id] holds the hours-of-
+        # call-out remaining for this study year.  When absent (single-
+        # shot solves), we fall back to a fresh pro-rate of the full
+        # hours_per_year_max.
+        dr_remaining_in = (init_state or {}).get("_dr_remaining_hours") or {}
+        def dr_annual(m, d):
+            if d in shared_dr_ids:
+                return pyo.Constraint.Skip
+            a = assets[d]
+            pmc = float(a["pmax_curtail"])
+            if d in dr_remaining_in:
+                cap_h = max(0.0, float(dr_remaining_in[d]))
+                cap_mwh_window = cap_h * pmc
+            else:
+                cap_h = float(a.get("hours_per_year_max", HOURS_PER_YEAR))
+                cap_mwh_year = cap_h * pmc
+                frac = (H * dt) / max(HOURS_PER_YEAR, 1)
+                cap_mwh_window = cap_mwh_year * frac
+            return sum(m.dr[d, t] * dt for t in m.T) <= cap_mwh_window
+        m.DR_Annual = pyo.Constraint(m.DR, rule=dr_annual)
+
+    # ── Reserve constraints ────────────────────────────────────────────
+    reserve_requirement = {
+        rp["id"]: {t: reserve_requirement_at(rp, t, profiles_w, offset_h, dt) for t in T}
+        for rp in reserve_prods
+    }
+    reserve_duration = {
+        rp["id"]: max(1e-9, float(rp.get("reserve_duration_h", 1.0) or 1.0))
+        for rp in reserve_prods
+    }
+    for rp in reserve_prods:
+        rid  = rp["id"]
+        elig = res_elig_g[rid]
+        elig_bess = res_elig_bess.get(rid, [])
+        dirn = rp.get("direction","up")
+        derating = rp.get("derating_factors", {})
+        dur_h = reserve_duration[rid]
+
+        def _reserve_up_expr(m, t, _rid=rid, _elig=elig, _belig=elig_bess, _der=derating):
+            up = sum(m.res_up[_rid,g,t] * _der.get(g,1.0) for g in _elig)
+            if bess_ids:
+                up += sum(m.bess_res_up[_rid,b,t] * _der.get(b,1.0) for b in _belig)
+            return up
+        def _reserve_down_expr(m, t, _rid=rid, _elig=elig, _belig=elig_bess, _der=derating):
+            dn = sum(m.res_down[_rid,g,t] * _der.get(g,1.0) for g in _elig)
+            if bess_ids:
+                dn += sum(m.bess_res_down[_rid,b,t] * _der.get(b,1.0) for b in _belig)
+            return dn
+        if dirn == "symmetric":
+            def res_supply_up(m, t, _rid=rid):
+                return _reserve_up_expr(m, t) + m.res_sh[_rid,t] >= reserve_requirement[_rid][t]
+            def res_supply_dn(m, t, _rid=rid):
+                return _reserve_down_expr(m, t) + m.res_sh[_rid,t] >= reserve_requirement[_rid][t]
+            m.add_component(f"ResSupUp_{rid}", pyo.Constraint(m.T, rule=res_supply_up))
+            m.add_component(f"ResSupDn_{rid}", pyo.Constraint(m.T, rule=res_supply_dn))
+        else:
+            def res_supply(m, t, _rid=rid, _dirn=dirn):
+                sup = _reserve_up_expr(m, t) if _dirn == "up" else _reserve_down_expr(m, t)
+                return sup + m.res_sh[_rid,t] >= reserve_requirement[_rid][t]
+            m.add_component(f"ResSup_{rid}", pyo.Constraint(m.T, rule=res_supply))
+
+        # Headroom/footroom: p + res_up ≤ pmax·u ; p - res_down ≥ pmin·u
+        # For an eligible unit under a single-direction reserve product,
+        # the opposite direction variable is otherwise unconstrained and
+        # never appears in the objective. Fix it to zero so the solver
+        # can't leave it undefined and the output layer cannot emit
+        # garbage under ``hourly_by_unit[…].reserve_up/down``. Ineligible
+        # units are already zeroed below; this closes the eligible-side
+        # gap for thermal/hydro/wind/solar/import (BESS is already handled
+        # symmetrically in its own block).
+        for g in elig:
+            if dirn in ("up","symmetric"):
+                def res_head(m, t, _g=g, _rid=rid):
+                    pmx = get_pmax_t(assets[_g], t-1, profiles_w, offset_h, dt)
+                    u_t = m.u[_g,t] if _g in committable else 1
+                    return m.p[_g,t] + m.res_up[_rid,_g,t] <= pmx * u_t
+                m.add_component(f"ResHead_{rid}_{g}", pyo.Constraint(m.T, rule=res_head))
+            else:
+                for t in T: m.res_up[rid,g,t].fix(0)
+            if dirn in ("down","symmetric"):
+                def res_foot(m, t, _g=g, _rid=rid):
+                    pmin = float(assets[_g].get("pmin",0))
+                    u_t  = m.u[_g,t] if _g in committable else 1
+                    return m.p[_g,t] - m.res_down[_rid,_g,t] >= pmin * u_t
+                m.add_component(f"ResFoot_{rid}_{g}", pyo.Constraint(m.T, rule=res_foot))
+            else:
+                for t in T: m.res_down[rid,g,t].fix(0)
+
+        for b in elig_bess:
+            if dirn not in ("up", "symmetric"):
+                for t in T: m.bess_res_up[rid,b,t].fix(0)
+            if dirn not in ("down", "symmetric"):
+                for t in T: m.bess_res_down[rid,b,t].fix(0)
+            if dirn in ("up", "symmetric"):
+                def bess_res_head(m, t, _b=b, _rid=rid, _dur=dur_h):
+                    a = assets[_b]; ed = float(a.get("eta_discharge", 1) or 1)
+                    soc_min = float(a.get("soc_min", 0)) * float(a.get("energy_mwh", 0))
+                    soc_avail = (init_state.get(_b, {}).get("soc", float(a["soc_init"]) * float(a["energy_mwh"]))
+                                 if t == 1 else m.soc[_b,t-1])
+                    return m.bess_res_up[_rid,_b,t] <= (soc_avail - soc_min) * ed / _dur
+                def bess_res_dis_head(m, t, _b=b, _rid=rid):
+                    return m.dis[_b,t] + m.bess_res_up[_rid,_b,t] <= _bess_discharge_cap(_b)
+                m.add_component(f"BessResEnergyUp_{rid}_{b}", pyo.Constraint(m.T, rule=bess_res_head))
+                m.add_component(f"BessResHeadUp_{rid}_{b}", pyo.Constraint(m.T, rule=bess_res_dis_head))
+            if dirn in ("down", "symmetric"):
+                def bess_res_empty(m, t, _b=b, _rid=rid, _dur=dur_h):
+                    a = assets[_b]; ec = float(a.get("eta_charge", 1) or 1)
+                    soc_max = float(a.get("soc_max", 1)) * float(a.get("energy_mwh", 0))
+                    soc_avail = (init_state.get(_b, {}).get("soc", float(a["soc_init"]) * float(a["energy_mwh"]))
+                                 if t == 1 else m.soc[_b,t-1])
+                    return m.bess_res_down[_rid,_b,t] <= (soc_max - soc_avail) / max(ec, 1e-9) / _dur
+                def bess_res_ch_head(m, t, _b=b, _rid=rid):
+                    return m.ch[_b,t] + m.bess_res_down[_rid,_b,t] <= _bess_charge_cap(_b)
+                m.add_component(f"BessResEnergyDn_{rid}_{b}", pyo.Constraint(m.T, rule=bess_res_empty))
+                m.add_component(f"BessResHeadDn_{rid}_{b}", pyo.Constraint(m.T, rule=bess_res_ch_head))
+
+        # Ineligible units: zero reserve
+        for g in disp_ids:
+            if g not in elig:
+                for t in T:
+                    m.res_up[rid,g,t].fix(0)
+                    m.res_down[rid,g,t].fix(0)
+        if bess_ids:
+            for b in bess_ids:
+                if b not in elig_bess:
+                    for t in T:
+                        m.bess_res_up[rid,b,t].fix(0)
+                        m.bess_res_down[rid,b,t].fix(0)
+
+    # A provider's raw headroom/footroom is a shared physical quantity.  The
+    # older product-by-product constraints allowed the same MW to be sold to
+    # every reserve product.  These aggregate constraints preserve all
+    # existing product definitions while preventing that double counting.
+    for g in disp_ids:
+        up_rids = [rp["id"] for rp in reserve_prods if g in res_elig_g[rp["id"]] and rp.get("direction", "up") in ("up", "symmetric")]
+        down_rids = [rp["id"] for rp in reserve_prods if g in res_elig_g[rp["id"]] and rp.get("direction", "up") in ("down", "symmetric")]
+        if up_rids:
+            def total_res_head(m, t, _g=g, _rids=tuple(up_rids)):
+                pmx = get_pmax_t(assets[_g], t-1, profiles_w, offset_h, dt)
+                u_t = m.u[_g,t] if _g in committable else 1
+                return sum(m.res_up[rid, _g, t] for rid in _rids) <= pmx * u_t - m.p[_g,t]
+            m.add_component(f"ResTotalHead_{g}", pyo.Constraint(m.T, rule=total_res_head))
+        if down_rids:
+            def total_res_foot(m, t, _g=g, _rids=tuple(down_rids)):
+                pmin = float(assets[_g].get("pmin", 0) or 0)
+                u_t = m.u[_g,t] if _g in committable else 1
+                return sum(m.res_down[rid, _g, t] for rid in _rids) <= m.p[_g,t] - pmin * u_t
+            m.add_component(f"ResTotalFoot_{g}", pyo.Constraint(m.T, rule=total_res_foot))
+    for b in bess_ids:
+        up_rids = [rp["id"] for rp in reserve_prods if b in res_elig_bess.get(rp["id"], []) and rp.get("direction", "up") in ("up", "symmetric")]
+        down_rids = [rp["id"] for rp in reserve_prods if b in res_elig_bess.get(rp["id"], []) and rp.get("direction", "up") in ("down", "symmetric")]
+        if up_rids:
+            def total_bess_head(m, t, _b=b, _rids=tuple(up_rids)):
+                return sum(m.bess_res_up[rid, _b, t] for rid in _rids) <= _bess_discharge_cap(_b) - m.dis[_b,t]
+            def total_bess_energy(m, t, _b=b, _rids=tuple(up_rids)):
+                a = assets[_b]; eta = float(a.get("eta_discharge", 1) or 1)
+                lo = float(a.get("soc_min", 0) or 0) * float(a.get("energy_mwh", 0) or 0)
+                soc = init_state.get(_b, {}).get("soc", float(a.get("soc_init", 0) or 0) * float(a.get("energy_mwh", 0) or 0)) if t == 1 else m.soc[_b,t-1]
+                return sum(m.bess_res_up[rid, _b, t] * reserve_duration[rid] for rid in _rids) <= (soc - lo) * eta
+            m.add_component(f"BessResTotalHead_{b}", pyo.Constraint(m.T, rule=total_bess_head))
+            m.add_component(f"BessResTotalEnergyUp_{b}", pyo.Constraint(m.T, rule=total_bess_energy))
+        if down_rids:
+            def total_bess_foot(m, t, _b=b, _rids=tuple(down_rids)):
+                return sum(m.bess_res_down[rid, _b, t] for rid in _rids) <= _bess_charge_cap(_b) - m.ch[_b,t]
+            def total_bess_energy_dn(m, t, _b=b, _rids=tuple(down_rids)):
+                a = assets[_b]; eta = float(a.get("eta_charge", 1) or 1)
+                hi = float(a.get("soc_max", 1) or 1) * float(a.get("energy_mwh", 0) or 0)
+                soc = init_state.get(_b, {}).get("soc", float(a.get("soc_init", 0) or 0) * float(a.get("energy_mwh", 0) or 0)) if t == 1 else m.soc[_b,t-1]
+                return sum(m.bess_res_down[rid, _b, t] * reserve_duration[rid] for rid in _rids) <= (hi - soc) / max(eta, 1e-9)
+            m.add_component(f"BessResTotalFoot_{b}", pyo.Constraint(m.T, rule=total_bess_foot))
+            m.add_component(f"BessResTotalEnergyDown_{b}", pyo.Constraint(m.T, rule=total_bess_energy_dn))
+
+    # ── Gas constraints with rolling-window carry-over ────────────────
+    # Gas flow per period = gas_rate[Mm³/MWh] × p[MW] × dt[h].
+    #
+    # Carry-over:
+    #   gas_limits["_remaining_annual_mm3"]   — Mm³ left in this study year.
+    #   gas_limits["_remaining_monthly_mm3"]  — {1..12: Mm³ left in that month}.
+    # When solve_all is driving the rolling horizon it decrements these
+    # after each committed slice and threads the residual through to
+    # the next solve_window call.  When absent (single-shot solves) we
+    # fall back to the original full annual / per-month caps.
+    gas_mode = gas_limits.get("mode","none")
+    if gas_mode != "none" and gas_units:
+        annual_cap_full = (gas_limits.get("annual_limit") or 0)
+        remaining_annual = gas_limits.get("_remaining_annual_mm3", annual_cap_full)
+        if gas_mode in ("annual","annual+monthly") and annual_cap_full:
+            # Capture remaining_annual via a local for safe closure binding.
+            _cap_annual = float(remaining_annual)
+            def gas_total(m):
+                return sum(assets[g]["_gas_rate"] * m.p[g, t] * dt
+                           for g in gas_units for t in m.T) <= _cap_annual
+            m.GasTotal = pyo.Constraint(rule=gas_total)
+        # ── Real per-calendar-month gas cap with carry-over ────────────
+        monthly = gas_limits.get("monthly_limits")
+        remaining_monthly = gas_limits.get("_remaining_monthly_mm3") or {}
+        if gas_mode in ("monthly","annual+monthly") and monthly:
+            HOURS_PER_MONTH = (
+                31*24, 28*24, 31*24, 30*24, 31*24, 30*24,
+                31*24, 31*24, 30*24, 31*24, 30*24, 31*24,
+            )
+            def _hour_to_month(global_h: int) -> int:
+                acc = 0
+                for i, hpm in enumerate(HOURS_PER_MONTH, start=1):
+                    if global_h < acc + hpm:
+                        return i
+                    acc += hpm
+                return 12
+            month_to_periods: dict[int, list[int]] = {}
+            for t in T:
+                # `% 8760` folds the study clock into a single calendar
+                # year. Multi-year studies (horizon_hours > 8760) reuse
+                # the same monthly gas cap for every year — intentional
+                # for repeating annual budgets, but not a per-year cap.
+                gh = (offset_h + int((t - 1) * dt)) % 8760
+                mo = _hour_to_month(gh)
+                month_to_periods.setdefault(mo, []).append(t)
+            constrained = [mo for mo in sorted(month_to_periods.keys()) if mo in monthly]
+            if constrained:
+                m.GasMonthlyIdx = pyo.Set(initialize=constrained, ordered=True)
+                def _gas_month_rule(m, mo):
+                    periods = month_to_periods[mo]
+                    cap_full = float(monthly[mo])
+                    # Decide between fresh-window pro-rate (no carry-over
+                    # provided) and remaining-month enforcement (carry-over).
+                    if mo in remaining_monthly:
+                        cap_window = max(0.0, float(remaining_monthly[mo]))
+                    else:
+                        hours_in_window = len(periods) * dt
+                        frac = hours_in_window / float(HOURS_PER_MONTH[mo - 1])
+                        cap_window = cap_full * frac
+                    return sum(assets[g]["_gas_rate"] * m.p[g, t] * dt
+                               for g in gas_units for t in periods) <= cap_window
+                m.GasMonthly = pyo.Constraint(m.GasMonthlyIdx, rule=_gas_month_rule)
+
+    # ── Warm start hints (v1.3 #6) — pre-populate .value on vars from a
+    #   previous solve; both Gurobi and HiGHS honour this for MIP restarts.
+    if warm_start:
+        for vn, values in warm_start.items():
+            if not hasattr(m, vn):  continue
+            var = getattr(m, vn)
+            for k, v in values.items():
+                try:
+                    var[k].value = float(v)
+                except (KeyError, TypeError, ValueError):
+                    pass
+
+    # ── Solve ──────────────────────────────────────────────────────────
+    m.dual = pyo.Suffix(direction=pyo.Suffix.IMPORT)
+    backend = str(solver_cfg.get("solver", "auto")).lower()
+    # Stage 2 compatibility seam: model construction remains legacy, while
+    # backend selection, option validation and solve diagnostics are canonical.
+    from powersim.solvers import solve_model
+    solve_options = {
+        "time_limit_s": float(solver_cfg.get("time_limit_s", 300)),
+        "mip_gap": float(solver_cfg.get("mip_gap", 0.005)),
+        "threads": int(solver_cfg.get("threads", 0)),
+        "log_to_console": False,
+        "warm_start": bool(warm_start),
+    }
+    outcome = solve_model(m, backend, solve_options)
+    diagnostics = outcome.diagnostics
+    result = outcome.raw_result
+    backend_used = diagnostics.backend
+    solve_wall_s = diagnostics.orchestration_runtime_s or 0.0
+    infeasible = diagnostics.normalized_status.value == "infeasible"
+    unusable = not diagnostics.has_incumbent
+
+    # ── v1.4: IIS diagnostics on infeasibility ──────────────────────────
+    iis_report: dict | None = None
+    if infeasible and solver_cfg.get("iis_on_infeasible", False):
+        iis_report = _compute_iis(m, assets, demand_w, profiles_w,
+                                  gas_limits, reserve_prods, backend_used)
+        print("⚠️  IIS report written; attach to diagnostics.iis")
+    if unusable:
+        # The legacy shape is retained for callers, but canonical diagnostics
+        # mark it invalid/no-incumbent and the publication gate rejects it.
+        n_gen  = len(disp_ids)
+        empty_disp = {g: 0.0 for g in disp_ids}
+        empty_comm = {g: 0.0 for g in committable}
+        hourly_w_empty = []
+        for t in T:
+            hourly_w_empty.append({
+                "t": t - 1 + offset_h, "hour_of_year": (offset_h + (t-1)*dt),
+                "period_minutes": int(round(dt * 60)),
+                "load_mw": demand_w[t-1], "generation_mw": 0.0,
+                "lambda_usd_mwh": 0.0, "lambda_source": "infeasible",
+                "unserved_mwh": demand_w[t-1] * dt, "curtailed_mwh": 0.0,
+                "gas_mm3h": 0.0,
+                "dispatch": empty_disp, "commitment": empty_comm,
+                "startup": {}, "shutdown": {},
+                "reserve_up": {rid: {g: 0.0 for g in res_elig.get(rid, [])} for rid in res_ids},
+                "reserve_down": {rid: {g: 0.0 for g in res_elig.get(rid, [])} for rid in res_ids},
+                "reserve_shortfall": {rid: 0.0 for rid in res_ids},
+                "bess": {}, "hydro": {}, "dr": {}, "pumped_hydro": {},
+            })
+        fin_state = {"_iis_report": iis_report} if iis_report else {}
+        return SolvedRows(hourly_w_empty, solver_diagnostics=diagnostics,
+                          extraction_completed=False), fin_state, solve_wall_s, float("nan")
+
+    def pv(var, *keys):
+        try: v = pyo.value(var[keys]); return float(v) if v else 0.0
+        except: return 0.0
+
+    # ── Extract hourly results ─────────────────────────────────────────
+    # Reserve records are deliberately extracted as a separate canonical
+    # stream: they are capacity commitments, not energy injections.
+    from powersim.components.results import ReserveResult
+    hourly_w = []
+    reserve_results = []
+    for t in T:
+        disp = {g: round(pv(m.p, g, t), 3) for g in disp_ids}
+        comm = {g: round(pv(m.u, g, t))    for g in committable}
+        start_h = {g: round(pv(m.y, g, t)) for g in committable}
+        shut_h  = {g: round(pv(m.z, g, t)) for g in committable}
+        # v1.5 Thermal Stage 3 — emit hot-start indicator for multi-stage units.
+        hot_h = ({g: round(pv(m.y_hot, g, t)) for g in _ms_start}
+                 if _ms_start else {})
+
+        # Gas — reported as Mm³/h rate (intensive). Total volume per period
+        # is `hgas × dt` but the output keeps the rate for back-compat.
+        hgas = sum(assets[g]["_gas_rate"] * disp[g] for g in gas_units)
+
+        # Curtailment — MWh per period (pot - actual is MW, × dt).
+        curt = 0.0
+        for g in wind_solar:
+            pot = get_pmax_t(assets[g], t-1, profiles_w, offset_h, dt)
+            curt += max(0.0, pot - disp[g]) * dt
+
+        # Lambda (VOLL-aware) — copperplate single λ vs nodal LMP per bus
+        bus_lmp = {}
+        line_flow = {}
+        bus_angle = {}
+        bus_injection = {}
+        if use_dcopf:
+            # Per-line MW flows (from primal m.fl).
+            try:
+                for ln in lines:
+                    lid = ln["id"]
+                    line_flow[lid] = float(pyo.value(m.fl[lid, t]) or 0.0)
+                for b in bus_ids:
+                    bus_angle[b] = float(pyo.value(m.theta[b, t]) or 0.0)
+                    gen_b = sum(pv(m.p, g, t) for g in disp_ids if asset_bus.get(g) == b)
+                    bess_b = sum(pv(m.dis, bid, t) - pv(m.ch, bid, t) for bid in bess_ids if asset_bus.get(bid) == b) if bess_ids else 0.0
+                    dr_b = sum(pv(m.dr, d, t) for d in dr_ids if asset_bus.get(d) == b) if dr_ids else 0.0
+                    ph_b = sum(pv(m.ph_gen_hi, h, t) + pv(m.ph_gen_lo, h, t) - pv(m.ph_pmp_hi, h, t) - pv(m.ph_pmp_lo, h, t) for h in ph_ids if asset_bus.get(h) == b) if ph_ids else 0.0
+                    bus_injection[b] = gen_b + bess_b + dr_b + ph_b
+            except Exception:
+                pass
+            # Per-bus dual.  For MIP runs HiGHS often doesn't surface
+            # constraint duals — when missing, broadcast the system λ
+            # (computed below) so the field is always populated.
+            dcopf_dual_ok = False
+            try:
+                tmp = {}
+                for b in bus_ids:
+                    tmp[b] = round(abs(float(m.dual[m.Balance[b, t]])), 3)
+                if all(isinstance(v, (int, float)) for v in tmp.values()):
+                    bus_lmp = tmp
+                    dcopf_dual_ok = True
+            except Exception:
+                pass
+            # Use slack-bus dual as system λ; if duals weren't loaded
+            # the bus_lmp dict was just broadcast from system λ below.
+            try:    lam = abs(float(m.dual[m.Balance[slack, t]]))
+            except: lam = sum(bus_lmp.values())/max(len(bus_lmp),1) if bus_lmp else 0.0
+        else:
+            try:    lam = abs(float(m.dual[m.Balance[t]]))
+            except: lam = 0.0
+        if lam < 1e-6:
+            # VOLL-aware fallback: check unserved → marginal committed
+            unserv = pv(m.unserv, t)
+            if unserv > 1e-3:
+                lam = float(solver_cfg.get("unserved_penalty", 3000))
+            else:
+                mcs = [assets[g]["_dispMC"] for g in disp_ids if disp.get(g,0) > 0.5]
+                lam = max(mcs) if mcs else 0.0
+        # If DC-OPF is on but MIP duals weren't available, populate
+        # bus_lmp with the system λ (zero-congestion assumption).
+        if use_dcopf and not bus_lmp:
+            bus_lmp = {b: round(lam, 3) for b in bus_ids}
+
+        # Reserves
+        res_up_h = {}
+        res_down_h = {}
+        for rid in res_ids:
+            res_up_h[rid] = {g: pv(m.res_up, rid, g, t) for g in res_elig_g[rid]}
+            res_down_h[rid] = {g: pv(m.res_down, rid, g, t) for g in res_elig_g[rid]}
+            if bess_ids:
+                for b in res_elig_bess.get(rid, []):
+                    res_up_h[rid][b] = pv(m.bess_res_up, rid, b, t)
+                    res_down_h[rid][b] = pv(m.bess_res_down, rid, b, t)
+        res_sh_h   = {rid: pv(m.res_sh, rid, t) for rid in res_ids}
+
+        reserve_period = int(round(offset_h / dt)) + t - 1
+        product_by_id = {rp["id"]: rp for rp in reserve_prods}
+        for rid in res_ids:
+            rp = product_by_id[rid]
+            direction = str(rp.get("direction", "up"))
+            derating = rp.get("derating_factors", {}) or {}
+            directions = ("up", "down") if direction == "symmetric" else (direction,)
+            directional_effective = []
+            for reserve_direction in directions:
+                provision = res_up_h[rid] if reserve_direction == "up" else res_down_h[rid]
+                effective = 0.0
+                for gid, raw in provision.items():
+                    factor = float(derating.get(gid, 1.0) or 0.0)
+                    effective += raw * factor
+                    asset = assets[gid]
+                    if asset.get("type") == "bess":
+                        state = (init_state.get(gid, {}).get("soc", float(asset.get("soc_init", 0) or 0) * float(asset.get("energy_mwh", 0) or 0))
+                                 if t == 1 else pv(m.soc, gid, t - 1))
+                        if reserve_direction == "up":
+                            power_cap = max(0.0, _bess_discharge_cap(gid) - pv(m.dis, gid, t))
+                            energy_cap = max(0.0, state - float(asset.get("soc_min", 0) or 0) * float(asset.get("energy_mwh", 0) or 0)) * float(asset.get("eta_discharge", 1) or 1) / reserve_duration[rid]
+                        else:
+                            power_cap = max(0.0, _bess_charge_cap(gid) - pv(m.ch, gid, t))
+                            energy_cap = max(0.0, float(asset.get("soc_max", 1) or 1) * float(asset.get("energy_mwh", 0) or 0) - state) / max(float(asset.get("eta_charge", 1) or 1), 1e-9) / reserve_duration[rid]
+                    else:
+                        dispatch = pv(m.p, gid, t)
+                        pmx = get_pmax_t(asset, t - 1, profiles_w, offset_h, dt)
+                        unit_on = pv(m.u, gid, t) if gid in committable else 1.0
+                        if reserve_direction == "up":
+                            power_cap, energy_cap = max(0.0, pmx * unit_on - dispatch), None
+                        else:
+                            power_cap, energy_cap = max(0.0, dispatch - float(asset.get("pmin", 0) or 0) * unit_on), None
+                    reserve_results.append(ReserveResult(
+                        period=reserve_period, product_id=rid, direction=reserve_direction,
+                        provider_id=gid, provided_mw=raw,
+                        effective_provided_mw=raw * factor,
+                        physical_capability_mw=power_cap,
+                        energy_capability_mw=energy_cap,
+                        derating_factor=factor,
+                    ))
+                directional_effective.append(effective)
+            # One product-level record per period. For symmetric products the
+            # limiting directional provision is reported while QA reconstructs
+            # both directional requirements from provider records.
+            system_effective = min(directional_effective) if directional_effective else 0.0
+            reserve_results.append(ReserveResult(
+                period=reserve_period, product_id=rid, direction=direction,
+                provided_mw=system_effective, effective_provided_mw=system_effective,
+                requirement_mw=reserve_requirement[rid][t],
+                shortfall_mw=res_sh_h[rid],
+                shortfall_penalty_usd=res_sh_h[rid] * float(rp.get("shortfall_penalty", 500) or 0) * dt,
+            ))
+
+        # BESS
+        bess_h = {}
+        if bess_ids:
+            for b in bess_ids:
+                cap = float(assets[b]["energy_mwh"])
+                s   = pv(m.soc, b, t)
+                bess_h[b] = {
+                    "charge_mw":    pv(m.ch,  b, t),
+                    "discharge_mw": pv(m.dis, b, t),
+                    "soc_mwh":      round(s, 2),
+                    "soc_frac":     round(s / cap, 3) if cap > 0 else 0
+                }
+
+        # Hydro
+        hydro_h = {}
+        if hydro_reg:
+            for h_id in hydro_reg:
+                ha  = assets[h_id]["hydro"]
+                # Use the window's effective efficiency (head_efficiency_curve
+                # if set) so reported release matches what the LP balance saw.
+                eff = _hydro_eff.get(h_id, float(ha.get("efficiency", 350)))
+                rel = disp[h_id] / max(eff, 0.001)
+                infl_key = assets[h_id].get("inflow_profile")
+                infl = profiles_w.get(infl_key, [float(ha.get("inflow",0.05))]*(t))[t-1] if infl_key else float(ha.get("inflow",0.05))
+                hydro_h[h_id] = {
+                    "storage_mm3":  round(pv(m.stor, h_id, t), 3),
+                    "release_mm3h": round(rel, 5),
+                    "inflow_mm3h":  round(infl, 5),
+                    "spill_mm3h":   round(pv(m.spill, h_id, t), 5)
+                }
+
+        # DR curtailment per period.
+        dr_h = {d: round(pv(m.dr, d, t), 3) for d in dr_ids}
+
+        # Pumped-hydro state + net dispatch per period.
+        ph_h = {}
+        for h_id in ph_ids:
+            gen_hi = pv(m.ph_gen_hi, h_id, t)
+            gen_lo = pv(m.ph_gen_lo, h_id, t)
+            pmp_hi = pv(m.ph_pmp_hi, h_id, t)
+            pmp_lo = pv(m.ph_pmp_lo, h_id, t)
+            ph_h[h_id] = {
+                "gen_mw":         round(gen_hi + gen_lo, 3),
+                "pump_mw":        round(pmp_hi + pmp_lo, 3),
+                "net_mw":         round(gen_hi + gen_lo - pmp_hi - pmp_lo, 3),
+                "soc_mwh":        round(pv(m.ph_soc, h_id, t), 2),
+                "head_segment":   "high" if pv(m.ph_zhi, h_id, t) > 0.5 else "deep",
+                "mode":           "gen" if pv(m.ph_mode, h_id, t) > 0.5 else "pump/idle",
+            }
+
+        gen_total = sum(disp.values()) + (
+            sum(bess_h[b]["discharge_mw"] - bess_h[b]["charge_mw"] for b in bess_ids)
+            if bess_ids else 0
+        ) + sum(ph_h[h_id]["net_mw"] for h_id in ph_ids) \
+          + sum(dr_h.values())
+
+        # 't' is a period index; we also expose hour_of_year for calendar
+        # work and the period's duration in minutes.
+        t_period = t - 1 + offset_h * max(1, int(round(1/dt)))
+        hour_of_year = (offset_h + (t - 1) * dt)
+        hourly_w.append({
+            "t":               t_period,
+            "hour_of_year":    round(hour_of_year, 6),
+            "period_minutes":  int(round(dt * 60)),
+            "load_mw":         demand_w[t-1],
+            "generation_mw":   round(gen_total, 2),
+            "lambda_usd_mwh":  round(lam, 3),
+            "lambda_source":   "dual_or_fallback",
+            "unserved_mwh":    round(pv(m.unserv, t) * dt, 3),
+            "curtailed_mwh":   round(curt, 2),
+            "gas_mm3h":        round(hgas, 6),
+            "dispatch":        disp,
+            "commitment":      comm,
+            "startup":         start_h,
+            "startup_hot":     hot_h,
+            "shutdown":        shut_h,
+            "reserve_up":      res_up_h,
+            "reserve_down":    res_down_h,
+            "reserve_shortfall": res_sh_h,
+            "bess":            bess_h,
+            "hydro":           hydro_h,
+            "dr":              dr_h,
+            "pumped_hydro":    ph_h,
+            "bus_lmp":         bus_lmp,
+            "line_flow":       line_flow,
+            "bus_angle_rad":  bus_angle,
+            "bus_injection_mw": bus_injection,
+            "reserve_eligible_filtered": reserve_eligible_filtered,
+        })
+
+    # ── Carry final state ──────────────────────────────────────────────
+    # `boundary_t` is the last *committed* period.  In rolling-horizon
+    # solves the look-ahead tail (periods commit_periods+1 .. H) is
+    # discarded by solve_all, so the state we hand to the next window
+    # must come from the boundary, not the last solved period.
+    boundary_t = int(commit_periods) if commit_periods else T[-1]
+    boundary_t = max(1, min(boundary_t, T[-1]))
+    fin_state = {}
+    for g in committable:
+        # Read the committed-slice u-trace and count trailing on/off
+        # periods so the next window can enforce the remainder of
+        # min_up / min_down via the boundary fix-and-force constraints.
+        u_series = [int(round(pv(m.u, g, t))) for t in range(1, boundary_t + 1)]
+        last_u = u_series[-1] if u_series else 0
+        trail_on = 0
+        for u in reversed(u_series):
+            if u == 1: trail_on += 1
+            else: break
+        # If the entire committed slice is on, extend with whatever the
+        # previous window had carried in.
+        if trail_on == len(u_series):
+            trail_on += int((init_state.get(g, {}) or {}).get("periods_on", 0))
+        trail_off = 0
+        for u in reversed(u_series):
+            if u == 0: trail_off += 1
+            else: break
+        if trail_off == len(u_series):
+            trail_off += int((init_state.get(g, {}) or {}).get("periods_off", 0))
+        fin_state[g] = {
+            "u":            last_u,
+            "p":            pv(m.p, g, boundary_t),
+            "periods_on":   trail_on  if last_u == 1 else 0,
+            "periods_off":  trail_off if last_u == 0 else 0,
+        }
+    for h_id in hydro_reg:
+        fin_state.setdefault(h_id, {})["stor"] = pv(m.stor, h_id, boundary_t)
+    for b in bess_ids:
+        s = fin_state.setdefault(b, {})
+        s["soc"] = pv(m.soc, b, boundary_t)
+        # Carry final-period ch/dis MW so the next window's ramp
+        # constraint (if any) has a non-zero boundary.
+        s["ch_prev"]  = pv(m.ch,  b, boundary_t)
+        s["dis_prev"] = pv(m.dis, b, boundary_t)
+    for h_id in ph_ids:
+        fin_state.setdefault(h_id, {})["ph_soc"] = pv(m.ph_soc, h_id, boundary_t)
+    if iis_report is not None:
+        fin_state["_iis_report"] = iis_report
+
+    tc = str(getattr(result, "solver", {}).termination_condition
+             if hasattr(result,"solver") else "—")
+    print(f"   ✅ {tc} | {solve_wall_s:.1f}s | H={H} | backend={backend_used} | dt={dt}h")
+
+    try:
+        obj_val = float(pyo.value(m.OBJ))
+    except Exception:
+        obj_val = float("nan")
+
+    # Stage 3A canonical component extraction stays full precision and is
+    # transported explicitly with this solve. Legacy serialization remains a
+    # separate compatibility layer.
+    component_results = shared_session.extract(m) if shared_session is not None else []
+    return SolvedRows(
+        hourly_w,
+        solver_diagnostics=diagnostics,
+        component_results=component_results,
+        reserve_results=reserve_results,
+    ), fin_state, solve_wall_s, obj_val
+
+
+# ══════════════════════════════════════════════════════════════════════
+# 5. ROLLING HORIZON DRIVER
+# ══════════════════════════════════════════════════════════════════════
+
+def solve_all(inp: dict, assets: dict, profiles: dict, gas_limits: dict) -> tuple[list, float, float]:
+    """
+    Run UC/ED over the full study horizon using rolling windows if needed.
+    Returns: (all_hourly, total_solve_time, total_objective)
+    Stage-1 patch: also returns summed Pyomo objective for closure check.
+    """
+    sh      = inp.get("study_horizon", {})
+    H_total_h = int(sh.get("horizon_hours", len(profiles.get("demand", [])) or HOURS_PER_YEAR))
+    start_h   = int(sh.get("start_hour", 0))
+    demand  = profiles["demand"]
+    reserve_prods = inp.get("reserve_products", [])
+    solver_cfg    = dict(inp.get("solver_settings", {}))
+    # Pass CO₂ price + network model into solve_window via solver_cfg piggyback.
+    solver_cfg["_co2_price_usd_per_t"] = float(inp.get("co2_price_usd_per_t", 0) or 0)
+    solver_cfg["_network"] = {
+        **normalize_dc_network(inp, assets),
+    }
+
+    # Resolution → period duration.
+    r_min, _ppy, dt_h = resolve_resolution(inp)
+    periods_per_h = 60 // r_min
+    H_total_p     = H_total_h * periods_per_h
+
+    window_h = int(solver_cfg.get("rolling_window_h", 168))
+    step_h   = int(solver_cfg.get("rolling_step_h",   24))
+    window_p = window_h * periods_per_h
+    step_p   = step_h   * periods_per_h
+
+    warm_start_enabled = bool(solver_cfg.get("warm_start", False))
+
+    use_rolling = H_total_p > window_p
+    iis_reports: list[dict] = []
+    if not use_rolling:
+        print(f"⚙️  Full-horizon solve: {len(assets)} assets × {H_total_p} periods "
+              f"({H_total_h}h @ {r_min}min)")
+        hourly, fin_state, swall, obj_val = solve_window(
+            assets, demand[:H_total_p], profiles, reserve_prods, gas_limits,
+            init_state={}, solver_cfg=solver_cfg, offset_h=start_h, dt=dt_h)
+        if fin_state.get("_iis_report"):
+            iis_reports.append(fin_state["_iis_report"])
+        window_record = _window_diagnostic(hourly.solver_diagnostics, 1, 0, H_total_p)
+        rows = SolvedRows(
+            hourly,
+            solver_diagnostics=hourly.solver_diagnostics,
+            window_diagnostics=[window_record],
+            iis_reports=iis_reports,
+            component_results=hourly.component_results,
+            reserve_results=hourly.reserve_results,
+            extraction_completed=hourly.extraction_completed,
+        )
+        return rows, swall, obj_val
+
+    n_windows = math.ceil((H_total_p - window_p) / step_p) + 1
+    print(f"⚙️  Rolling Horizon: {H_total_h}h ÷ {window_h}h window × {step_h}h step "
+          f"= {n_windows} windows  (dt={r_min}min, warm_start={warm_start_enabled})")
+
+    all_hourly, state, total_swall, obj_accum = [], {}, 0.0, 0.0
+    all_component_results = []
+    all_reserve_results = []
+    window_diagnostics = []
+    committed_p = 0
+    prev_hint: dict | None = None
+
+    # ── Carry-over budgets (rolling-horizon correctness) ────────────
+    # These trackers ensure the cumulative gas use, monthly gas use,
+    # and DR call-out hours respect the original input caps even when
+    # the optimisation is decomposed across many windows.
+    annual_cap_full = float(gas_limits.get("annual_limit") or 0)
+    remaining_annual = annual_cap_full
+    monthly_caps = dict(gas_limits.get("monthly_limits") or {})
+    remaining_monthly = {mo: float(v) for mo, v in monthly_caps.items()}
+    HOURS_PER_MONTH_LOCAL = (
+        31*24, 28*24, 31*24, 30*24, 31*24, 30*24,
+        31*24, 31*24, 30*24, 31*24, 30*24, 31*24,
+    )
+    def _hour_to_month_local(global_h: int) -> int:
+        acc = 0
+        for i, hpm in enumerate(HOURS_PER_MONTH_LOCAL, start=1):
+            if global_h < acc + hpm: return i
+            acc += hpm
+        return 12
+    gas_units_global = [a["id"] for a in inp.get("assets", [])
+                        if a.get("type") == "thermal"
+                        and a["id"] in (gas_limits.get("applies_to") or [])]
+    dr_assets = [a for a in inp.get("assets", []) if a.get("type") == "dr"]
+    remaining_dr_hours = {a["id"]: float(a.get("hours_per_year_max", HOURS_PER_YEAR))
+                          for a in dr_assets}
+
+    for w in range(n_windows):
+        start_p = w * step_p
+        end_p   = min(start_p + window_p, H_total_p)
+        if start_p >= H_total_p: break
+        # End-of-horizon storage / SOC targets must only bind on the
+        # LAST window; otherwise every intermediate window drives the
+        # reservoir/SOC to the end target, which is not the intent.
+        is_last_window = (end_p >= H_total_p)
+
+        demand_w   = demand[start_p:end_p]
+        profiles_w = {k: v[start_p:end_p] if isinstance(v, list) else v
+                      for k, v in profiles.items()}
+        # window_start_h is the window's offset WITHIN the study; the
+        # study itself may start mid-year via sh["start_hour"] (captured
+        # above as the outer start_h). Both must combine into offset_h
+        # so profile shapes, month lookups, and hour-of-year outputs
+        # align with the calendar. Bug: prior code shadowed start_h
+        # here and lost the outer offset entirely.
+        window_start_h = start_p // periods_per_h
+        window_offset_h = start_h + window_start_h
+
+        # Inject remaining budgets into per-window gas_limits / state.
+        solver_cfg_win = dict(solver_cfg)
+        solver_cfg_win["_is_last_window"] = is_last_window
+        # Shared components use this marker only to reject the known unsafe
+        # nonzero-delay cascade combination. It is not a physics input.
+        state = dict(state)
+        state["_powersim_rolling"] = True
+        gas_limits_window = dict(gas_limits)
+        if annual_cap_full:
+            gas_limits_window["_remaining_annual_mm3"] = remaining_annual
+        if remaining_monthly:
+            gas_limits_window["_remaining_monthly_mm3"] = dict(remaining_monthly)
+        if remaining_dr_hours:
+            state["_dr_remaining_hours"] = dict(remaining_dr_hours)
+
+        commit_n_p = min(step_p, end_p - start_p)
+        hourly_w, state, swall, obj_w = solve_window(
+            assets, demand_w, profiles_w, reserve_prods, gas_limits_window,
+            init_state=state, solver_cfg=solver_cfg_win, offset_h=window_offset_h,
+            dt=dt_h, warm_start=prev_hint if warm_start_enabled else None,
+            commit_periods=commit_n_p)
+        window_diagnostics.append(_window_diagnostic(
+            hourly_w.solver_diagnostics, w + 1, start_p, end_p))
+        if state.get("_iis_report"):
+            iis_reports.append({**state["_iis_report"], "window": w+1})
+        total_swall += swall
+        if not hourly_w.solver_diagnostics.has_incumbent:
+            print(f"   ❌ window {w+1} has no usable incumbent; rolling solve aborted")
+            break
+        all_hourly.extend(hourly_w[:commit_n_p])
+        # Canonical shared results include the full look-ahead window. Publish
+        # only the committed slice so overlapping rolling windows never
+        # duplicate physical observations.
+        window_base_period = int(round(window_offset_h / dt_h))
+        commit_end_period = window_base_period + commit_n_p
+        all_component_results.extend(
+            result
+            for result in hourly_w.component_results
+            if window_base_period <= result.period < commit_end_period
+        )
+        all_reserve_results.extend(
+            result
+            for result in hourly_w.reserve_results
+            if window_base_period <= result.period < commit_end_period
+        )
+        committed_p += commit_n_p
+        if obj_w == obj_w and len(hourly_w) > 0:
+            obj_accum += obj_w * (commit_n_p / len(hourly_w))
+        pct = committed_p / H_total_p * 100
+        print(f"   window {w+1:3d}/{n_windows}: p{start_p:6d}-{start_p+commit_n_p-1:6d} "
+              f"| {swall:5.1f}s | {pct:5.1f}% done")
+
+        # ── Decrement remaining budgets from the COMMITTED slice ─────
+        # gas_mm3h on the row is the per-period rate; volume = rate × dt.
+        for j, row in enumerate(hourly_w[:commit_n_p]):
+            gas_used = float(row.get("gas_mm3h") or 0) * dt_h
+            if gas_used > 0:
+                if annual_cap_full:
+                    remaining_annual = max(0.0, remaining_annual - gas_used)
+                if remaining_monthly:
+                    # `% HOURS_PER_YEAR` folds the study clock into a
+                    # single calendar year — see the same guard inside
+                    # solve_window's monthly-gas constraint. Multi-year
+                    # studies decrement the same monthly bucket every
+                    # year; per-calendar-year caps are not supported.
+                    gh = (window_offset_h + int(j * dt_h)) % HOURS_PER_YEAR
+                    mo = _hour_to_month_local(gh)
+                    if mo in remaining_monthly:
+                        remaining_monthly[mo] = max(0.0, remaining_monthly[mo] - gas_used)
+            if remaining_dr_hours:
+                dr_dispatch = row.get("dr") or {}
+                for d in remaining_dr_hours:
+                    pmc = next((float(a["pmax_curtail"]) for a in dr_assets
+                                if a["id"] == d), 0.0)
+                    if pmc > 0:
+                        mw = float(dr_dispatch.get(d, 0) or 0)
+                        # hours-of-call-out = MW dispatched / pmax_curtail × dt
+                        used_h = (mw / pmc) * dt_h
+                        remaining_dr_hours[d] = max(0.0, remaining_dr_hours[d] - used_h)
+
+        # Build a warm-start hint from the values this window produced.
+        # Uses rolled-forward assignments: period τ in new window ≈ period τ+step in old window.
+        if warm_start_enabled and hourly_w:
+            hint: dict = {"p": {}, "u": {}}
+            for j, row in enumerate(hourly_w[step_p:], start=1):
+                for g, v in row.get("dispatch", {}).items():
+                    hint["p"][(g, j)] = v
+                for g, v in row.get("commitment", {}).items():
+                    hint["u"][(g, j)] = v
+            prev_hint = hint
+
+    completion_mark = "✅" if committed_p == H_total_p else "❌ INCOMPLETE"
+    print(f"\n   {completion_mark} Total: {committed_p} periods ({committed_p*dt_h:.0f}h), "
+          f"{total_swall:.0f}s ({total_swall/60:.1f} min)")
+    aggregate = _aggregate_solver_diagnostics(window_diagnostics, obj_accum)
+    complete = committed_p == H_total_p and aggregate.has_incumbent
+    rows = SolvedRows(
+        all_hourly,
+        solver_diagnostics=aggregate,
+        window_diagnostics=window_diagnostics,
+        iis_reports=iis_reports,
+        component_results=all_component_results,
+        reserve_results=all_reserve_results,
+        extraction_completed=complete,
+    )
+    return rows, total_swall, obj_accum if complete else float("nan")
+
+
+def _window_diagnostic(diagnostics, number: int, start_period: int, end_period: int) -> dict:
     return {"window": number, "start_period": start_period, "end_period": end_period,
             "diagnostics": diagnostics.model_dump(mode="json")}
 
