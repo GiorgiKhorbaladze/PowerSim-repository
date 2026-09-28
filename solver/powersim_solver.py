@@ -2055,7 +2055,10 @@ def solve_window(
     hourly_w = []
     reserve_results = []
     for t in T:
-        disp = {g: round(pv(m.p, g, t), 3) for g in disp_ids}
+        # Canonical interval values are computation data, not presentation.
+        # Keep solver precision here so objective and physical QA never
+        # reconstruct from a rounded MW dispatch value.
+        disp = {g: pv(m.p, g, t) for g in disp_ids}
         comm = {g: round(pv(m.u, g, t))    for g in committable}
         start_h = {g: round(pv(m.y, g, t)) for g in committable}
         shut_h  = {g: round(pv(m.z, g, t)) for g in committable}
@@ -2200,8 +2203,8 @@ def solve_window(
                 bess_h[b] = {
                     "charge_mw":    pv(m.ch,  b, t),
                     "discharge_mw": pv(m.dis, b, t),
-                    "soc_mwh":      round(s, 2),
-                    "soc_frac":     round(s / cap, 3) if cap > 0 else 0
+            "soc_mwh":      s,
+            "soc_frac":     s / cap if cap > 0 else 0
                 }
 
         # Hydro
@@ -2216,14 +2219,14 @@ def solve_window(
                 infl_key = assets[h_id].get("inflow_profile")
                 infl = profiles_w.get(infl_key, [float(ha.get("inflow",0.05))]*(t))[t-1] if infl_key else float(ha.get("inflow",0.05))
                 hydro_h[h_id] = {
-                    "storage_mm3":  round(pv(m.stor, h_id, t), 3),
-                    "release_mm3h": round(rel, 5),
-                    "inflow_mm3h":  round(infl, 5),
-                    "spill_mm3h":   round(pv(m.spill, h_id, t), 5)
+                    "storage_mm3":  pv(m.stor, h_id, t),
+                    "release_mm3h": rel,
+                    "inflow_mm3h":  infl,
+                    "spill_mm3h":   pv(m.spill, h_id, t)
                 }
 
         # DR curtailment per period.
-        dr_h = {d: round(pv(m.dr, d, t), 3) for d in dr_ids}
+        dr_h = {d: pv(m.dr, d, t) for d in dr_ids}
 
         # Pumped-hydro state + net dispatch per period.
         ph_h = {}
@@ -2233,10 +2236,10 @@ def solve_window(
             pmp_hi = pv(m.ph_pmp_hi, h_id, t)
             pmp_lo = pv(m.ph_pmp_lo, h_id, t)
             ph_h[h_id] = {
-                "gen_mw":         round(gen_hi + gen_lo, 3),
-                "pump_mw":        round(pmp_hi + pmp_lo, 3),
-                "net_mw":         round(gen_hi + gen_lo - pmp_hi - pmp_lo, 3),
-                "soc_mwh":        round(pv(m.ph_soc, h_id, t), 2),
+                "gen_mw":         gen_hi + gen_lo,
+                "pump_mw":        pmp_hi + pmp_lo,
+                "net_mw":         gen_hi + gen_lo - pmp_hi - pmp_lo,
+                "soc_mwh":        pv(m.ph_soc, h_id, t),
                 "head_segment":   "high" if pv(m.ph_zhi, h_id, t) > 0.5 else "deep",
                 "mode":           "gen" if pv(m.ph_mode, h_id, t) > 0.5 else "pump/idle",
             }
@@ -2256,12 +2259,12 @@ def solve_window(
             "hour_of_year":    round(hour_of_year, 6),
             "period_minutes":  int(round(dt * 60)),
             "load_mw":         demand_w[t-1],
-            "generation_mw":   round(gen_total, 2),
+            "generation_mw":   gen_total,
             "lambda_usd_mwh":  round(lam, 3),
             "lambda_source":   "dual_or_fallback",
-            "unserved_mwh":    round(pv(m.unserv, t) * dt, 3),
-            "curtailed_mwh":   round(curt, 2),
-            "gas_mm3h":        round(hgas, 6),
+            "unserved_mwh":    pv(m.unserv, t) * dt,
+            "curtailed_mwh":   curt,
+            "gas_mm3h":        hgas,
             "dispatch":        disp,
             "commitment":      comm,
             "startup":         start_h,
@@ -2737,8 +2740,12 @@ def build_result_store(hourly: list, assets: dict, inp: dict, solve_time: float,
                 if a.get("type")=="thermal" and a["id"] in
                    gas_cfg.get("applies_to", [])]
 
-    # ── By-unit summary ────────────────────────────────────────────────
+    # ── By-unit summary and full-precision canonical cost stream ───────
+    # ``by_unit`` is a display summary and intentionally rounds to whole
+    # dollars.  Objective QA must never reconstruct from that presentation
+    # layer, so retain a parallel exact stream derived from canonical rows.
     by_unit = {}
+    objective_cost_streams = {}
     for gid, a in assets.items():
         atype = a.get("type")
         # Energy attribution depends on asset type — DR & pumped_hydro
@@ -2803,6 +2810,12 @@ def build_result_store(hourly: list, assets: dict, inp: dict, solve_time: float,
         if atype == "dr":
             vom_cost = max(energy, 0.0) * float(a.get("price_per_mwh", 0))
         gross     = fuel_cost + sc_cost + nl_cost + vom_cost
+        objective_cost_streams[gid] = {
+            "fuel_cost_usd": fuel_cost,
+            "startup_cost_usd": sc_cost,
+            "no_load_cost_usd": nl_cost,
+            "variable_vom_cost_usd": vom_cost,
+        }
         gas_mm3   = energy * a["_gas_rate"]
         # Capacity-factor reference: pmax_installed for RE, pmax for thermal/hydro,
         # power_mw for BESS, pmax for pumped hydro (gen side), pmax_curtail for DR.
@@ -2995,15 +3008,25 @@ def build_result_store(hourly: list, assets: dict, inp: dict, solve_time: float,
     unserv_pen = float(s_cfg.get("unserved_penalty", 3000))
     res_pen_by = {rp["id"]: float(rp.get("shortfall_penalty", 500))
                   for rp in inp.get("reserve_products", [])}
-    fuel_cost = sum(bu["fuel_cost"] for bu in by_unit.values())
-    startup_cost = sum(bu["startup_cost"] for bu in by_unit.values())
-    no_load_cost = sum(bu["no_load_cost"] for bu in by_unit.values())
-    vom_cost = sum(bu["vom_cost"] for bu in by_unit.values()
-                   if bu.get("type") not in ("bess", "dr", "pumped_hydro"))
+    objective_dispatch_types = {"bess", "dr", "pumped_hydro"}
+    fuel_cost = sum(stream["fuel_cost_usd"] for gid, stream in objective_cost_streams.items()
+                    if assets[gid].get("type") not in objective_dispatch_types)
+    startup_cost = sum(stream["startup_cost_usd"] for gid, stream in objective_cost_streams.items()
+                       if assets[gid].get("type") not in objective_dispatch_types)
+    no_load_cost = sum(stream["no_load_cost_usd"] for gid, stream in objective_cost_streams.items()
+                       if assets[gid].get("type") not in objective_dispatch_types)
+    vom_cost = sum(stream["variable_vom_cost_usd"] for gid, stream in objective_cost_streams.items()
+                   if assets[gid].get("type") not in ("bess", "dr", "pumped_hydro"))
     bess_degradation_cost = 0.0
     bess_end_soc_penalty = 0.0
-    dr_cost = sum(bu["vom_cost"] for bu in by_unit.values() if bu.get("type") == "dr")
-    pumped_hydro_cost = sum(bu["vom_cost"] for bu in by_unit.values() if bu.get("type") == "pumped_hydro")
+    dr_cost = sum(stream["variable_vom_cost_usd"] for gid, stream in objective_cost_streams.items()
+                  if assets[gid].get("type") == "dr")
+    # Pumped-hydro VOM is charged on generation, not on net dispatch.
+    pumped_hydro_cost = sum(
+        float(assets[gid].get("vom", 0.1) or 0.1)
+        * sum(float((row.get("pumped_hydro", {}).get(gid, {}) or {}).get("gen_mw", 0) or 0) for row in hourly) * dt_h
+        for gid in assets if assets[gid].get("type") == "pumped_hydro"
+    )
     hydro_end_level_penalty = 0.0
     hydro_spill_penalty = 0.0
     for gid, a in assets.items():
@@ -3019,10 +3042,9 @@ def build_result_store(hourly: list, assets: dict, inp: dict, solve_time: float,
                 bess_end_soc_penalty += max(0.0, target - end_soc) * float(a.get("soc_end_penalty_usd_mwh", 0) or 0)
         if a.get("type") == "hydro_reg" and hourly:
             ha = a.get("hydro", {}) or {}
-            if float(ha.get("end_level_penalty", 0) or 0) > 0 and float(ha.get("target_end_level_frac", 0) or 0) > 0:
-                end_stor = float((hourly[-1].get("hydro", {}) or {}).get(gid, {}).get("storage_mm3", 0) or 0)
-                target = float(ha.get("target_end_level_frac", 0)) * float(ha.get("reservoir_max", 0) or 0)
-                hydro_end_level_penalty += max(0.0, target - end_stor) * float(ha.get("end_level_penalty", 0) or 0)
+            # ``end_level_penalty`` is a known legacy term not included in
+            # the constructed Pyomo objective.  It is deliberately excluded
+            # from exact reconstruction and marks the run compatibility-only.
             spill_cost = float(ha.get("spill_cost_usd_per_mm3", ha.get("spill_cost", 0)) or 0)
             hydro_spill_penalty += spill_cost * sum(float((h.get("hydro", {}) or {}).get(gid, {}).get("spill_mm3h", 0) or 0) * dt_h for h in hourly)
     pen_unserved = unserv_pen * total_unserv
@@ -3034,8 +3056,13 @@ def build_result_store(hourly: list, assets: dict, inp: dict, solve_time: float,
     # LP objective includes a CO₂ term `co2_factor × p × dt × co2_price`
     # for every thermal unit; per-unit outputs already carry
     # `co2_cost_usd`, so summing them closes that term into the objective.
-    co2_cost_total = sum(float(bu.get("co2_cost_usd", 0) or 0)
-                         for bu in by_unit.values())
+    co2_price = float(inp.get("co2_price_usd_per_t", 0) or 0)
+    co2_cost_total = sum(
+        float(assets[gid].get("co2_factor_t_per_mwh", 0) or 0)
+        * sum(float(row.get("dispatch", {}).get(gid, 0) or 0) for row in hourly)
+        * dt_h * co2_price
+        for gid in assets if assets[gid].get("type") == "thermal"
+    )
     # LP objective includes a storage-target shortfall penalty for hydro
     # plants with a monthly `storage_targets.month_end` schedule. Sum
     # actual shortfall at each target month-end against its target.
@@ -3067,10 +3094,31 @@ def build_result_store(hourly: list, assets: dict, inp: dict, solve_time: float,
                 short = max(0.0, float(tgt) - stor_now)
                 if short > 0:
                     stor_target_pen += penalty * short
+    unsupported_objective_terms = []
+    for gid, asset in assets.items():
+        if asset.get("type") == "bess" and float(asset.get("depth_multiplier", 1) or 1) > 1:
+            unsupported_objective_terms.append(f"{gid}:bess_depth_multiplier")
+        if asset.get("type") == "hydro_reg":
+            hydro = asset.get("hydro", {}) or {}
+            if float(hydro.get("end_level_penalty", 0) or 0) > 0 and float(hydro.get("target_end_level_frac", 0) or 0) > 0:
+                unsupported_objective_terms.append(f"{gid}:hydro_end_level_penalty")
     reconstructed = (fuel_cost + startup_cost + no_load_cost + vom_cost + bess_degradation_cost
         + bess_end_soc_penalty + dr_cost + pumped_hydro_cost + pen_unserved + pen_reserve
         + hydro_end_level_penalty + hydro_spill_penalty
         + co2_cost_total + stor_target_pen)
+    # The cost stream is the full-precision canonical source for independent
+    # objective QA.  Per-asset entries above preserve cost attribution; this
+    # system entry records terms that are naturally system/state scoped.
+    objective_cost_streams["__system__"] = {
+        "bess_degradation_cost_usd": bess_degradation_cost,
+        "bess_end_soc_penalty_usd": bess_end_soc_penalty,
+        "pumped_hydro_vom_cost_usd": pumped_hydro_cost,
+        "unserved_energy_penalty_usd": pen_unserved,
+        "reserve_shortfall_penalty_usd": pen_reserve,
+        "hydro_spill_penalty_usd": hydro_spill_penalty,
+        "co2_cost_usd": co2_cost_total,
+        "storage_target_penalty_usd": stor_target_pen,
+    }
 
     if obj_total is None or obj_total != obj_total:      # NaN / not supplied
         closure_gap  = None
@@ -3079,25 +3127,27 @@ def build_result_store(hourly: list, assets: dict, inp: dict, solve_time: float,
     else:
         denom       = max(abs(obj_total), 1.0)
         closure_gap = abs(obj_total - reconstructed) / denom
-        closure_ok  = closure_gap < 5e-3                  # 0.5% tolerance
+        closure_ok  = abs(obj_total - reconstructed) <= 1e-6 + 1e-7 * denom
         closure_note = (f"obj={obj_total:.2f} reconstructed={reconstructed:.2f} "
                         f"gap={closure_gap*100:.4f}%")
 
     objective_breakdown = {
-        "fuel_cost": round(fuel_cost, 6), "startup_cost": round(startup_cost, 6),
-        "no_load_cost": round(no_load_cost, 6), "vom_cost": round(vom_cost, 6),
-        "bess_degradation_cost": round(bess_degradation_cost, 6),
-        "bess_end_soc_penalty": round(bess_end_soc_penalty, 6),
-        "dr_cost": round(dr_cost, 6), "pumped_hydro_cost": round(pumped_hydro_cost, 6),
-        "unserved_penalty": round(pen_unserved, 6),
-        "reserve_shortfall_penalty": round(pen_reserve, 6),
-        "hydro_end_level_penalty": round(hydro_end_level_penalty, 6),
-        "hydro_spill_penalty": round(hydro_spill_penalty, 6),
-        "co2_cost": round(co2_cost_total, 6),
-        "storage_target_penalty": round(stor_target_pen, 6),
-        "total_reconstructed": round(reconstructed, 6),
-        "pyomo_objective": None if obj_total is None or obj_total != obj_total else round(obj_total, 6),
+        "fuel_cost": fuel_cost, "startup_cost": startup_cost,
+        "no_load_cost": no_load_cost, "vom_cost": vom_cost,
+        "bess_degradation_cost": bess_degradation_cost,
+        "bess_end_soc_penalty": bess_end_soc_penalty,
+        "dr_cost": dr_cost, "pumped_hydro_cost": pumped_hydro_cost,
+        "unserved_penalty": pen_unserved,
+        "reserve_shortfall_penalty": pen_reserve,
+        "hydro_end_level_penalty": hydro_end_level_penalty,
+        "hydro_spill_penalty": hydro_spill_penalty,
+        "co2_cost": co2_cost_total,
+        "storage_target_penalty": stor_target_pen,
+        "total_reconstructed": reconstructed,
+        "pyomo_objective": None if obj_total is None or obj_total != obj_total else obj_total,
         "closure_gap_pct": None if closure_gap is None else round(closure_gap * 100, 6),
+        "validated_full_precision": not unsupported_objective_terms,
+        "unsupported_legacy_terms": unsupported_objective_terms,
     }
 
     # ── Provenance: echo profile_bundle into metadata ──────────────────
@@ -3152,6 +3202,7 @@ def build_result_store(hourly: list, assets: dict, inp: dict, solve_time: float,
             "reserve_supply_by_type": reserve_supply_by_type,
             "reserve_shortfall_by_product": res_shortfall,
             "dc_network": normalize_dc_network(inp, assets),
+            "objective_cost_streams": objective_cost_streams,
             "objective_breakdown": objective_breakdown,
         },
         "system_summary": {
