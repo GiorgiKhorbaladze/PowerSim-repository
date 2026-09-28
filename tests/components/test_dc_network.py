@@ -39,3 +39,28 @@ def test_dc_network_corruption_blocks_publication():
     badrows=solver.SolvedRows(corrupt,solver_diagnostics=rows.solver_diagnostics,window_diagnostics=rows.window_diagnostics,component_results=rows.component_results,reserve_results=rows.reserve_results,extraction_completed=True)
     invalid=solver.build_result_store(badrows,assets,inp,0,0)
     assert invalid["qa"]["status"]=="fail" and invalid["publication"]["publishable"] is False
+
+
+def test_network_scarcity_is_fail_closed_until_unserved_energy_is_locational():
+    inp=_input(capacity=1)
+    rows,_,result=_solve(inp)
+    # This characterizes the retained system-level slack: the line saturates
+    # and the remaining 9 MW is represented only in the aggregate result.
+    assert rows[0]["line_flow"]["ab"] == pytest.approx(1)
+    assert rows[0]["unserved_mwh"] == pytest.approx(9)
+    scope=next(c for c in result["qa"]["checks"] if c["check_id"]=="network.locational_unserved_scope")
+    assert scope["status"]=="fail"
+    assert result["qa"]["status"]=="fail"
+    assert result["diagnostics"]["result_validity"]=="invalid"
+    assert result["publication"]["publishable"] is False
+
+
+def test_explicit_bus_demand_with_scarcity_cannot_claim_a_valid_network_solution():
+    inp=_input(capacity=1)
+    inp.pop("load_share_by_bus")
+    inp["demand_by_bus"]={"a":[0.0],"b":[10.0]}
+    rows,_,result=_solve(inp)
+    # The legacy equal-share proxy makes this model infeasible rather than
+    # silently attributing the shortage to Bus B.  It must remain invalid.
+    assert rows.solver_diagnostics.normalized_status.value=="infeasible"
+    assert result["publication"]["publishable"] is False
