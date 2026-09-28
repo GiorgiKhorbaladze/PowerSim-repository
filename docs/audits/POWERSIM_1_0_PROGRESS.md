@@ -4,11 +4,11 @@
 
 | Item | Status |
 | --- | --- |
-| Completed stage | Stage 3D reservoir-hydro, cascades and gas coupling - merged in PR #81. Stage 4A reserve engine - merged in PR #82. Stage 4B DC network hardening - merged in PR #83. Stage 4C deterministic objective QA is in review. |
-| Merged migration PRs | #69 Stage 3A, #71 Thermal UC, #72 thermal economics, #73 BESS core, #74 pumped-hydro core, #75 demand-response core, #76 DR QA/publication corrective, #77 Stage 3C closure hardening, #79 reservoir-hydro core, #80 cascade migration, #81 Stage 3D closure. |
-| Shared components | Wind, solar, simplified run-of-river, imports, thermal UC/economics, BESS with independently auditable canonical boundary state, pumped hydro with auditable segment flows and VOM, demand response with structured validation and publication gating, reservoir hydro/cascades with independent water-balance QA, and canonical gas accounting. Stage 4A adds canonical reserve allocations and independent reserve QA. |
-| Components still legacy-owned | Thermal objective ownership; BESS depth-cost/end-target extensions; reservoir `end_level_penalty`; stochastic, adequacy and expansion. Pumped hydro and DR remain unsupported reserve providers. |
-| Release readiness | Not release-ready. Stage 4C deterministic integration is in review; Stage 5A stochastic UC follows. |
+| Completed stage | Stage 3D reservoir-hydro, cascades and gas coupling - merged in PR #81. Stage 4A reserve engine - merged in PR #82. Stage 4B DC network hardening - merged in PR #83. PR #84 made objective QA mandatory. Stage 4C shared deterministic integration is complete in this PR. |
+| Merged migration PRs | #69 Stage 3A, #71 Thermal UC, #72 thermal economics, #73 BESS core, #74 pumped-hydro core, #75 demand-response core, #76 DR QA/publication corrective, #77 Stage 3C closure hardening, #79 reservoir-hydro core, #80 cascade migration, #81 Stage 3D closure, #82 reserve engine, #83 DC network hardening, #84 deterministic objective QA gate. |
+| Shared validated components | Wind, solar, simplified run-of-river, imports, thermal UC/economics, non-committable reservoir hydro/cascades with independent water-balance QA, BESS with independently auditable canonical boundary state, pumped hydro with auditable segment flows and VOM, demand response with structured validation and publication gating, canonical gas accounting, data-driven reserves, and DC network flow/balance QA. |
+| Components still legacy-owned | Committable reservoir-hydro UC/pmin/startup behavior; thermal objective construction; optional BESS depth-cost/end-target extensions; reservoir `end_level_penalty`; stochastic, adequacy and expansion. Pumped hydro and DR remain unsupported reserve providers. |
+| Release readiness | Not release-ready. Stage 5A stochastic UC parity follows Stage 4C. |
 
 ## Stage 3B acceptance intent
 
@@ -64,7 +64,7 @@ requires explicit modelling approval before a PowerSim 1.0 correction.
 
 ## Next work
 
-1. Stage 5A: stochastic UC parity after Stage 4C acceptance.
+1. Stage 5A: stochastic UC parity using the shared deterministic component path.
 
 ## Stage 3D reservoir core and cascades - merged in PRs #79 and #80
 
@@ -100,7 +100,7 @@ for resolved eligible units. Rolling 60-minute and 15-minute tests prove that
 only committed-slice gas consumption decrements the carried annual budget.
 Corrupt canonical gas volumes fail QA and publication.
 
-## Stage 4A reserve engine - pending merge
+## Stage 4A reserve engine - merged in PR #82
 
 Reserve products are data-driven by id and direction (`up`, `down`, or
 `symmetric`). Fixed and profile-backed requirements are fail-closed when a
@@ -114,7 +114,13 @@ The existing thermal, reservoir-hydro, run-of-river, import and BESS provider
 scope remains preserved. Pumped hydro and demand response are explicitly
 filtered rather than represented as validated reserve providers.
 
-## Stage 4B DC network hardening - pending merge
+Reserve provider response-time/ramp deliverability is **not** validated. The
+`response_time_label` field is descriptive text only and PowerSim does not
+infer a numerical response time from it. Validated reserve scope is therefore
+requirements, direction/symmetry, eligibility, derating, headroom/footroom,
+cross-product stacking, BESS power/SOC energy sufficiency and shortfall cost.
+
+## Stage 4B DC network hardening - merged in PR #83
 
 Validated network mode is explicit and fail-closed: it requires buses,
 branches, one reference bus, a valid bus for every asset and an explicit load
@@ -124,14 +130,39 @@ Canonical results publish signed flow, bus angle and nodal injection. QA
 reconstructs flow, limits, nodal balance and reference angle without reading
 live Pyomo constraints. AC voltage, reactive-power and losses are not claimed.
 
-## Stage 4C deterministic integration - pending merge
+The current formulation has only a system-level unserved-energy slack. It is
+not a locational shortage variable, so a DC-network run with nonzero unserved
+energy fails QA and publication. Validated DC scope excludes locational
+scarcity/unserved-energy studies until bus-level unserved variables exist.
+
+## Stage 4C deterministic shared integration - completed in this PR
 
 The production publication path now executes an explicit objective QA check
-against the extracted deterministic objective reconstruction and the solver
-incumbent objective. The present 0.5% tolerance is a transparent compatibility
-limit for legacy whole-USD summary rounding, not a claim of exact canonical
-cost ownership. Full-precision objective ownership and mixed-fleet acceptance
-remain required before Stage 4C can be marked complete.
+against full-precision canonical cost streams and the solver incumbent
+objective. Presentation summaries may remain rounded, but validated QA no
+longer uses them or the former 0.5% compatibility tolerance. It fails closed
+when a required cost stream is absent, non-numeric or does not close to the
+canonical reconstruction.
+
+The shared acceptance fleet covers thermal, non-committable reservoir hydro,
+run-of-river, wind, solar, BESS, pumped hydro, demand response, imports, gas,
+reserves and DC network at 60-minute, 15-minute and supported rolling
+resolution. Independent component/network/reserve/objective QA must pass for
+publication. Canonical corruption of objective, network, storage/water or
+reserve data is covered by publication-gate regression tests.
+
+### Ownership audit
+
+| Area | v1.0 ownership/status |
+| --- | --- |
+| Thermal bounds, UC and ramps | Shared authoritative for migrated thermal assets |
+| VRE availability and RoR bounds | Shared authoritative |
+| Reservoir water balance and non-committable pmax | Shared authoritative; committable hydro remains legacy compatibility only |
+| BESS and pumped-hydro SOC | Shared authoritative for validated core; documented selector extensions remain compatibility only |
+| DR and gas budget | Shared authoritative |
+| Reserve allocation/headroom/stacking | Shared authoritative within the documented provider and no-response-time scope |
+| DC nodal balance/flows | Shared authoritative for zero-unserved DC studies |
+| Objective assembly | Legacy Pyomo objective remains authoritative; full-precision canonical reconstruction is independently publication-gated |
 
 ### Confirmed legacy soft end-level penalty defect
 
