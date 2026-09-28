@@ -51,7 +51,12 @@ class ReservoirHydroComponent:
         # objective, so it is not actually charged.  Activating it here
         # would be a material dispatch/economic change, not a migration.
         strategic_penalty = float(hydro.get("end_level_penalty", 0) or 0) > 0 and float(hydro.get("target_end_level_frac", 0) or 0) > 0
-        return not strategic_penalty
+        # The shared reservoir component owns water physics for dispatch-only
+        # reservoir units.  Legacy hydro commitment has UC, pmin and startup
+        # ownership which has not been migrated to this component; retaining
+        # it on the legacy path is required for parity.
+        committable = bool(asset.get("_committable", asset.get("committable", True)))
+        return not strategic_penalty and not committable
 
     def _name(self, stem: str) -> str:
         safe = re.sub(r"[^A-Za-z0-9_]", "_", self.asset_id)
@@ -137,6 +142,12 @@ class ReservoirHydroComponent:
             return float(context.profiles[profile][index])
         return float(self.asset["hydro"].get("inflow", 0) or 0)
 
+    def _available(self, context: BuildContext, index: int) -> float:
+        resolver = context.availability_resolver
+        if resolver is not None:
+            return float(resolver(self.asset, index))
+        return float(self.asset.get("pmax", 0) or 0)
+
     def _cascade_inflow(self, model: Any, context: BuildContext, t: int) -> Any:
         """Exact legacy cascade transport: delayed turbine flow plus optional spill."""
         hydro = self.asset["hydro"]
@@ -159,6 +170,15 @@ class ReservoirHydroComponent:
         import pyomo.environ as pyo
         m, aid, periods, dt, hydro = context.builder, self.asset_id, context.periods, context.duration_hours, self.asset["hydro"]
         efficiency = max(self._efficiency(context), .001)
+        # GenUB is intentionally skipped for all migrated assets by the
+        # transitional assembler.  This component is therefore the sole
+        # owner of the non-committable reservoir dispatch limit.  Use the
+        # legacy availability seam so maintenance/temperature derating keeps
+        # its established semantics.
+        m.add_component(
+            self._name("Pmax"),
+            pyo.Constraint(periods, rule=lambda model, t: model.p[aid, t] <= self._available(context, periods.index(t))),
+        )
         def balance(model, t):
             index = periods.index(t)
             previous = self._initial_storage(context) if index == 0 else model.stor[aid, t - 1]
@@ -204,7 +224,7 @@ class ReservoirHydroComponent:
             storage = float(pyo.value(m.stor[aid, t]) or 0)
             previous = self._initial_storage(context) if index == 0 else float(pyo.value(m.stor[aid, t - 1]) or 0)
             cascade = float(pyo.value(self._cascade_inflow(m, context, t)) or 0)
-            output.append(ComponentResult(aid, self.kind, context.period_coordinate(index), available_mw=float(self.asset.get("pmax", 0) or 0), injection_mw=dispatch, cost_usd=spill_price * spill * dt, state_of_water_mm3=storage, previous_state_of_water_mm3=previous, water_inflow_mm3h=self._inflow(context, index), water_release_mm3h=dispatch / max(efficiency, .001), water_spill_mm3h=spill, water_cascade_inflow_mm3h=cascade, water_efficiency_mwh_per_mm3=efficiency, spill_cost_usd=spill_price * spill * dt))
+            output.append(ComponentResult(aid, self.kind, context.period_coordinate(index), available_mw=self._available(context, index), injection_mw=dispatch, cost_usd=spill_price * spill * dt, state_of_water_mm3=storage, previous_state_of_water_mm3=previous, water_inflow_mm3h=self._inflow(context, index), water_release_mm3h=dispatch / max(efficiency, .001), water_spill_mm3h=spill, water_cascade_inflow_mm3h=cascade, water_efficiency_mwh_per_mm3=efficiency, spill_cost_usd=spill_price * spill * dt))
         return output
 
     def qa_spec(self) -> ComponentQAMetadata:

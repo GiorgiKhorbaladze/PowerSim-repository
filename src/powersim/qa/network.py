@@ -22,7 +22,13 @@ def check_network_results(resolved_input: dict, result: dict, tolerance: Toleran
             message="network-mode result lacks interval extraction", witness={})]
     bus_ids = [b["id"] for b in buses]; slack = next((b["id"] for b in buses if b.get("is_slack")), None)
     flow_bad=[]; balance_bad=[]; angle_bad=[]; count=0
+    unserved_mwh = 0.0
     for row in rows:
+        try:
+            unserved_mwh += float(row.get("unserved_mwh", 0.0) or 0.0)
+        except (TypeError, ValueError):
+            return [QACheckResult(check_id="network.canonical_extraction", status=QAStatus.FAIL,
+                message="network-mode result has non-numeric unserved energy", witness={"t": row.get("t")})]
         angle=row.get("bus_angle_rad") or {}; injection=row.get("bus_injection_mw") or {}; flows=row.get("line_flow") or {}
         if set(angle) != set(bus_ids) or set(injection) != set(bus_ids):
             return [QACheckResult(check_id="network.canonical_extraction", status=QAStatus.FAIL,
@@ -47,4 +53,17 @@ def check_network_results(resolved_input: dict, result: dict, tolerance: Toleran
         count+=1
     def output(check_id,bad,msg):
         return QACheckResult(check_id=check_id,status=QAStatus.FAIL if bad else QAStatus.PASS,message=msg,witness={"bad":bad[:10]},checked_count=count,max_violation=1.0 if bad else 0.0)
-    return [output("network.flow_and_limit",flow_bad,"DC branch flow equation and limits"),output("network.nodal_balance",balance_bad,"DC nodal balances"),output("network.reference_angle",angle_bad,"DC reference angle")]
+    # The current solver has one system-level unserved-energy variable.  It
+    # cannot identify the constrained load bus without a locational slack.
+    # Preserve the legacy equation, but never validate/publish a network run
+    # that uses it as though the shortage were locationally resolved.
+    scarcity_limit = tolerance.persisted_energy_rounding * max(1, len(rows))
+    scarcity = QACheckResult(
+        check_id="network.locational_unserved_scope",
+        status=QAStatus.FAIL if unserved_mwh > scarcity_limit else QAStatus.PASS,
+        message=("network scarcity is unsupported without locational unserved-energy variables"
+                 if unserved_mwh > scarcity_limit else "no network scarcity requiring locational unserved energy"),
+        witness={"unserved_mwh": unserved_mwh, "validated_limit_mwh": scarcity_limit},
+        checked_count=count, max_violation=max(0.0, unserved_mwh - scarcity_limit),
+    )
+    return [output("network.flow_and_limit",flow_bad,"DC branch flow equation and limits"),output("network.nodal_balance",balance_bad,"DC nodal balances"),output("network.reference_angle",angle_bad,"DC reference angle"),scarcity]
