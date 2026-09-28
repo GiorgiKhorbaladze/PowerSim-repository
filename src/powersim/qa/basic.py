@@ -87,12 +87,19 @@ class ObjectiveReconstructionCheck:
         if not isinstance(breakdown, dict) or breakdown.get("pyomo_objective") is None:
             return QACheckResult(check_id=self.check_id,status=QAStatus.NOT_RUN,
                 message="solver objective or canonical reconstruction is unavailable", witness={})
+        if "total_reconstructed" not in breakdown:
+            return QACheckResult(check_id=self.check_id,status=QAStatus.FAIL,
+                message="objective reconstruction is incomplete",
+                witness={"missing_fields": ["total_reconstructed"]})
         try:
             objective = float(breakdown["pyomo_objective"])
             reconstructed = float(breakdown["total_reconstructed"])
         except (TypeError, ValueError):
             return QACheckResult(check_id=self.check_id,status=QAStatus.FAIL,
                 message="objective reconstruction is non-numeric", witness={"breakdown": breakdown})
+        if not math.isfinite(objective) or not math.isfinite(reconstructed):
+            return QACheckResult(check_id=self.check_id,status=QAStatus.FAIL,
+                message="objective reconstruction is non-finite", witness={"breakdown": breakdown})
         violation = abs(objective - reconstructed)
         # Legacy summary aggregation rounds several cost rows to whole USD.
         # Until those rows are replaced by a full-precision canonical cost
