@@ -56,6 +56,29 @@ def test_shared_reservoir_matches_legacy_and_reconstructs_water_balance(resoluti
     assert all(item.status.value == "pass" for item in checks)
 
 
+@pytest.mark.parametrize("resolution_min", [60, 15])
+def test_shared_noncommittable_reservoir_preserves_legacy_generation_limit(resolution_min):
+    """Characterize the migrated GenUB handoff: water alone cannot raise MW output."""
+    legacy_input = _input(False, resolution_min)
+    shared_input = _input(True, resolution_min)
+    for inp in (legacy_input, shared_input):
+        inp["assets"][0]["pmax"] = 8
+        inp["assets"][0]["hydro"].update({"reservoir_init": 20, "reservoir_max": 20, "reservoir_end_min": 0})
+        inp["profiles"]["demand"] = [20.0] * len(inp["profiles"]["demand"])
+    old_assets, new_assets = solver.build_asset_map(legacy_input), solver.build_asset_map(shared_input)
+    old_rows, _, old_objective = solver.solve_all(legacy_input, old_assets, legacy_input["profiles"], {})
+    new_rows, _, new_objective = solver.solve_all(shared_input, new_assets, shared_input["profiles"], {})
+    assert new_objective == pytest.approx(old_objective, abs=.01)
+    assert all(row["dispatch"]["h"] <= 8 + 1e-8 for row in new_rows)
+    assert [row["dispatch"]["h"] for row in new_rows] == pytest.approx([row["dispatch"]["h"] for row in old_rows])
+
+
+def test_committable_reservoir_remains_legacy_owned_until_hydro_uc_is_migrated():
+    asset = _input(True)["assets"][0]
+    asset.pop("committable")
+    assert ReservoirHydroComponent.supports_shared(asset) is False
+
+
 def test_reservoir_validation_is_structured():
     context = BuildContext(builder=object(), periods=(1,), duration_hours=1, capabilities=frozenset({"deterministic"}))
     issues = ReservoirHydroComponent({"id": "h", "hydro": {"efficiency": 0, "reservoir_min": 9, "reservoir_init": 3, "reservoir_max": 2}}).validate(context)
