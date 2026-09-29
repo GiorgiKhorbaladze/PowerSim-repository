@@ -4,11 +4,11 @@
 
 | Item | Status |
 | --- | --- |
-| Completed stage | Stage 3D reservoir-hydro, cascades and gas coupling - merged in PR #81. Stage 4A reserve engine - merged in PR #82. Stage 4B DC network hardening - merged in PR #83. PR #84 made objective QA mandatory. Stage 4C shared deterministic integration - merged in PR #85. Stage 5A shared stochastic UC - merged in PR #86. Stage 5B genuine N-1 SCUC - merged in PR #87. |
-| Merged migration PRs | #69 Stage 3A, #71 Thermal UC, #72 thermal economics, #73 BESS core, #74 pumped-hydro core, #75 demand-response core, #76 DR QA/publication corrective, #77 Stage 3C closure hardening, #79 reservoir-hydro core, #80 cascade migration, #81 Stage 3D closure, #82 reserve engine, #83 DC network hardening, #84 deterministic objective QA gate, #85 deterministic shared integration, #86 shared stochastic UC extensive form, #87 genuine N-1 security-constrained UC. |
+| Completed stage | Stage 3D reservoir-hydro, cascades and gas coupling - merged in PR #81. Stage 4A reserve engine - merged in PR #82. Stage 4B DC network hardening - merged in PR #83. PR #84 made objective QA mandatory. Stage 4C shared deterministic integration - merged in PR #85. Stage 5A shared stochastic UC - merged in PR #86. Stage 5B genuine N-1 SCUC - merged in PR #87. Stage 5C chronological probabilistic adequacy - merged in PR #88. |
+| Merged migration PRs | #69 Stage 3A, #71 Thermal UC, #72 thermal economics, #73 BESS core, #74 pumped-hydro core, #75 demand-response core, #76 DR QA/publication corrective, #77 Stage 3C closure hardening, #79 reservoir-hydro core, #80 cascade migration, #81 Stage 3D closure, #82 reserve engine, #83 DC network hardening, #84 deterministic objective QA gate, #85 deterministic shared integration, #86 shared stochastic UC extensive form, #87 genuine N-1 security-constrained UC, #88 chronological probabilistic adequacy. |
 | Shared validated components | Wind, solar, simplified run-of-river, imports, thermal UC/economics, non-committable reservoir hydro/cascades with independent water-balance QA, BESS with independently auditable canonical boundary state, pumped hydro with auditable segment flows and VOM, demand response with structured validation and publication gating, canonical gas accounting, data-driven reserves, and DC network flow/balance QA. |
 | Components still legacy-owned | Committable reservoir-hydro UC/pmin/startup behavior; thermal objective construction; optional BESS depth-cost/end-target extensions; reservoir `end_level_penalty`; screening adequacy/expansion. Pumped hydro and DR remain unsupported reserve providers. |
-| Release readiness | Not release-ready. Stage 5C chronological probabilistic adequacy is implemented locally pending focused regression and PR review; Stage 5D scoped expansion is next after merge. |
+| Release readiness | Not release-ready. Stage 5C chronological probabilistic adequacy merged in PR #88; Stage 5D scoped expansion is next. |
 
 ## Stage 3B acceptance intent
 
@@ -230,7 +230,7 @@ network. PowerSim does not claim locational load shedding, reserve activation-
 time deliverability or stochastic SCUC. The existing reserve response-time
 limitation remains unchanged.
 
-## Stage 5C chronological probabilistic adequacy - pending PR
+## Stage 5C chronological probabilistic adequacy - merged in PR #88
 
 The historical `run_adequacy()` interface remains a **screening** calculation:
 duration-limited BESS firm capacity is not a chronological storage simulation,
