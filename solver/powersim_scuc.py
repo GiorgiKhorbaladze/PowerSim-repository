@@ -1,8 +1,10 @@
 """
-PowerSim v4.0 — Security-constrained UC (N-1)  (#7)
+PowerSim v4.0 — LEGACY SECURITY SCREENING ONLY (not validated SCUC)
 ====================================================
 
-Adds N-1 contingency screening to the dispatch decision:
+Adds post-solve N-1 contingency screening to an already-produced dispatch.
+It is retained for compatibility/reporting only. It is not a security-
+constrained optimization and must not be used for validated PowerSim 1.0 SCUC.
 
     For every contingency c in input.contingencies:
         For every period t:
