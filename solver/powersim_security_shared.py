@@ -130,6 +130,10 @@ def build_security_model(inp: dict[str, Any]):
                 model.security.add(block.p[c["target"], period] == 0)
         if c["kind"] == "line_outage":
             for period in model.base.T:
+                # Removing the line means removing its DC transfer equation,
+                # not merely imposing zero flow while still forcing equal bus
+                # angles through f = B(theta_from-theta_to).
+                block.LineFlow[c["target"], period].deactivate()
                 model.security.add(block.fl[c["target"], period] == 0)
         for generator in model.base.G:
             if c["kind"] in {"unit_outage", "import_outage"} and generator == c["target"]:
