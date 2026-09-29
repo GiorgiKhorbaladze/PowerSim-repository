@@ -40,6 +40,7 @@ _colab_install()
 import json, time, math, warnings, argparse, os
 from datetime import datetime, timedelta
 from collections import defaultdict
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -785,6 +786,8 @@ def solve_window(
                                         # boundary so cumulative budgets and
                                         # min-up/down state propagate
                                         # correctly to the next window.
+    model: Any | None = None,           # optional owning model/block for EF composition
+    build_only: bool = False,            # construct physics/objective but do not solve/extract
 ) -> tuple[list, dict, float, float]:
     """
     Solve one rolling window.
@@ -792,7 +795,7 @@ def solve_window(
     """
     H   = len(demand_w)
     T   = list(range(1, H + 1))    # 1-indexed periods
-    m   = pyo.ConcreteModel()
+    m   = model if model is not None else pyo.ConcreteModel()
 
     # Stage 3A rollback seam. The default remains the validated legacy path;
     # shared is explicit and deterministic (never selected by environment).
@@ -1991,6 +1994,22 @@ def solve_window(
                 except (KeyError, TypeError, ValueError):
                     pass
 
+    if build_only:
+        # The caller owns the enclosing extensive-form objective.  Preserve
+        # this exact deterministic objective expression as a named component
+        # but deactivate it to avoid multiple active objectives.  No solver
+        # call or result extraction is performed on a build-only block.
+        m.OBJ.deactivate()
+        m._powersim_window_metadata = {
+            "assets": assets, "demand_w": demand_w, "profiles_w": profiles_w,
+            "reserve_products": reserve_prods, "gas_limits": gas_limits,
+            "init_state": init_state, "solver_cfg": solver_cfg,
+            "offset_h": offset_h, "duration_hours": dt,
+            "component_engine": component_engine,
+            "shared_session": shared_session,
+        }
+        return m
+
     # ── Solve ──────────────────────────────────────────────────────────
     m.dual = pyo.Suffix(direction=pyo.Suffix.IMPORT)
     backend = str(solver_cfg.get("solver", "auto")).lower()
@@ -2044,6 +2063,79 @@ def solve_window(
         return SolvedRows(hourly_w_empty, solver_diagnostics=diagnostics,
                           extraction_completed=False), fin_state, solve_wall_s, float("nan")
 
+    return extract_window_solution(
+        m, assets=assets, demand_w=demand_w, profiles_w=profiles_w,
+        reserve_prods=reserve_prods, gas_limits=gas_limits, init_state=init_state,
+        solver_cfg=solver_cfg, offset_h=offset_h, dt=dt,
+        diagnostics=diagnostics, raw_result=result, solve_wall_s=solve_wall_s,
+        backend_used=backend_used, iis_report=iis_report,
+        commit_periods=commit_periods, shared_session=shared_session,
+    )
+
+def extract_window_solution(
+    m, *, assets: dict, demand_w: list, profiles_w: dict, reserve_prods: list,
+    gas_limits: dict, init_state: dict, solver_cfg: dict, offset_h: int, dt: float,
+    diagnostics, raw_result=None, solve_wall_s: float = 0.0, backend_used: str = "unknown",
+    iis_report: dict | None = None, commit_periods: int | None = None,
+    shared_session=None,
+) -> tuple[SolvedRows, dict, float, float]:
+    """Extract one already-solved deterministic window into canonical rows.
+
+    This is the sole production extraction path. It is used after a normal
+    deterministic solve and, without another solve, on each solved block of a
+    stochastic extensive form. QA therefore sees exactly the EF incumbent.
+    """
+    H = len(demand_w)
+    T = list(range(1, H + 1))
+    all_ids = list(assets)
+    thermal = [i for i, a in assets.items() if a["type"] == "thermal"]
+    hydro_reg = [i for i, a in assets.items() if a["type"] == "hydro_reg"]
+    wind_solar = [i for i, a in assets.items() if a["type"] in ("wind", "solar")]
+    bess_ids = [i for i, a in assets.items() if a["type"] == "bess"]
+    dr_ids = [i for i, a in assets.items() if a["type"] == "dr"]
+    ph_ids = [i for i, a in assets.items() if a["type"] == "pumped_hydro"]
+    disp_ids = [i for i in all_ids if assets[i]["type"] not in ("dr", "pumped_hydro", "bess")]
+    committable = [i for i in disp_ids if assets[i]["_committable"]]
+    gas_units = [i for i in thermal if i in gas_limits.get("applies_to", []) and assets[i]["_gas_rate"] > 0]
+    _ms_start = [g for g in committable if assets[g].get("startup_cost_hot") is not None and assets[g].get("startup_cost_cold") is not None]
+    res_ids = [rp["id"] for rp in reserve_prods]
+    res_elig_g, res_elig_bess, res_elig = {}, {}, {}
+    reserve_eligible_filtered = []
+    supported_reserve_types = {"thermal", "hydro_reg", "hydro_ror", "import", "bess"}
+    for rp in reserve_prods:
+        rid = rp["id"]
+        listed = [u for u in rp.get("eligible_units", []) if u in assets]
+        res_elig_g[rid] = [u for u in listed if u in disp_ids]
+        res_elig_bess[rid] = [u for u in listed if u in bess_ids]
+        res_elig[rid] = res_elig_g[rid] + res_elig_bess[rid]
+        for u in listed:
+            if assets[u].get("type") not in supported_reserve_types:
+                reserve_eligible_filtered.append({"product": rid, "asset": u, "type": assets[u].get("type"), "reason": "reserve provider type not implemented in Stage 1"})
+    reserve_requirement = {rp["id"]: {t: reserve_requirement_at(rp, t, profiles_w, offset_h, dt) for t in T} for rp in reserve_prods}
+    reserve_duration = {rp["id"]: max(1e-9, float(rp.get("reserve_duration_h", 1.0) or 1.0)) for rp in reserve_prods}
+    _net_input = solver_cfg.get("_network", {})
+    buses = _net_input.get("buses") or []
+    lines = _net_input.get("lines") or []
+    bus_ids = [b["id"] for b in buses]
+    use_dcopf = bool(buses and lines)
+    slack = next((b["id"] for b in buses if b.get("is_slack")), None)
+    asset_bus = {gid: assets[gid].get("bus") for gid in assets}
+    _hydro_eff = {}
+    _need = set(hydro_reg)
+    for h_id in hydro_reg:
+        up = (assets[h_id].get("hydro") or {}).get("cascade_upstream")
+        if up and up in assets:
+            _need.add(up)
+    for h_id in _need:
+        ha = assets[h_id].get("hydro") or {}
+        stor0 = init_state.get(h_id, {}).get("stor", float(ha.get("reservoir_init", 700)))
+        _hydro_eff[h_id] = hydro_efficiency_at(ha, stor0)
+    def _bess_charge_cap(b):
+        a = assets[b]; cap = float(a.get("charge_power_mw", a.get("power_mw", 0)))
+        return min(cap, float(a["c_rate_max"]) * float(a.get("energy_mwh", 0))) if a.get("c_rate_max") is not None else cap
+    def _bess_discharge_cap(b):
+        a = assets[b]; cap = float(a.get("discharge_power_mw", a.get("power_mw", 0)))
+        return min(cap, float(a["c_rate_max"]) * float(a.get("energy_mwh", 0))) if a.get("c_rate_max") is not None else cap
     def pv(var, *keys):
         try: v = pyo.value(var[keys]); return float(v) if v else 0.0
         except: return 0.0
@@ -2332,8 +2424,8 @@ def solve_window(
     if iis_report is not None:
         fin_state["_iis_report"] = iis_report
 
-    tc = str(getattr(result, "solver", {}).termination_condition
-             if hasattr(result,"solver") else "—")
+    tc = str(getattr(raw_result, "solver", {}).termination_condition
+             if raw_result is not None and hasattr(raw_result,"solver") else "extensive_form_incumbent")
     print(f"   ✅ {tc} | {solve_wall_s:.1f}s | H={H} | backend={backend_used} | dt={dt}h")
 
     try:

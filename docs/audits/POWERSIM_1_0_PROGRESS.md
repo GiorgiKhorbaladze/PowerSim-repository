@@ -4,11 +4,11 @@
 
 | Item | Status |
 | --- | --- |
-| Completed stage | Stage 3D reservoir-hydro, cascades and gas coupling - merged in PR #81. Stage 4A reserve engine - merged in PR #82. Stage 4B DC network hardening - merged in PR #83. PR #84 made objective QA mandatory. Stage 4C shared deterministic integration is complete in this PR. |
-| Merged migration PRs | #69 Stage 3A, #71 Thermal UC, #72 thermal economics, #73 BESS core, #74 pumped-hydro core, #75 demand-response core, #76 DR QA/publication corrective, #77 Stage 3C closure hardening, #79 reservoir-hydro core, #80 cascade migration, #81 Stage 3D closure, #82 reserve engine, #83 DC network hardening, #84 deterministic objective QA gate. |
+| Completed stage | Stage 3D reservoir-hydro, cascades and gas coupling - merged in PR #81. Stage 4A reserve engine - merged in PR #82. Stage 4B DC network hardening - merged in PR #83. PR #84 made objective QA mandatory. Stage 4C shared deterministic integration - merged in PR #85. |
+| Merged migration PRs | #69 Stage 3A, #71 Thermal UC, #72 thermal economics, #73 BESS core, #74 pumped-hydro core, #75 demand-response core, #76 DR QA/publication corrective, #77 Stage 3C closure hardening, #79 reservoir-hydro core, #80 cascade migration, #81 Stage 3D closure, #82 reserve engine, #83 DC network hardening, #84 deterministic objective QA gate, #85 deterministic shared integration. |
 | Shared validated components | Wind, solar, simplified run-of-river, imports, thermal UC/economics, non-committable reservoir hydro/cascades with independent water-balance QA, BESS with independently auditable canonical boundary state, pumped hydro with auditable segment flows and VOM, demand response with structured validation and publication gating, canonical gas accounting, data-driven reserves, and DC network flow/balance QA. |
 | Components still legacy-owned | Committable reservoir-hydro UC/pmin/startup behavior; thermal objective construction; optional BESS depth-cost/end-target extensions; reservoir `end_level_penalty`; stochastic, adequacy and expansion. Pumped hydro and DR remain unsupported reserve providers. |
-| Release readiness | Not release-ready. Stage 5A stochastic UC parity follows Stage 4C. |
+| Release readiness | Not release-ready. Stage 5A shared stochastic UC implementation is awaiting PR/CI acceptance; Stage 5B follows only after that gate. |
 
 ## Stage 3B acceptance intent
 
@@ -135,7 +135,7 @@ not a locational shortage variable, so a DC-network run with nonzero unserved
 energy fails QA and publication. Validated DC scope excludes locational
 scarcity/unserved-energy studies until bus-level unserved variables exist.
 
-## Stage 4C deterministic shared integration - completed in this PR
+## Stage 4C deterministic shared integration - merged in PR #85
 
 The production publication path now executes an explicit objective QA check
 against full-precision canonical cost streams and the solver incumbent
@@ -163,6 +163,33 @@ reserve data is covered by publication-gate regression tests.
 | Reserve allocation/headroom/stacking | Shared authoritative within the documented provider and no-response-time scope |
 | DC nodal balance/flows | Shared authoritative for zero-unserved DC studies |
 | Objective assembly | Legacy Pyomo objective remains authoritative; full-precision canonical reconstruction is independently publication-gated |
+
+## Stage 5A stochastic UC - implementation complete, awaiting PR/CI
+
+Validated stochastic UC has one entrypoint and one joint Pyomo extensive-form
+solve. Each scenario block is built by the deterministic shared assembler;
+there is no independent scenario loop, consensus heuristic or second solve.
+Thermal commitment, startup, shutdown and hot-start selectors are constrained
+non-anticipatively in that single model, while dispatch and other supported
+physical recourse remain scenario-specific. Stochastic rolling horizon is
+explicitly unsupported and fail-closed.
+
+Deterministic post-solve extraction is now the reusable
+`extract_window_solution()` path used by both deterministic windows and the
+already-solved EF blocks. Each scenario therefore exposes normal canonical
+physical output and runs the same independent deterministic QA: component,
+gas, reserve, DC network and full-precision objective checks. Per-scenario
+diagnostics are explicitly marked `solve_scope=extensive_form`; only the
+aggregate owns solver runtime, bound and actual gap.
+
+The strict contract requires unique scenario ids and explicit, finite,
+strictly-positive probabilities summing to one without normalization. Profile
+overrides are validated before assembly for known references, numerical
+finiteness and solved-horizon coverage. Aggregate QA independently checks the
+probability contract, extracted non-anticipativity, probability-weighted
+full-precision expected objective, scenario physical validity and complete
+canonical extraction. Any failure blocks publication. The legacy independent
+scenario loop and consensus heuristic remain legacy compatibility only.
 
 ### Confirmed legacy soft end-level penalty defect
 
