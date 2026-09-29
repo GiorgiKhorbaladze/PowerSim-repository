@@ -8,7 +8,7 @@
 | Merged migration PRs | #69 Stage 3A, #71 Thermal UC, #72 thermal economics, #73 BESS core, #74 pumped-hydro core, #75 demand-response core, #76 DR QA/publication corrective, #77 Stage 3C closure hardening, #79 reservoir-hydro core, #80 cascade migration, #81 Stage 3D closure, #82 reserve engine, #83 DC network hardening, #84 deterministic objective QA gate, #85 deterministic shared integration, #86 shared stochastic UC extensive form, #87 genuine N-1 security-constrained UC, #88 chronological probabilistic adequacy, #89 scoped capacity expansion screening. |
 | Shared validated components | Wind, solar, simplified run-of-river, imports, thermal UC/economics, non-committable reservoir hydro/cascades with independent water-balance QA, BESS with independently auditable canonical boundary state, pumped hydro with auditable segment flows and VOM, demand response with structured validation and publication gating, canonical gas accounting, data-driven reserves, and DC network flow/balance QA. |
 | Components still legacy-owned | Committable reservoir-hydro UC/pmin/startup behavior; thermal objective construction; optional BESS depth-cost/end-target extensions; reservoir `end_level_penalty`; legacy permissive screening adequacy/expansion. Pumped hydro and DR remain unsupported reserve providers. |
-| Release readiness | Not release-ready. Stage 5D scoped expansion screening merged in PR #89; Stage 6 project/scenario/run platform is next. |
+| Release readiness | Not release-ready. Stage 6 project/scenario/run platform implementation is pending PR review; Stage 7 API and UI integration follows. |
 
 ## Stage 3B acceptance intent
 
@@ -64,7 +64,7 @@ requires explicit modelling approval before a PowerSim 1.0 correction.
 
 ## Next work
 
-1. Stage 6: project, scenario, immutable run and provenance platform.
+1. Stage 7A: application API over the Project/Scenario/Run Manager.
 
 ## Stage 3D reservoir core and cascades - merged in PRs #79 and #80
 
@@ -272,6 +272,21 @@ integer investment, storage chronology, endogenous capacity credit,
 fuel/emissions or correlated availability. The older permissive planner and
 the greedy adequacy-expansion handoff remain legacy compatibility/screening
 only.
+
+## Stage 6 project, scenario, run and result platform - pending PR
+
+The new `RunManager` persists a typed project, resolves each scenario into a
+separate immutable input snapshot, and records the canonical snapshot hash,
+input hash, contract/workflow/software versions and timestamps in a manifest.
+It owns state transitions only; it never implements electrical equations.
+
+Runs move through an explicit fail-closed lifecycle. A result envelope is
+accepted only in the result-validation/reporting states and only when its
+run-id and snapshot fingerprint exactly match the stored immutable input.
+Persisted snapshot and result hashes can be verified independently. Batch
+creation produces independent snapshots per scenario, and comparison reports
+validity and exact result hashes without claiming that unlike scenarios are
+physically equivalent.
 
 ## Blockers
 
