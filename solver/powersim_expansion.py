@@ -238,7 +238,8 @@ def plan_multi_year(inp: dict) -> dict:
         cum_by_year[y]    = {c: round(float(pyo.value(m.cum[c, y]) or 0.0), 2) for c in cids}
     annual_capex = {y: round(sum(capex[c] * CRF[c] * builds_by_year[y][c] for c in cids), 0) for y in yrs}
     annual_opex  = {y: round(sum(opex[c]  * cum_by_year[y][c] for c in cids), 0) for y in yrs}
-    npv_total    = round(float(pyo.value(m.OBJ)), 0)
+    objective_usd = float(pyo.value(m.OBJ))
+    npv_total    = round(objective_usd, 0)
 
     return {
         "mode":                 "multi_year",
@@ -255,6 +256,8 @@ def plan_multi_year(inp: dict) -> dict:
         "annual_capex_by_year": annual_capex,
         "annual_opex_by_year":  annual_opex,
         "npv_total":            npv_total,
+        # Canonical precision for scoped-expansion QA; `npv_total` is display rounded.
+        "objective_usd":         objective_usd,
     }
 
 
@@ -354,6 +357,8 @@ def plan(inp: dict) -> dict:
         "annual_capex":     round(annual_capex, 0),
         "annual_opex":      round(annual_opex, 0),
         "annual_total":     round(annual_capex + annual_opex, 0),
+        # Canonical precision for scoped-expansion QA; display fields above remain unchanged.
+        "objective_usd":     annual_capex + annual_opex,
     }
 
 
