@@ -8,7 +8,7 @@
 | Merged migration PRs | #69 Stage 3A, #71 Thermal UC, #72 thermal economics, #73 BESS core, #74 pumped-hydro core, #75 demand-response core, #76 DR QA/publication corrective, #77 Stage 3C closure hardening, #79 reservoir-hydro core, #80 cascade migration, #81 Stage 3D closure, #82 reserve engine, #83 DC network hardening, #84 deterministic objective QA gate, #85 deterministic shared integration. |
 | Shared validated components | Wind, solar, simplified run-of-river, imports, thermal UC/economics, non-committable reservoir hydro/cascades with independent water-balance QA, BESS with independently auditable canonical boundary state, pumped hydro with auditable segment flows and VOM, demand response with structured validation and publication gating, canonical gas accounting, data-driven reserves, and DC network flow/balance QA. |
 | Components still legacy-owned | Committable reservoir-hydro UC/pmin/startup behavior; thermal objective construction; optional BESS depth-cost/end-target extensions; reservoir `end_level_penalty`; stochastic, adequacy and expansion. Pumped hydro and DR remain unsupported reserve providers. |
-| Release readiness | Not release-ready. Stage 5A stochastic UC parity follows Stage 4C. |
+| Release readiness | Not release-ready. Stage 5A shared stochastic UC implementation is awaiting PR/CI acceptance; Stage 5B follows only after that gate. |
 
 ## Stage 3B acceptance intent
 
@@ -164,27 +164,32 @@ reserve data is covered by publication-gate regression tests.
 | DC nodal balance/flows | Shared authoritative for zero-unserved DC studies |
 | Objective assembly | Legacy Pyomo objective remains authoritative; full-precision canonical reconstruction is independently publication-gated |
 
-## Stage 5A stochastic UC - in progress
+## Stage 5A stochastic UC - implementation complete, awaiting PR/CI
 
-The validated singleton parity entrypoint calls the production shared
-deterministic assembly, canonical extraction, independent QA and publication
-gate directly. A one-scenario probability-1.0 case reproduces the
-deterministic 60-minute and 15-minute canonical result, including gas,
-reserve and DC-network data.
+Validated stochastic UC has one entrypoint and one joint Pyomo extensive-form
+solve. Each scenario block is built by the deterministic shared assembler;
+there is no independent scenario loop, consensus heuristic or second solve.
+Thermal commitment, startup, shutdown and hot-start selectors are constrained
+non-anticipatively in that single model, while dispatch and other supported
+physical recourse remain scenario-specific. Stochastic rolling horizon is
+explicitly unsupported and fail-closed.
 
-Multi-scenario input is fail-closed pending an explicit non-anticipative
-extensive form that reuses shared physics. The prior independent scenario
-loop and consensus heuristic are legacy compatibility only; the standalone
-extensive-form module duplicates physics and is deprecated for validated use.
+Deterministic post-solve extraction is now the reusable
+`extract_window_solution()` path used by both deterministic windows and the
+already-solved EF blocks. Each scenario therefore exposes normal canonical
+physical output and runs the same independent deterministic QA: component,
+gas, reserve, DC network and full-precision objective checks. Per-scenario
+diagnostics are explicitly marked `solve_scope=extensive_form`; only the
+aggregate owns solver runtime, bound and actual gap.
 
-The Stage 5A branch now has a reusable `solve_window(..., build_only=True)`
-seam and a single Pyomo extensive-form construction that places each resolved
-scenario in its own deterministic physical block. The EF links thermal
-commitment/startup/shutdown variables by in-model equality constraints and
-uses a probability-weighted objective. It rejects stochastic rolling horizon.
-This remains non-publishable until full per-scenario canonical extraction,
-independent physical QA and aggregate expected-objective/non-anticipativity
-QA are connected.
+The strict contract requires unique scenario ids and explicit, finite,
+strictly-positive probabilities summing to one without normalization. Profile
+overrides are validated before assembly for known references, numerical
+finiteness and solved-horizon coverage. Aggregate QA independently checks the
+probability contract, extracted non-anticipativity, probability-weighted
+full-precision expected objective, scenario physical validity and complete
+canonical extraction. Any failure blocks publication. The legacy independent
+scenario loop and consensus heuristic remain legacy compatibility only.
 
 ### Confirmed legacy soft end-level penalty defect
 
