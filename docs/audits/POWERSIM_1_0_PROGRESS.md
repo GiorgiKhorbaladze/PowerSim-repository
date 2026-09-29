@@ -4,11 +4,11 @@
 
 | Item | Status |
 | --- | --- |
-| Completed stage | Stage 3D reservoir-hydro, cascades and gas coupling - merged in PR #81. Stage 4A reserve engine - merged in PR #82. Stage 4B DC network hardening - merged in PR #83. PR #84 made objective QA mandatory. Stage 4C shared deterministic integration - merged in PR #85. Stage 5A shared stochastic UC - merged in PR #86. Stage 5B genuine N-1 SCUC - merged in PR #87. Stage 5C chronological probabilistic adequacy - merged in PR #88. Stage 5D scoped expansion screening - merged in PR #89. |
-| Merged migration PRs | #69 Stage 3A, #71 Thermal UC, #72 thermal economics, #73 BESS core, #74 pumped-hydro core, #75 demand-response core, #76 DR QA/publication corrective, #77 Stage 3C closure hardening, #79 reservoir-hydro core, #80 cascade migration, #81 Stage 3D closure, #82 reserve engine, #83 DC network hardening, #84 deterministic objective QA gate, #85 deterministic shared integration, #86 shared stochastic UC extensive form, #87 genuine N-1 security-constrained UC, #88 chronological probabilistic adequacy, #89 scoped capacity expansion screening. |
+| Completed stage | Stage 3D reservoir-hydro, cascades and gas coupling - merged in PR #81. Stage 4A reserve engine - merged in PR #82. Stage 4B DC network hardening - merged in PR #83. PR #84 made objective QA mandatory. Stage 4C shared deterministic integration - merged in PR #85. Stage 5A shared stochastic UC - merged in PR #86. Stage 5B genuine N-1 SCUC - merged in PR #87. Stage 5C chronological probabilistic adequacy - merged in PR #88. Stage 5D scoped expansion screening - merged in PR #89. Stage 6 project/scenario/run platform - merged in PR #90. |
+| Merged migration PRs | #69 Stage 3A, #71 Thermal UC, #72 thermal economics, #73 BESS core, #74 pumped-hydro core, #75 demand-response core, #76 DR QA/publication corrective, #77 Stage 3C closure hardening, #79 reservoir-hydro core, #80 cascade migration, #81 Stage 3D closure, #82 reserve engine, #83 DC network hardening, #84 deterministic objective QA gate, #85 deterministic shared integration, #86 shared stochastic UC extensive form, #87 genuine N-1 security-constrained UC, #88 chronological probabilistic adequacy, #89 scoped capacity expansion screening, #90 project/scenario/run platform. |
 | Shared validated components | Wind, solar, simplified run-of-river, imports, thermal UC/economics, non-committable reservoir hydro/cascades with independent water-balance QA, BESS with independently auditable canonical boundary state, pumped hydro with auditable segment flows and VOM, demand response with structured validation and publication gating, canonical gas accounting, data-driven reserves, and DC network flow/balance QA. |
 | Components still legacy-owned | Committable reservoir-hydro UC/pmin/startup behavior; thermal objective construction; optional BESS depth-cost/end-target extensions; reservoir `end_level_penalty`; legacy permissive screening adequacy/expansion. Pumped hydro and DR remain unsupported reserve providers. |
-| Release readiness | Not release-ready. Stage 6 project/scenario/run platform implementation is pending PR review; Stage 7 API and UI integration follows. |
+| Release readiness | Not release-ready. Stage 6 project/scenario/run platform merged in PR #90; Stage 7 API and UI integration is next. |
 
 ## Stage 3B acceptance intent
 
@@ -273,7 +273,7 @@ fuel/emissions or correlated availability. The older permissive planner and
 the greedy adequacy-expansion handoff remain legacy compatibility/screening
 only.
 
-## Stage 6 project, scenario, run and result platform - pending PR
+## Stage 6 project, scenario, run and result platform - merged in PR #90
 
 The new `RunManager` persists a typed project, resolves each scenario into a
 separate immutable input snapshot, and records the canonical snapshot hash,
