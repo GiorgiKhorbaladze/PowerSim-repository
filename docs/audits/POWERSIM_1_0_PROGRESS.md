@@ -177,6 +177,15 @@ extensive form that reuses shared physics. The prior independent scenario
 loop and consensus heuristic are legacy compatibility only; the standalone
 extensive-form module duplicates physics and is deprecated for validated use.
 
+The Stage 5A branch now has a reusable `solve_window(..., build_only=True)`
+seam and a single Pyomo extensive-form construction that places each resolved
+scenario in its own deterministic physical block. The EF links thermal
+commitment/startup/shutdown variables by in-model equality constraints and
+uses a probability-weighted objective. It rejects stochastic rolling horizon.
+This remains non-publishable until full per-scenario canonical extraction,
+independent physical QA and aggregate expected-objective/non-anticipativity
+QA are connected.
+
 ### Confirmed legacy soft end-level penalty defect
 
 The legacy `end_short` variable/constraint is declared after the Pyomo
