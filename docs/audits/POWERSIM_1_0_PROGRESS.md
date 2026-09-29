@@ -7,8 +7,8 @@
 | Completed stage | Stage 3D reservoir-hydro, cascades and gas coupling - merged in PR #81. Stage 4A reserve engine - merged in PR #82. Stage 4B DC network hardening - merged in PR #83. PR #84 made objective QA mandatory. Stage 4C shared deterministic integration - merged in PR #85. Stage 5A shared stochastic UC - merged in PR #86. |
 | Merged migration PRs | #69 Stage 3A, #71 Thermal UC, #72 thermal economics, #73 BESS core, #74 pumped-hydro core, #75 demand-response core, #76 DR QA/publication corrective, #77 Stage 3C closure hardening, #79 reservoir-hydro core, #80 cascade migration, #81 Stage 3D closure, #82 reserve engine, #83 DC network hardening, #84 deterministic objective QA gate, #85 deterministic shared integration, #86 shared stochastic UC extensive form. |
 | Shared validated components | Wind, solar, simplified run-of-river, imports, thermal UC/economics, non-committable reservoir hydro/cascades with independent water-balance QA, BESS with independently auditable canonical boundary state, pumped hydro with auditable segment flows and VOM, demand response with structured validation and publication gating, canonical gas accounting, data-driven reserves, and DC network flow/balance QA. |
-| Components still legacy-owned | Committable reservoir-hydro UC/pmin/startup behavior; thermal objective construction; optional BESS depth-cost/end-target extensions; reservoir `end_level_penalty`; stochastic, adequacy and expansion. Pumped hydro and DR remain unsupported reserve providers. |
-| Release readiness | Not release-ready. Stage 5A shared stochastic UC merged in PR #86; Stage 5B genuine N-1/SCUC characterization and migration is next. |
+| Components still legacy-owned | Committable reservoir-hydro UC/pmin/startup behavior; thermal objective construction; optional BESS depth-cost/end-target extensions; reservoir `end_level_penalty`; adequacy and expansion. Pumped hydro and DR remain unsupported reserve providers. |
+| Release readiness | Not release-ready. Stage 5B genuine N-1/SCUC implementation is awaiting PR/CI acceptance; Stage 5C adequacy follows only after that gate. |
 
 ## Stage 3B acceptance intent
 
@@ -200,6 +200,35 @@ reconstruction. Activating that term would alter dispatch and economics, so
 the Stage 3D shared core excludes assets using this optional feature. They are
 classified as legacy compatibility only, not validated PowerSim 1.0 core.
 Correcting it requires a separate explicit modelling decision.
+
+## Stage 5B genuine N-1 SCUC - implementation complete, awaiting PR/CI
+
+Validated deterministic security UC is a single joint Pyomo model with a
+base-case block and contingency feasibility blocks constructed by the same
+shared deterministic window builder. The economic objective is strictly the
+base-case objective. Contingencies are not scenarios and are not probability
+weighted. Base thermal commitment/startup/shutdown is preventive and shared;
+surviving units can redispatch only inside their base-case validated upward or
+downward reserve allocation and normal physical limits.
+
+The strict v1.0 contingency contract accepts exactly one element per unique
+contingency: `unit_outage`, `import_outage`, or `line_outage`. Unit/import
+outages fix canonical post-contingency output to zero. A line outage fixes its
+flow to zero inside the contingency network equations, so it is not a no-op.
+The standalone `powersim_scuc.py` remains legacy compatibility/screening only
+and is not used by the validated security workflow.
+
+Canonical contingency results expose post-contingency dispatch, angles, flows,
+base reserve-limited redispatch and normal deterministic canonical results.
+Independent security QA validates outage application, commitment consistency,
+reserve-limited corrective dispatch, DC flow, branch limits, nodal balance,
+absence of system-level unserved energy and complete extraction. Any failure
+blocks aggregate publication.
+
+Validated security scope rejects any line contingency that islands the DC
+network. PowerSim does not claim locational load shedding, reserve activation-
+time deliverability or stochastic SCUC. The existing reserve response-time
+limitation remains unchanged.
 
 ## Blockers
 
