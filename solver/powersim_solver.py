@@ -40,6 +40,7 @@ _colab_install()
 import json, time, math, warnings, argparse, os
 from datetime import datetime, timedelta
 from collections import defaultdict
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -785,6 +786,8 @@ def solve_window(
                                         # boundary so cumulative budgets and
                                         # min-up/down state propagate
                                         # correctly to the next window.
+    model: Any | None = None,           # optional owning model/block for EF composition
+    build_only: bool = False,            # construct physics/objective but do not solve/extract
 ) -> tuple[list, dict, float, float]:
     """
     Solve one rolling window.
@@ -792,7 +795,7 @@ def solve_window(
     """
     H   = len(demand_w)
     T   = list(range(1, H + 1))    # 1-indexed periods
-    m   = pyo.ConcreteModel()
+    m   = model if model is not None else pyo.ConcreteModel()
 
     # Stage 3A rollback seam. The default remains the validated legacy path;
     # shared is explicit and deterministic (never selected by environment).
@@ -1990,6 +1993,22 @@ def solve_window(
                     var[k].value = float(v)
                 except (KeyError, TypeError, ValueError):
                     pass
+
+    if build_only:
+        # The caller owns the enclosing extensive-form objective.  Preserve
+        # this exact deterministic objective expression as a named component
+        # but deactivate it to avoid multiple active objectives.  No solver
+        # call or result extraction is performed on a build-only block.
+        m.OBJ.deactivate()
+        m._powersim_window_metadata = {
+            "assets": assets, "demand_w": demand_w, "profiles_w": profiles_w,
+            "reserve_products": reserve_prods, "gas_limits": gas_limits,
+            "init_state": init_state, "solver_cfg": solver_cfg,
+            "offset_h": offset_h, "duration_hours": dt,
+            "component_engine": component_engine,
+            "shared_session": shared_session,
+        }
+        return m
 
     # ── Solve ──────────────────────────────────────────────────────────
     m.dual = pyo.Suffix(direction=pyo.Suffix.IMPORT)
