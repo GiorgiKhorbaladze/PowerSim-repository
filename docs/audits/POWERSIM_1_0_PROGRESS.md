@@ -4,11 +4,11 @@
 
 | Item | Status |
 | --- | --- |
-| Completed stage | Stage 3D reservoir-hydro, cascades and gas coupling - merged in PR #81. Stage 4A reserve engine - merged in PR #82. Stage 4B DC network hardening - merged in PR #83. PR #84 made objective QA mandatory. Stage 4C shared deterministic integration - merged in PR #85. Stage 5A shared stochastic UC - merged in PR #86. Stage 5B genuine N-1 SCUC - merged in PR #87. Stage 5C chronological probabilistic adequacy - merged in PR #88. Stage 5D scoped expansion screening - merged in PR #89. Stage 6 project/scenario/run platform - merged in PR #90. |
-| Merged migration PRs | #69 Stage 3A, #71 Thermal UC, #72 thermal economics, #73 BESS core, #74 pumped-hydro core, #75 demand-response core, #76 DR QA/publication corrective, #77 Stage 3C closure hardening, #79 reservoir-hydro core, #80 cascade migration, #81 Stage 3D closure, #82 reserve engine, #83 DC network hardening, #84 deterministic objective QA gate, #85 deterministic shared integration, #86 shared stochastic UC extensive form, #87 genuine N-1 security-constrained UC, #88 chronological probabilistic adequacy, #89 scoped capacity expansion screening, #90 project/scenario/run platform. |
+| Completed stage | Stage 3D reservoir-hydro, cascades and gas coupling - merged in PR #81. Stage 4A reserve engine - merged in PR #82. Stage 4B DC network hardening - merged in PR #83. PR #84 made objective QA mandatory. Stage 4C shared deterministic integration - merged in PR #85. Stage 5A shared stochastic UC - merged in PR #86. Stage 5B genuine N-1 SCUC - merged in PR #87. Stage 5C chronological probabilistic adequacy - merged in PR #88. Stage 5D scoped expansion screening - merged in PR #89. Stage 6 project/scenario/run platform - merged in PR #90. Stage 7A application API - merged in PR #91. Stage 7B initial UI/API connector - merged in PR #94. |
+| Merged migration PRs | #69 Stage 3A, #71 Thermal UC, #72 thermal economics, #73 BESS core, #74 pumped-hydro core, #75 demand-response core, #76 DR QA/publication corrective, #77 Stage 3C closure hardening, #79 reservoir-hydro core, #80 cascade migration, #81 Stage 3D closure, #82 reserve engine, #83 DC network hardening, #84 deterministic objective QA gate, #85 deterministic shared integration, #86 shared stochastic UC extensive form, #87 genuine N-1 security-constrained UC, #88 chronological probabilistic adequacy, #89 scoped capacity expansion screening, #90 project/scenario/run platform, #91 application API, #94 UI/API connector. |
 | Shared validated components | Wind, solar, simplified run-of-river, imports, thermal UC/economics, non-committable reservoir hydro/cascades with independent water-balance QA, BESS with independently auditable canonical boundary state, pumped hydro with auditable segment flows and VOM, demand response with structured validation and publication gating, canonical gas accounting, data-driven reserves, and DC network flow/balance QA. |
 | Components still legacy-owned | Committable reservoir-hydro UC/pmin/startup behavior; thermal objective construction; optional BESS depth-cost/end-target extensions; reservoir `end_level_penalty`; legacy permissive screening adequacy/expansion. Pumped hydro and DR remain unsupported reserve providers. |
-| Release readiness | Not release-ready. Stage 7A application API is pending PR review; unified UI and browser E2E remain next. |
+| Release readiness | Not release-ready. The application API and its solver-free UI transport connector are merged. Browser-hosted E2E, release engineering and final independent audit remain. |
 
 ## Stage 3B acceptance intent
 
@@ -64,7 +64,25 @@ requires explicit modelling approval before a PowerSim 1.0 correction.
 
 ## Next work
 
-1. Stage 7B: unified UI over the application API, then browser E2E.
+1. Stage 7C: browser-hosted E2E in a browser-reachable deployment environment, then Stage 8 release engineering and final audit.
+
+## Stage 7 application integration
+
+PR #91 provides the solver-free application service over the immutable
+project/scenario/run platform. It validates and saves projects, creates runs,
+launches only through an injected backend executor, exposes status/results and
+compares runs. In the absence of an executor it deliberately moves a run to
+`failed`; it never fabricates a solve.
+
+PR #94 adds a small, separately loaded UI transport connector. It exposes the
+application API calls (`saveProject`, `createRun`, `launch`, `status`,
+`result`, `compare`) without JavaScript solver equations. It does not turn the
+static demonstration page into a second solver.
+
+Browser-hosted E2E is still open. The controlled browser environment used for
+the current smoke attempt blocks workspace-local URLs, so a browser load could
+not be honestly recorded as passing. Static connector load/syntax checks are
+automated, but are not a substitute for the required hosted-browser flow.
 
 ## Stage 3D reservoir core and cascades - merged in PRs #79 and #80
 
