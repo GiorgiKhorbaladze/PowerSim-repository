@@ -36,15 +36,15 @@ def test_single_scenario_shared_stochastic_matches_deterministic_all_canonical_r
     deterministic=solver.build_result_store(rows, assets, inp, elapsed, objective)
     out=stochastic.run_stochastic_shared(inp)
     scenario=out["scenarios"][0]["result"]
-    assert out["expected_objective_usd"] == pytest.approx(objective)
+    assert out["aggregate"]["expected_objective_usd"] == pytest.approx(objective)
     assert scenario["hourly_system"] == deterministic["hourly_system"]
     assert scenario["qa"]["status"] == "pass" and out["publication"]["publishable"] is True
 
 
 @pytest.mark.parametrize("scenarios,match", [
-    ([{"id":"a","probability":-1}], "finite and non-negative"),
-    ([{"id":"a","probability":float("nan")}], "finite and non-negative"),
-    ([{"id":"a","probability":0}], "positive total"),
+    ([{"id":"a","probability":-1}], "strictly positive"),
+    ([{"id":"a","probability":float("nan")}], "strictly positive"),
+    ([{"id":"a","probability":0}], "strictly positive"),
     ([{"id":"a","probability":.5},{"id":"a","probability":.5}], "duplicate"),
     ([{"id":"a","probability":.9}], "sum to 1"),
 ])
@@ -53,6 +53,35 @@ def test_shared_stochastic_probability_validation_fails_closed(scenarios, match)
     with pytest.raises(ValueError, match=match): stochastic.run_stochastic_shared(inp)
 
 
-def test_multi_scenario_is_rejected_until_shared_nonanticipative_ef_exists():
+def test_two_scenario_identical_inputs_share_first_stage_and_publish():
     inp=_input(); inp["stochastic_scenarios"]=[{"id":"a","probability":.5},{"id":"b","probability":.5}]
-    with pytest.raises(ValueError, match="non-anticipative extensive form"): stochastic.run_stochastic_shared(inp)
+    out=stochastic.run_stochastic_shared(inp)
+    a,b=out["scenarios"]
+    assert a["first_stage"] == b["first_stage"]
+    assert a["result"]["hourly_system"] == b["result"]["hourly_system"]
+    assert a["objective_usd"] == pytest.approx(b["objective_usd"])
+    assert out["aggregate"]["expected_objective_usd"] == pytest.approx(a["objective_usd"])
+    assert out["publication"]["publishable"] is True
+    for scenario in (a,b):
+        check_ids={check["check_id"] for check in scenario["result"]["qa"]["checks"]}
+        assert {"component.thermal_gas_conversion", "reserve.product_requirement", "network.nodal_balance", "objective_reconstruction"} <= check_ids
+
+
+def test_divergent_demand_profiles_keep_first_stage_nonanticipative_and_allow_recourse():
+    inp=_input()
+    inp["stochastic_scenarios"]=[
+        {"id":"low","probability":.5,"profile_overrides":{"demand":[8.0,8.0]}},
+        {"id":"high","probability":.5,"profile_overrides":{"demand":[14.0,14.0]}},
+    ]
+    out=stochastic.run_stochastic_shared(inp)
+    low,high=out["scenarios"]
+    assert low["first_stage"] == high["first_stage"]
+    assert low["result"]["hourly_system"] != high["result"]["hourly_system"]
+    assert out["qa"]["status"] == "pass"
+
+
+def test_unknown_or_nonfinite_profile_override_fails_closed():
+    inp=_input(); inp["stochastic_scenarios"]=[{"id":"a","probability":1.0,"profile_overrides":{"missing":[1,1]}}]
+    with pytest.raises(ValueError, match="unknown profile"): stochastic.run_stochastic_shared(inp)
+    inp=_input(); inp["stochastic_scenarios"]=[{"id":"a","probability":1.0,"profile_overrides":{"demand":[1,float("nan")]}}]
+    with pytest.raises(ValueError, match="non-finite"): stochastic.run_stochastic_shared(inp)
