@@ -120,5 +120,32 @@
   async function status(runId){return request(`/runs/${encodeURIComponent(runId||state.runId)}`);}
   async function result(runId){return request(`/runs/${encodeURIComponent(runId||state.runId)}/result`);}
   async function compare(leftRunId,rightRunId){return request(`/runs/compare?left_run_id=${encodeURIComponent(leftRunId)}&right_run_id=${encodeURIComponent(rightRunId)}`);}
-  window.PowerSimApplicationAPI={setBaseUrl,saveProject,createRun,launch,status,result,compare,get state(){return {...state};}};
+  // Adapts the static editor's persisted input to the typed application API.
+  // This carries data only; all validation and electrical equations remain in Python.
+  function projectFromLegacyPayload(payload, projectId){
+    if(!payload || typeof payload!=='object') throw new Error('A legacy input payload is required');
+    const resolution=Number(payload.resolution_min||60);
+    if(!Number.isFinite(resolution)||resolution<=0) throw new Error('resolution_min must be a positive number');
+    const horizon=payload.study_horizon||{};
+    const periods=Math.max(1,Math.round(Number(horizon.horizon_hours||24)*60/resolution));
+    const metadata=payload.metadata||{};
+    const year=Number(metadata.study_year||new Date().getUTCFullYear());
+    const start=`${metadata.study_year||year}-01-01T00:00:00+04:00`;
+    const profiles=Object.entries(payload.profiles||{}).map(([id,values])=>({id,unit:id==='demand'?'MW':'availability_factor',values:Array.isArray(values)?values:[]}));
+    const assets=(payload.assets||[]).map(asset=>({
+      id:String(asset.id||asset.name||''), kind:String(asset.type||'legacy_asset'), enabled:asset.enabled!==false,
+      bus:asset.bus||asset.bus_id||null,
+      profile_references:[asset.availability_profile,asset.inflow_profile].filter(Boolean),
+      capacity_min_mw:Number.isFinite(Number(asset.pmin))?Number(asset.pmin):null,
+      capacity_max_mw:Number.isFinite(Number(asset.pmax||asset.power_mw))?Number(asset.pmax||asset.power_mw):null,
+      legacy_extensions:asset
+    }));
+    if(assets.some(asset=>!asset.id)) throw new Error('Every asset needs an id or name before submission');
+    return {id:projectId||`ui-${Date.now()}`,version:{revision:1},metadata:{source:'PowerSim static UI',legacy_schema_version:metadata.schema_version||null},units:{currency:'USD'},time:{timezone:metadata.timezone||'Asia/Tbilisi',study_year:year,resolution_minutes:resolution,interval_duration_hours:resolution/60,start,periods,calendar_policy:'explicit_periods'},assets,profiles,reserve_products:payload.reserve_products||[],solver_settings:payload.solver_settings||{},legacy_payload:payload};
+  }
+  async function submitCurrentUiProject(projectId){
+    if(typeof window.buildInputPayload!=='function') throw new Error('The PowerSim editor is not loaded');
+    return saveProject(projectFromLegacyPayload(window.buildInputPayload(),projectId));
+  }
+  window.PowerSimApplicationAPI={setBaseUrl,saveProject,createRun,launch,status,result,compare,projectFromLegacyPayload,submitCurrentUiProject,get state(){return {...state};}};
 })();

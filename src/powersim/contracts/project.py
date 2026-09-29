@@ -95,6 +95,9 @@ class ProjectContract(ContractModel):
     reserve_products: list[dict[str, Any]] = Field(default_factory=list)
     solver_settings: dict[str, Any] = Field(default_factory=dict)
     scenarios: list[ScenarioContract] = Field(default_factory=list)
+    # Compatibility payload for the static editor. It is preserved for the
+    # backend workflow but is never interpreted as a second solver model.
+    legacy_payload: FrozenDict | None = None
 
 
 def _deep_overlay(base: Any, overlay: Any) -> Any:
