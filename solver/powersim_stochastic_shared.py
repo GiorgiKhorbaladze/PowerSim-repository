@@ -41,12 +41,10 @@ def _scenarios(inp: dict[str, Any]) -> list[dict[str, Any]]:
             probability = float(probability)
         except (TypeError, ValueError):
             raise ValueError(f"stochastic scenario {sid} probability must be numeric") from None
-        if not math.isfinite(probability) or probability < 0:
-            raise ValueError(f"stochastic scenario {sid} probability must be finite and non-negative")
+        if not math.isfinite(probability) or probability <= 0:
+            raise ValueError(f"stochastic scenario {sid} probability must be finite and strictly positive")
         scenarios.append({**item, "probability": probability})
     total = sum(item["probability"] for item in scenarios)
-    if total <= 0:
-        raise ValueError("stochastic scenario probabilities must have a positive total")
     if abs(total - 1.0) > 1e-9:
         raise ValueError(f"stochastic scenario probabilities must sum to 1.0, got {total:g}")
     return scenarios
@@ -68,9 +66,21 @@ def _scenario_input(base: dict[str, Any], scenario: dict[str, Any]) -> dict[str,
     if not isinstance(overrides, dict):
         raise ValueError(f"stochastic scenario {scenario['id']} profile_overrides must be an object")
     profiles = resolved.setdefault("profiles", {})
+    horizon_h = int((resolved.get("study_horizon") or {}).get("horizon_hours", 0) or 0)
+    expected_periods = horizon_h * (60 // int(resolved.get("resolution_min", 60)))
     assets = {str(asset.get("id")): asset for asset in resolved.get("assets", []) if isinstance(asset, dict)}
     for key, value in overrides.items():
         if isinstance(value, list):
+            if key not in profiles:
+                raise ValueError(f"stochastic scenario {scenario['id']} references unknown profile {key}")
+            try:
+                valid_values = all(math.isfinite(float(item)) for item in value)
+            except (TypeError, ValueError):
+                valid_values = False
+            if not valid_values:
+                raise ValueError(f"stochastic scenario {scenario['id']} profile override {key} contains non-finite data")
+            if expected_periods and len(value) < expected_periods:
+                raise ValueError(f"stochastic scenario {scenario['id']} profile override {key} does not cover the solved horizon")
             profiles[key] = value
         elif key in assets and isinstance(value, str):
             asset = assets[key]
@@ -82,54 +92,14 @@ def _scenario_input(base: dict[str, Any], scenario: dict[str, Any]) -> dict[str,
                 raise ValueError(f"profile override for {key} is unsupported for asset type {asset.get('type')}")
         else:
             raise ValueError(f"stochastic scenario {scenario['id']} has unsupported profile override {key}")
+    if not isinstance(profiles.get("demand"), list):
+        raise ValueError(f"stochastic scenario {scenario['id']} requires a demand profile")
     return resolved
 
 
 def run_stochastic_shared(inp: dict[str, Any]) -> dict[str, Any]:
-    """Run the validated singleton stochastic parity path.
-
-    This is deliberately fail-closed for more than one scenario.  Calling
-    separate deterministic solves cannot enforce first-stage non-anticipativity
-    and is therefore legacy compatibility behaviour, not PowerSim 1.0 SCUC.
-    """
-    scenarios = _scenarios(inp)
-    if len(scenarios) != 1:
-        raise ValueError(
-            "validated shared stochastic UC currently supports exactly one scenario; "
-            "multi-scenario non-anticipative extensive form is not yet available"
-        )
-    scenario = scenarios[0]
-    resolved = _scenario_input(inp, scenario)
-    assets = build_asset_map(resolved)
-    profiles, horizon = slice_profiles(resolved)
-    gas_limits = build_gas_limits(resolved, int((resolved.get("study_horizon") or {}).get("start_hour", 0)), horizon)
-    rows, elapsed, objective = solve_all(resolved, assets, profiles, gas_limits)
-    result = build_result_store(rows, assets, resolved, elapsed, objective)
-    first_stage = {
-        "commitment": [dict(row.get("commitment") or {}) for row in rows],
-        "startup": [dict(row.get("startup") or {}) for row in rows],
-        "shutdown": [dict(row.get("shutdown") or {}) for row in rows],
-    }
-    objective_value = float((result.get("diagnostics") or {}).get("objective_breakdown", {}).get("pyomo_objective", objective))
-    scenario_publishable = bool((result.get("publication") or {}).get("publishable"))
-    return {
-        "workflow": "shared_deterministic_single_scenario_parity",
-        "scenario_count": 1,
-        "probability_metadata": {"validated": True, "normalized": False, "sum": 1.0},
-        "expected_objective_usd": objective_value,
-        "first_stage": first_stage,
-        "scenarios": [{
-            "id": scenario["id"], "probability": scenario["probability"],
-            "objective_usd": objective_value, "result": result,
-            "qa_status": (result.get("qa") or {}).get("status"),
-            "publishable": scenario_publishable,
-        }],
-        "qa_status": (result.get("qa") or {}).get("status"),
-        "publication": {"publishable": scenario_publishable,
-                        "reasons": [] if scenario_publishable else ["mandatory_scenario_not_publishable"]},
-        "legacy_stochastic_paths": {
-            "powersim_solver.run_stochastic": "legacy_compatibility_only_independent_scenario_loop",
-            "powersim_stochastic.run_stochastic_2stage": "legacy_compatibility_only_consensus_heuristic",
-            "powersim_stochastic_efs.solve_efs": "deprecated_duplicate_physics",
-        },
-    }
+    """Run the sole validated shared-physics stochastic UC entrypoint."""
+    # Import lazily because the EF builder imports this module's strict input
+    # contract helpers. This is one joint solve, never a scenario loop.
+    from powersim_stochastic_extensive_shared import solve_extensive_form
+    return solve_extensive_form(inp)
