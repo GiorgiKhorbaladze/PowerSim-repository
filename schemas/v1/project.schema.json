@@ -515,6 +515,19 @@
       "title": "Id",
       "type": "string"
     },
+    "legacy_payload": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Legacy Payload"
+    },
     "metadata": {
       "additionalProperties": true,
       "title": "Metadata",
