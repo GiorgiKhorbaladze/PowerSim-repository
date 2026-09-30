@@ -6,10 +6,11 @@ constraints or substitutes a second electrical model for the validated solver.
 from __future__ import annotations
 
 import copy
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
-from powersim.contracts import ResolvedInputContract, ResultEnvelope
+from powersim.contracts import QAReport, ResolvedInputContract, ResultEnvelope, SolverDiagnostics
 
 
 def resolved_to_workflow_input(resolved: ResolvedInputContract) -> dict[str, Any]:
@@ -62,3 +63,31 @@ class LocalWorkflowExecutor:
             raise RuntimeError("no local workflow runner configured")
         resolved = ResolvedInputContract.model_validate_json(Path(resolved_input_path).read_text(encoding="utf-8"))
         return self.runner(resolved_to_workflow_input(resolved), run_id, resolved.fingerprint())
+
+
+def run_deterministic_workflow(workflow: dict[str, Any], run_id: str, snapshot_fingerprint: str) -> ResultEnvelope:
+    """Execute the established deterministic solver and preserve its gate.
+
+    The solver implementation, canonical extraction and independent QA remain
+    in ``solver.powersim_solver``.  This wrapper only adapts the accepted
+    result into the platform envelope.
+    """
+    from solver.powersim_solver import build_asset_map, build_gas_limits, build_result_store, slice_profiles, solve_all
+
+    assets = build_asset_map(workflow)
+    profiles, horizon_periods = slice_profiles(workflow)
+    start_hour = int((workflow.get("study_horizon") or {}).get("start_hour", 0))
+    gas_limits = build_gas_limits(workflow, start_hour, horizon_periods)
+    hourly, elapsed, objective = solve_all(workflow, assets, profiles, gas_limits)
+    raw = build_result_store(hourly, assets, workflow, elapsed, obj_total=objective)
+    diagnostics = SolverDiagnostics.model_validate(raw["diagnostics"]["solver_diagnostics"])
+    qa = QAReport.model_validate(raw["qa"])
+    return ResultEnvelope(run_id=run_id, snapshot_fingerprint=snapshot_fingerprint,
+                          created_at=datetime.now(timezone.utc), validity=diagnostics.result_validity,
+                          solver=diagnostics, qa=qa, results=raw)
+
+
+class DeterministicLocalSolverExecutor(LocalWorkflowExecutor):
+    """Production deterministic UC/ED executor using the validated solver."""
+    def __init__(self):
+        super().__init__(run_deterministic_workflow)
