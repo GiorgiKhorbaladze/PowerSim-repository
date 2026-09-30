@@ -36,9 +36,20 @@ def main(argv: list[str] | None = None) -> int:
     sub = parser.add_subparsers(dest="command")
     validate = sub.add_parser("validate", help="validate a current or legacy input JSON")
     validate.add_argument("input", type=Path)
+    serve = sub.add_parser("serve", help="run the same-origin PowerSim UI and API")
+    serve.add_argument("--workspace", type=Path, default=Path("powersim_workspace"))
+    serve.add_argument("--host", default="127.0.0.1")
+    serve.add_argument("--port", type=int, default=8000)
     args = parser.parse_args(argv)
     if args.command == "validate":
         return _validate(args.input)
+    if args.command == "serve":
+        try:
+            import uvicorn
+            from powersim.server import create_application
+        except ImportError as exc:
+            parser.error(f"serve dependencies are unavailable: {exc}")
+        uvicorn.run(create_application(args.workspace), host=args.host, port=args.port)
+        return 0
     parser.print_help()
     return 0
-
