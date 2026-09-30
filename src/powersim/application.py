@@ -1,11 +1,11 @@
 """Application service - a solver-free control layer over :class:`RunManager`."""
 from __future__ import annotations
 from typing import Any, Protocol
-from powersim.contracts import ProjectContract, RunStatus
+from powersim.contracts import ProjectContract, ResultEnvelope, RunStatus
 from powersim.platform import RunManager
 
 class RunExecutor(Protocol):
-    def submit(self, run_id: str, resolved_input_path: str) -> None: ...
+    def execute(self, run_id: str, resolved_input_path: str) -> ResultEnvelope: ...
 
 class ApplicationService:
     def __init__(self, manager: RunManager, executor: RunExecutor|None=None): self.manager,self.executor=manager,executor
@@ -21,9 +21,19 @@ class ApplicationService:
         if self.executor is None:
             run=self.manager.transition(run_id,RunStatus.FAILED,"no backend executor configured")
             return {"accepted":False,"reason":"no_backend_executor","run":run.model_dump(mode="json")}
-        self.executor.submit(run_id,str(self.manager.root/"runs"/run_id/"resolved_input.json"))
         run=self.manager.transition(run_id,RunStatus.SOLVING,"submitted to backend executor")
-        return {"accepted":True,"run":run.model_dump(mode="json")}
+        try:
+            result=self.executor.execute(run_id,str(self.manager.root/"runs"/run_id/"resolved_input.json"))
+            if result.run_id != run_id or result.snapshot_fingerprint != run.snapshot_fingerprint:
+                raise ValueError("backend result does not match immutable run identity")
+            self.manager.transition(run_id,RunStatus.VALIDATING_RESULTS,"backend result received")
+            self.manager.transition(run_id,RunStatus.REPORTING,"persisting gated result")
+            self.manager.store_result(run_id,result)
+            run=self.manager.transition(run_id,RunStatus.COMPLETED,"result persisted after QA/publication gate")
+            return {"accepted":True,"run":run.model_dump(mode="json"),"publishable":result.validity.value!="invalid"}
+        except Exception as exc:
+            failed=self.manager.transition(run_id,RunStatus.FAILED,"backend execution failed",{"error":str(exc)})
+            return {"accepted":False,"reason":"backend_execution_failed","run":failed.model_dump(mode="json")}
     def result(self,run_id:str)->dict[str,Any]:
         path=self.manager.root/"runs"/run_id/"result.json"
         if not path.exists(): raise FileNotFoundError("result is not available")
