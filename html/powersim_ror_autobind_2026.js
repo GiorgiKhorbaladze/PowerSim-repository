@@ -107,7 +107,8 @@
 // Application API connector. This is UI transport only - no solver physics.
 (function(){
   'use strict';
-  const state={baseUrl:localStorage.getItem('powersim.applicationApi')||'http://localhost:8001',runId:null};
+  const sameOrigin=(window.location&&/^https?:$/.test(window.location.protocol))?`${window.location.origin}/api`:'http://localhost:8000/api';
+  const state={baseUrl:localStorage.getItem('powersim.applicationApi')||sameOrigin,runId:null};
   async function request(path,method,body){
     const response=await fetch(state.baseUrl.replace(/\/$/,'')+path,{method:method||'GET',headers:{'Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});
     if(!response.ok) throw new Error(`Application API ${method||'GET'} ${path}: HTTP ${response.status}`);
