@@ -20,7 +20,18 @@ powersim = "powersim.cli.main:main"
 version = {attr = "powersim.version.__version__"}
 
 [tool.setuptools.packages.find]
-where = ["src"]
+where = ["src", "."]
+include = ["powersim*", "solver*"]
+
+[tool.setuptools.data-files]
+"powersim/ui" = [
+  "html/PowerSim_v4.html",
+  "html/gse_load_2026_2030.js",
+  "html/powersim_ai_chat.css",
+  "html/powersim_ai_chat.js",
+  "html/powersim_ror_autobind_2026.js",
+  "html/powersim_ror_profiles_2026.js",
+]
 
 [tool.pytest.ini_options]
 pythonpath = ["src", "."]
