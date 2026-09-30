@@ -148,5 +148,95 @@
     if(typeof window.buildInputPayload!=='function') throw new Error('The PowerSim editor is not loaded');
     return saveProject(projectFromLegacyPayload(window.buildInputPayload(),projectId));
   }
-  window.PowerSimApplicationAPI={setBaseUrl,saveProject,createRun,launch,status,result,compare,projectFromLegacyPayload,submitCurrentUiProject,get state(){return {...state};}};
+  function showBackendResult(envelope){
+    if(!envelope || !envelope.results) throw new Error('Backend returned no canonical result payload');
+    if(envelope.validity!=='valid' || envelope.qa?.status!=='pass'){
+      throw new Error(`Backend result is not publishable (validity=${envelope.validity||'unknown'}, QA=${envelope.qa?.status||'unknown'})`);
+    }
+    window.STATE.results=envelope.results;
+    if(typeof window.renderWorkflowSteps==='function') window.renderWorkflowSteps();
+    if(typeof window.goTab==='function') window.goTab('results');
+    if(typeof window.renderResults==='function') window.renderResults();
+    if(typeof window.renderReports==='function') try{window.renderReports();}catch(error){console.warn('Reports render skipped:',error);}
+  }
+  function setRunStatus(message,kind){
+    const target=document.getElementById('powersim-backend-status');
+    if(target){target.textContent=message;target.dataset.kind=kind||'info';}
+  }
+  async function runCurrentUiStudy(){
+    const validation=typeof window.runValidation==='function'?window.runValidation():{errors:[]};
+    if(validation.errors?.length) throw new Error('Correct UI validation errors before launching the backend');
+    setRunStatus('პროექტი ინახება...','info');
+    const saved=await submitCurrentUiProject();
+    setRunStatus('run იქმნება...','info');
+    const run=await createRun(saved.project_id);
+    setRunStatus('solver მუშაობს...','info');
+    const launched=await launch(run.id);
+    if(!launched.accepted) throw new Error(launched.reason||'Backend did not accept the run');
+    const envelope=await result(run.id);
+    showBackendResult(envelope);
+    setRunStatus(`დასრულდა - QA: ${envelope.qa.status}; გამოქვეყნებადი: ${envelope.validity==='valid'?'დიახ':'არა'}`,'ok');
+    return {run:launched.run,result:envelope};
+  }
+  function compactBackendDemo(projectId){
+    const demand=Array.from({length:8760},()=>20);
+    const legacyPayload={
+      metadata:{study_year:2026,timezone:'Asia/Tbilisi',description:'PowerSim compact backend demonstration'},
+      resolution_min:60,
+      study_horizon:{start_hour:0,horizon_hours:4,mode:'full'},
+      profiles:{demand},
+      assets:[
+        {id:'demo_thermal',name:'Demo thermal',type:'thermal',committable:true,pmin:0,pmax:30,
+         heat_rate:0,fuel_price:0,vom:10,startup_cost:0,no_load_cost:0,ramp_up:30,ramp_down:30,
+         min_up:0,min_down:0,initial_status:1,initial_power:20},
+        {id:'demo_import',name:'Demo import',type:'import',pmax:30,vom:100}
+      ],
+      reserve_products:[],gas_constraints:{mode:'annual',unit:'Mm3',applies_to:[],annual:{cap:0}},
+      solver_settings:{mip_gap:0.005,time_limit_s:30,rolling_window_h:168,rolling_step_h:24,unserved_penalty:3000,solver:'auto'}
+    };
+    return projectFromLegacyPayload(legacyPayload,projectId||`backend-demo-${Date.now()}`);
+  }
+  async function runCompactBackendDemo(){
+    setRunStatus('სატესტო პროექტი ინახება...','info');
+    const saved=await saveProject(compactBackendDemo());
+    const run=await createRun(saved.project_id);
+    setRunStatus('solver მუშაობს...','info');
+    const launched=await launch(run.id);
+    if(!launched.accepted) throw new Error(launched.reason||'Backend did not accept the run');
+    const envelope=await result(run.id);
+    showBackendResult(envelope);
+    setRunStatus(`სატესტო გამოთვლა დასრულდა - QA: ${envelope.qa.status}; გამოქვეყნებადი: ${envelope.validity==='valid'?'დიახ':'არა'}`,'ok');
+    return {run:launched.run,result:envelope};
+  }
+  function installVisibleApplicationControls(){
+    if(typeof document==='undefined'||typeof document.getElementById!=='function'||typeof document.querySelector!=='function') return;
+    if(document.getElementById('powersim-backend-run')) return;
+    const actions=document.querySelector('#pane-workflow .lpanel .bgrp');
+    if(!actions) return;
+    const button=document.createElement('button');
+    button.id='powersim-backend-run'; button.className='btn btn-p'; button.type='button';
+    button.textContent='▶ Backend გამოთვლა';
+    button.addEventListener('click',async()=>{
+      button.disabled=true;
+      try{await runCurrentUiStudy();}
+      catch(error){setRunStatus(`შეცდომა: ${error.message}`,'error'); if(typeof window.showBanner==='function') window.showBanner(`❌ Backend: ${error.message}`,'r',8000);}
+      finally{button.disabled=false;}
+    });
+    const demo=document.createElement('button');
+    demo.id='powersim-backend-demo'; demo.className='btn btn-b'; demo.type='button';
+    demo.textContent='⚡ Backend Mini Demo';
+    demo.addEventListener('click',async()=>{
+      demo.disabled=true;
+      try{await runCompactBackendDemo();}
+      catch(error){setRunStatus(`შეცდომა: ${error.message}`,'error'); if(typeof window.showBanner==='function') window.showBanner(`❌ Backend: ${error.message}`,'r',8000);}
+      finally{demo.disabled=false;}
+    });
+    const status=document.createElement('div');
+    status.id='powersim-backend-status'; status.style.cssText='font-size:9px;color:var(--t2);line-height:1.4';
+    status.textContent='ადგილობრივი API: მზად';
+    actions.append(button,demo,status);
+  }
+  window.PowerSimApplicationAPI={setBaseUrl,saveProject,createRun,launch,status,result,compare,projectFromLegacyPayload,submitCurrentUiProject,runCurrentUiStudy,compactBackendDemo,runCompactBackendDemo,showBackendResult,installVisibleApplicationControls,get state(){return {...state};}};
+  document.addEventListener('DOMContentLoaded',installVisibleApplicationControls);
+  installVisibleApplicationControls();
 })();
