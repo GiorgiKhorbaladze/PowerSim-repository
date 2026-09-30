@@ -8,7 +8,7 @@ dynamic = ["version"]
 description = "PowerSim power-system planning contracts and tools"
 readme = "README.md"
 requires-python = ">=3.10,<3.13"
-dependencies = ["pydantic>=2.7,<3"]
+dependencies = ["pydantic>=2.7,<3", "fastapi>=0.110", "uvicorn>=0.27", "pyomo>=6.7", "highspy>=1.7", "numpy>=1.24", "pandas>=2.0", "openpyxl>=3.1", "xlsxwriter>=3.1"]
 
 [project.optional-dependencies]
 test = ["pytest>=8"]
@@ -24,4 +24,3 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src", "."]
-
