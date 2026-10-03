@@ -11,7 +11,7 @@ from powersim.platform import RunManager
 
 def _default_static_dir() -> Path:
     """Locate the UI both from a source checkout and an installed wheel."""
-    source_assets = Path(__file__).resolve().parents[2] / "html"
+    frozen_assets = Path(getattr(sys, "_MEIPASS", "")) / "html"\n    if frozen_assets.is_dir():\n        return frozen_assets\n    source_assets = Path(__file__).resolve().parents[2] / "html"
     if source_assets.is_dir():
         return source_assets
     installed_assets = Path(sysconfig.get_path("data")) / "powersim" / "ui"
