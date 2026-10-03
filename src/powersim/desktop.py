@@ -1,7 +1,7 @@
 """Windows-friendly local PowerSim launcher.
 
 The frozen executable starts the same server and executor as ``powersim
-serve``.  It deliberately contains no alternative solver implementation.
+serve``. It deliberately contains no alternative solver implementation.
 """
 from __future__ import annotations
 
@@ -51,7 +51,13 @@ def main(argv: list[str] | None = None) -> int:
             Timer(0.8, lambda: webbrowser.open(f"http://{args.host}:{port}/", new=1)).start()
         import uvicorn
         from powersim.server import create_application
-        uvicorn.run(\n            create_application(workspace),\n            host=args.host,\n            port=port,\n            log_config=None,\n            access_log=False,\n        )
+        uvicorn.run(
+            create_application(workspace),
+            host=args.host,
+            port=port,
+            log_config=None,
+            access_log=False,
+        )
     except BaseException as error:
         _record_startup_error(workspace, error)
         return 1
