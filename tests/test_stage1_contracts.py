@@ -35,7 +35,7 @@ def test_roundtrip_schema_and_status_separation():
     assert ProjectContract.model_validate_json(p.model_dump_json()) == p
     for model in (ProjectContract, ResolvedInputContract, SolverDiagnostics, ResultEnvelope, QAReport, RunContract):
         assert model.model_json_schema()["type"] == "object"
-    assert {e.value for e in SolverStatus} == {"optimal","feasible","time_limit","infeasible","unbounded","numerical_error","solver_error"}
+    assert {e.value for e in SolverStatus} == {"optimal","feasible","time_limit","infeasible","unbounded","numerical_error","solver_error","completed"}
     assert set(QAStatus) != set(RunStatus)
 
 def test_single_authoritative_contract_version():
@@ -59,6 +59,7 @@ def test_diagnostics_null_and_consistency():
     ("infeasible", True, "invalid", False), ("unbounded", False, "invalid", True),
     ("numerical_error", False, "invalid", True), ("numerical_error", True, "valid", False),
     ("solver_error", False, "invalid", True), ("solver_error", True, "invalid", False),
+    ("completed", False, "valid", True),
 ])
 def test_complete_solver_status_matrix(status, incumbent, validity, accepted):
     kwargs = dict(backend="test", termination_condition=status, normalized_status=status,
