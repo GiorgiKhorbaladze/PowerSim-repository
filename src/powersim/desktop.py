@@ -1,12 +1,14 @@
 """Windows-friendly local PowerSim launcher.
 
-The frozen executable starts the same server and executor as ``powersim
-serve``. It deliberately contains no alternative solver implementation.
+The frozen executable starts the same server and executor as the serve CLI.
+It deliberately contains no alternative solver implementation.
 """
 from __future__ import annotations
 
 import argparse
+import os
 import socket
+import sys
 import traceback
 import webbrowser
 from pathlib import Path
@@ -23,6 +25,19 @@ def _workspace() -> Path:
     base = Path.home() / "PowerSimWorkspace"
     base.mkdir(parents=True, exist_ok=True)
     return base
+
+
+def _ensure_standard_streams() -> None:
+    """Supply writable streams for a PyInstaller windowed process.
+
+    Some native solver bindings call flush even when solver logging is
+    disabled. PyInstaller's windowed mode sets the standard streams to None;
+    directing those writes to the OS null device preserves the real solver
+    execution path without opening a command prompt for desktop users.
+    """
+    for name in ("stdout", "stderr"):
+        if getattr(sys, name, None) is None:
+            setattr(sys, name, open(os.devnull, "w", encoding="utf-8"))
 
 
 def _record_startup_error(workspace: Path, error: BaseException) -> None:
@@ -45,6 +60,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--no-browser", action="store_true")
     args = parser.parse_args(argv)
     workspace = args.workspace
+    _ensure_standard_streams()
     try:
         port = args.port or _available_port(args.host)
         if not args.no_browser:

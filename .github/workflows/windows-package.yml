@@ -21,7 +21,7 @@ jobs:
       - name: Build portable executable and installer
         shell: pwsh
         run: ./packaging/windows/build.ps1
-      - name: Verify portable application starts locally
+      - name: Verify portable application starts and solves locally
         shell: pwsh
         run: |
           $workspace = Join-Path $env:RUNNER_TEMP "powersim-workspace"
@@ -35,6 +35,22 @@ jobs:
               $errorLog = Join-Path $workspace "startup-error.log"
               if (Test-Path $errorLog) { Get-Content $errorLog }
               throw "Packaged PowerSim did not respond on localhost"
+            }
+            $project = Get-Content "samples/application_compact_demo.json" -Raw
+            $saved = Invoke-RestMethod -Uri http://127.0.0.1:8765/api/projects -Method Post -ContentType "application/json" -Body $project
+            $run = Invoke-RestMethod -Uri "http://127.0.0.1:8765/api/projects/$($saved.project_id)/runs" -Method Post
+            $launch = Invoke-RestMethod -Uri "http://127.0.0.1:8765/api/runs/$($run.id)/launch" -Method Post
+            if (-not $launch.accepted -or -not $launch.queued) { throw "Packaged PowerSim did not queue the compact solve" }
+            $solveDeadline = (Get-Date).AddSeconds(60)
+            do {
+              Start-Sleep -Milliseconds 250
+              $status = Invoke-RestMethod -Uri "http://127.0.0.1:8765/api/runs/$($run.id)"
+            } while ($status.status -notin @("completed", "failed") -and (Get-Date) -lt $solveDeadline)
+            if ($status.status -ne "completed") { throw "Packaged PowerSim compact solve did not complete: $($status.status)" }
+            $result = Invoke-RestMethod -Uri "http://127.0.0.1:8765/api/runs/$($run.id)/result"
+            Write-Host ("Packaged result: " + ($result | ConvertTo-Json -Depth 8 -Compress))
+            if ($result.qa.status -ne "pass" -or $result.validity -ne "valid") {
+              throw "Packaged PowerSim compact solve was not publishable"
             }
           } finally {
             Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
