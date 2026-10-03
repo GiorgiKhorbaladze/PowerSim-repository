@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import copy
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import Field, model_validator
 
@@ -77,14 +77,15 @@ class ProjectVersionContract(ContractModel):
 
 
 class ScenarioContract(ContractModel):
-    id: str
+    id: str = Field(min_length=1, max_length=128, pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
     name: str | None = None
     overlay: FrozenDict = Field(default_factory=FrozenDict)
 
 
 class ProjectContract(ContractModel):
     contract_version: str = CONTRACT_VERSION
-    id: str
+    id: str = Field(min_length=1, max_length=128, pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
+    workflow: Literal["deterministic_uc", "stochastic_uc", "security_scuc", "chronological_adequacy", "scoped_expansion"] = "deterministic_uc"
     version: ProjectVersionContract
     metadata: dict[str, Any] = Field(default_factory=dict)
     units: UnitSystem
