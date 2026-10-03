@@ -145,9 +145,13 @@ def run_registered_workflow(workflow: dict[str, Any], run_id: str,
     return _native_workflow_envelope(native, workflow_id, run_id, snapshot_fingerprint)
 
 
-class DeterministicLocalSolverExecutor(LocalWorkflowExecutor):
-    """Backward-compatible production executor for every registered workflow."""
+class RegisteredLocalWorkflowExecutor(LocalWorkflowExecutor):
+    """Production executor for every validated workflow in the registry."""
     def __init__(self):
         def registered(workflow: dict[str, Any], run_id: str, fingerprint: str) -> ResultEnvelope:
             return run_registered_workflow(workflow, run_id, fingerprint)
         super().__init__(registered)
+
+
+class DeterministicLocalSolverExecutor(RegisteredLocalWorkflowExecutor):
+    """Deprecated name retained for callers created before workflow selection."""
