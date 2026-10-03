@@ -1,0 +1,70 @@
+{
+  "id": "application-compact-demo",
+  "version": {"revision": 1},
+  "workflow": "deterministic_uc",
+  "units": {"currency": "USD"},
+  "time": {
+    "timezone": "UTC",
+    "study_year": 2026,
+    "resolution_minutes": 60,
+    "interval_duration_hours": 1,
+    "start": "2026-01-01T00:00:00Z",
+    "periods": 4,
+    "calendar_policy": "explicit_periods"
+  },
+  "assets": [
+    {
+      "id": "thermal",
+      "kind": "thermal",
+      "capacity_min_mw": 0,
+      "capacity_max_mw": 30,
+      "legacy_extensions": {
+        "id": "thermal",
+        "type": "thermal",
+        "pmin": 0,
+        "pmax": 30,
+        "committable": false,
+        "heat_rate": 0,
+        "fuel_price": 0,
+        "vom": 10,
+        "ramp_up": 30,
+        "ramp_down": 30
+      }
+    },
+    {
+      "id": "import",
+      "kind": "import",
+      "capacity_max_mw": 30,
+      "legacy_extensions": {
+        "id": "import",
+        "type": "import",
+        "pmax": 30,
+        "vom": 100
+      }
+    }
+  ],
+  "profiles": [
+    {"id": "demand", "unit": "MW", "values": [20, 20, 20, 20]}
+  ],
+  "legacy_payload": {
+    "resolution_min": 60,
+    "profiles": {"demand": [20, 20, 20, 20]},
+    "study_horizon": {"start_hour": 0, "horizon_hours": 4},
+    "assets": [
+      {
+        "id": "thermal",
+        "type": "thermal",
+        "pmin": 0,
+        "pmax": 30,
+        "committable": false,
+        "heat_rate": 0,
+        "fuel_price": 0,
+        "vom": 10,
+        "ramp_up": 30,
+        "ramp_down": 30
+      },
+      {"id": "import", "type": "import", "pmax": 30, "vom": 100}
+    ],
+    "solver_settings": {"solver": "highs", "time_limit_s": 30}
+  }
+}
