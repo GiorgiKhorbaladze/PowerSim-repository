@@ -26,6 +26,7 @@ def test_ui_loads_solver_free_application_api_connector():
         assert operation in source
     assert "powersim-backend-run" in source
     assert "powersim-backend-demo" in source
+    assert "patchChartFactory" in source
     assert "powersim_solver" not in source
     assert "pyomo" not in source.lower()
 
