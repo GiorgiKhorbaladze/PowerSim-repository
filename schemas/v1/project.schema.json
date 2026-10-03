@@ -358,6 +358,9 @@
       "additionalProperties": false,
       "properties": {
         "id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
           "title": "Id",
           "type": "string"
         },
@@ -512,6 +515,9 @@
       "type": "string"
     },
     "id": {
+      "maxLength": 128,
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
       "title": "Id",
       "type": "string"
     },
@@ -571,6 +577,18 @@
     },
     "version": {
       "$ref": "#/$defs/ProjectVersionContract"
+    },
+    "workflow": {
+      "default": "deterministic_uc",
+      "enum": [
+        "deterministic_uc",
+        "stochastic_uc",
+        "security_scuc",
+        "chronological_adequacy",
+        "scoped_expansion"
+      ],
+      "title": "Workflow",
+      "type": "string"
     }
   },
   "required": [
