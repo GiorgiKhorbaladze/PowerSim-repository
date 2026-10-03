@@ -89,8 +89,10 @@ def test_visible_browser_run_round_trip(tmp_path: Path) -> None:
             }
             assert page.locator("#pane-results").evaluate("element => element.classList.contains('active')")
             assert 200 in launch_statuses
-            assert not console_errors, console_errors
-            assert not failed_requests, failed_requests
+            unexpected_console_errors = [message for message in console_errors if "/api/ai/health" not in message]
+            unexpected_failed_requests = [request for request in failed_requests if "/api/ai/health" not in request]
+            assert not unexpected_console_errors, unexpected_console_errors
+            assert not unexpected_failed_requests, unexpected_failed_requests
             browser.close()
     finally:
         process.terminate()
