@@ -39,7 +39,9 @@ def test_workflow_adapter_detaches_immutable_compatibility_payload(tmp_path):
         'legacy_payload': {'metadata': {'legacy': True}, 'assets': [{'id': 'stale'}]},
     })
     run=manager.create_run(manager.save_project(project))
-    resolved=manager.get_resolved_input(run.id)
+    resolved=ResolvedInputContract.model_validate_json(
+        (manager._run_dir(run.id) / 'resolved_input.json').read_text(encoding='utf-8')
+    )
     workflow=resolved_to_workflow_input(resolved)
     workflow['metadata']['legacy']=False
     workflow['metadata']['new']='solver-private'
