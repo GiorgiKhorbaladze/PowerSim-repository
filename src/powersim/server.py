@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import sys
 import sysconfig
 
 from powersim.application import ApplicationService, build_fastapi_app
@@ -11,7 +12,10 @@ from powersim.platform import RunManager
 
 def _default_static_dir() -> Path:
     """Locate the UI both from a source checkout and an installed wheel."""
-    frozen_assets = Path(getattr(sys, "_MEIPASS", "")) / "html"\n    if frozen_assets.is_dir():\n        return frozen_assets\n    source_assets = Path(__file__).resolve().parents[2] / "html"
+    frozen_assets = Path(getattr(sys, "_MEIPASS", "")) / "html"
+    if frozen_assets.is_dir():
+        return frozen_assets
+    source_assets = Path(__file__).resolve().parents[2] / "html"
     if source_assets.is_dir():
         return source_assets
     installed_assets = Path(sysconfig.get_path("data")) / "powersim" / "ui"
@@ -36,12 +40,7 @@ def create_application(workspace: str | Path, static_dir: str | Path | None = No
 
     @app.get("/api/ai/health", include_in_schema=False)
     def optional_ai_health():
-        """Report the bundled UI's optional AI service as unavailable.
-
-        The local planning application has no embedded AI backend.  Returning
-        a truthful 200 response avoids a browser network error from the
-        optional widget while keeping its status offline.
-        """
+        """Report the bundled UI's optional AI service as unavailable."""
         return {"available": False, "reason": "optional AI backend is not configured"}
 
     app.mount("/api", build_fastapi_app(service))
