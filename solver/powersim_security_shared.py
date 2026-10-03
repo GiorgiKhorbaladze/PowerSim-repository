@@ -21,9 +21,14 @@ if str(HERE) not in sys.path:
 from powersim.contracts import QACheckResult, QAReport, QAStatus
 from powersim.results import evaluate_publication, finalized_diagnostics
 from powersim.solvers import solve_model
-from powersim_solver import (build_asset_map, build_gas_limits, build_result_store,
-                              extract_window_solution, normalize_dc_network,
-                              slice_profiles, solve_window)
+if __package__:  # Installed package path.
+    from .powersim_solver import (build_asset_map, build_gas_limits, build_result_store,
+                                  extract_window_solution, normalize_dc_network,
+                                  slice_profiles, solve_window)
+else:  # Compatibility for direct historical script execution.
+    from powersim_solver import (build_asset_map, build_gas_limits, build_result_store,
+                                 extract_window_solution, normalize_dc_network,
+                                 slice_profiles, solve_window)
 
 
 SUPPORTED_KINDS = {"unit_outage", "import_outage", "line_outage"}
