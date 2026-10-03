@@ -13,6 +13,7 @@ class SolverStatus(str, Enum):
     UNBOUNDED = "unbounded"
     NUMERICAL_ERROR = "numerical_error"
     SOLVER_ERROR = "solver_error"
+    COMPLETED = "completed"
 
 
 class ResultValidity(str, Enum):
@@ -51,7 +52,7 @@ class SolverDiagnostics(ContractModel):
     @model_validator(mode="after")
     def incumbent_consistency(self) -> "SolverDiagnostics":
         status = self.normalized_status
-        if status in {SolverStatus.OPTIMAL, SolverStatus.FEASIBLE} and not self.has_incumbent:
+        if status in {SolverStatus.OPTIMAL, SolverStatus.FEASIBLE, SolverStatus.COMPLETED} and not self.has_incumbent:
             raise ValueError(f"{status.value} requires an incumbent")
         no_incumbent_statuses = {
             SolverStatus.INFEASIBLE, SolverStatus.UNBOUNDED,
@@ -59,7 +60,9 @@ class SolverDiagnostics(ContractModel):
         }
         if status in no_incumbent_statuses and self.has_incumbent:
             raise ValueError(f"{status.value} cannot declare an incumbent")
-        if not self.has_incumbent:
+        # Completed adequacy/screening workflows do not have a MIP incumbent.
+        # Their canonical QA/publication result is still represented truthfully.
+        if not self.has_incumbent and status != SolverStatus.COMPLETED:
             if self.incumbent_objective is not None:
                 raise ValueError("incumbent_objective requires has_incumbent=true")
             if self.actual_mip_gap is not None:
