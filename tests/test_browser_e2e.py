@@ -1,4 +1,4 @@
-"""Browser-hosted acceptance of the same-origin PowerSim application.
+"""Browser-hosted acceptance of the same-origin queued PowerSim application.
 
 The test deliberately clicks the visible backend demonstration control.  It
 therefore covers browser -> API -> RunManager -> local solver -> canonical QA
