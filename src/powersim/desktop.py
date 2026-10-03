@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import argparse
 import socket
+import traceback
 import webbrowser
 from pathlib import Path
 from threading import Timer
@@ -24,6 +25,18 @@ def _workspace() -> Path:
     return base
 
 
+def _record_startup_error(workspace: Path, error: BaseException) -> None:
+    """Keep a diagnosable error trail for the windowed executable."""
+    try:
+        workspace.mkdir(parents=True, exist_ok=True)
+        (workspace / "startup-error.log").write_text(
+            "".join(traceback.format_exception(error)),
+            encoding="utf-8",
+        )
+    except OSError:
+        pass
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="PowerSim")
     parser.add_argument("--workspace", type=Path, default=_workspace())
@@ -31,12 +44,17 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--port", type=int)
     parser.add_argument("--no-browser", action="store_true")
     args = parser.parse_args(argv)
-    port = args.port or _available_port(args.host)
-    if not args.no_browser:
-        Timer(0.8, lambda: webbrowser.open(f"http://{args.host}:{port}/", new=1)).start()
-    import uvicorn
-    from powersim.server import create_application
-    uvicorn.run(create_application(args.workspace), host=args.host, port=port)
+    workspace = args.workspace
+    try:
+        port = args.port or _available_port(args.host)
+        if not args.no_browser:
+            Timer(0.8, lambda: webbrowser.open(f"http://{args.host}:{port}/", new=1)).start()
+        import uvicorn
+        from powersim.server import create_application
+        uvicorn.run(create_application(workspace), host=args.host, port=port)
+    except BaseException as error:
+        _record_startup_error(workspace, error)
+        return 1
     return 0
 
 
