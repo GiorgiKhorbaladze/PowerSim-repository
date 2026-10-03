@@ -1,4 +1,5 @@
 from datetime import datetime
+import time
 from powersim.application import ApplicationService
 from powersim.platform import RunManager
 from powersim.contracts import *
@@ -22,6 +23,10 @@ def test_local_executor_persists_only_matching_gated_result(tmp_path):
     service=ApplicationService(manager,LocalWorkflowExecutor(runner))
     run=service.create_run(service.save_project(payload())['project_id'])
     launched=service.launch(run['id'])
-    assert launched['accepted'] and launched['run']['status']=='completed'
+    assert launched['accepted'] and launched['run']['status']=='queued'
+    deadline=time.monotonic()+5
+    while service.run_status(run['id'])['status'] not in {'completed','failed'} and time.monotonic()<deadline:
+        time.sleep(.01)
+    assert service.run_status(run['id'])['status']=='completed'
     assert service.result(run['id'])['results']=={'ok':True}
     assert manager.verify_run(run['id'])['valid']
