@@ -20,7 +20,7 @@ from powersim.version import CONTRACT_VERSION, PRODUCT_VERSION, WORKFLOW_MODEL_V
 
 _ALLOWED = {
     RunStatus.DRAFT:{RunStatus.VALIDATING,RunStatus.CANCELLED}, RunStatus.VALIDATING:{RunStatus.QUEUED,RunStatus.FAILED,RunStatus.CANCELLED},
-    RunStatus.QUEUED:{RunStatus.PREPARING,RunStatus.CANCELLED}, RunStatus.PREPARING:{RunStatus.SOLVING,RunStatus.FAILED,RunStatus.CANCELLED},
+    RunStatus.QUEUED:{RunStatus.PREPARING,RunStatus.FAILED,RunStatus.CANCELLED}, RunStatus.PREPARING:{RunStatus.SOLVING,RunStatus.FAILED,RunStatus.CANCELLED},
     RunStatus.SOLVING:{RunStatus.VALIDATING_RESULTS,RunStatus.FAILED,RunStatus.CANCELLED}, RunStatus.VALIDATING_RESULTS:{RunStatus.REPORTING,RunStatus.FAILED},
     RunStatus.REPORTING:{RunStatus.COMPLETED,RunStatus.FAILED}, RunStatus.COMPLETED:set(), RunStatus.FAILED:set(), RunStatus.CANCELLED:set(),
 }
