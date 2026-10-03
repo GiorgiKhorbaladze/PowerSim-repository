@@ -254,7 +254,22 @@
     status.textContent='ადგილობრივი API: მზად';
     actions.append(button,demo,status);
   }
-  window.PowerSimApplicationAPI={setBaseUrl,saveProject,createRun,launch,status,result,compare,waitForCompletion,projectFromLegacyPayload,submitCurrentUiProject,runCurrentUiStudy,compactBackendDemo,runCompactBackendDemo,showBackendResult,installVisibleApplicationControls,get state(){return {...state};}};
-  document.addEventListener('DOMContentLoaded',installVisibleApplicationControls);
+  function patchChartFactory(){
+    // ApexCharts rejects `tooltip.shared` when `tooltip.intersect` is left at
+    // its default true.  Backend results must render even when an older static
+    // chart configuration omitted that companion option.
+    if(typeof window.mkChart!=='function'||window.mkChart.__powersimTooltipPatched) return;
+    const original=window.mkChart;
+    window.mkChart=function(target,options){
+      if(options?.tooltip?.shared===true&&options.tooltip.intersect===undefined){
+        options={...options,tooltip:{...options.tooltip,intersect:false}};
+      }
+      return original.call(this,target,options);
+    };
+    window.mkChart.__powersimTooltipPatched=true;
+  }
+  window.PowerSimApplicationAPI={setBaseUrl,saveProject,createRun,launch,status,result,compare,waitForCompletion,projectFromLegacyPayload,submitCurrentUiProject,runCurrentUiStudy,compactBackendDemo,runCompactBackendDemo,showBackendResult,installVisibleApplicationControls,patchChartFactory,get state(){return {...state};}};
+  document.addEventListener('DOMContentLoaded',()=>{patchChartFactory();installVisibleApplicationControls();});
+  patchChartFactory();
   installVisibleApplicationControls();
 })();

@@ -21,7 +21,7 @@ def _default_static_dir() -> Path:
 def create_application(workspace: str | Path, static_dir: str | Path | None = None):
     """Serve the UI and API together with the validated local executor."""
     from fastapi import FastAPI
-    from fastapi.responses import FileResponse
+    from fastapi.responses import HTMLResponse
     from fastapi.staticfiles import StaticFiles
 
     workspace = Path(workspace).resolve()
@@ -33,11 +33,31 @@ def create_application(workspace: str | Path, static_dir: str | Path | None = No
         raise RuntimeError(f"PowerSim UI asset is unavailable: {entrypoint}")
     app = FastAPI(title="PowerSim", version="1.0")
     service = ApplicationService(RunManager(workspace), RegisteredLocalWorkflowExecutor())
+
+    @app.get("/api/ai/health", include_in_schema=False)
+    def optional_ai_health():
+        """Report the bundled UI's optional AI service as unavailable.
+
+        The local planning application has no embedded AI backend.  Returning
+        a truthful 200 response avoids a browser network error from the
+        optional widget while keeping its status offline.
+        """
+        return {"available": False, "reason": "optional AI backend is not configured"}
+
     app.mount("/api", build_fastapi_app(service))
 
     @app.get("/", include_in_schema=False)
     def ui():
-        return FileResponse(entrypoint)
+        # The historical static UI predates same-origin serving and defaults
+        # its optional AI widget to localhost:8000.  Make its default current
+        # origin at serve time, then let the explicit unavailable health route
+        # keep the widget honest without producing a failed browser request.
+        html = entrypoint.read_text(encoding="utf-8")
+        html = html.replace("const DEFAULT_URL = 'http://localhost:8000';",
+                            "const DEFAULT_URL = window.location.origin;")
+        html = html.replace("try{ const r = await fetch(state.backendUrl + '/api/ai/health', {cache:'no-store'}); setStatus(r.ok, r.ok?'online':'offline'); }",
+                            "try{ const r = await fetch(state.backendUrl + '/api/ai/health', {cache:'no-store'}); const body = r.ok ? await r.json() : {}; const available = r.ok && body.available === true; setStatus(available, available?'online':'offline'); }")
+        return HTMLResponse(html)
 
     app.mount("/", StaticFiles(directory=static_dir, html=False), name="ui-assets")
     return app
