@@ -128,7 +128,11 @@
       latest=await status(runId);
       setRunStatus(`run: ${latest.status}`,'info');
       if(latest.status==='completed') return latest;
-      if(latest.status==='failed'||latest.status==='cancelled') throw new Error(`Backend run ended with status ${latest.status}`);
+      if(latest.status==='failed'||latest.status==='cancelled'){
+        const event=(latest.events||[]).at(-1)||{};
+        const detail=event.details?.error ? `: ${event.details.error}` : '';
+        throw new Error(`Backend run ended with status ${latest.status}${detail}`);
+      }
       await new Promise(resolve=>setTimeout(resolve,500));
     }
     throw new Error('Backend run did not complete before the UI timeout');
