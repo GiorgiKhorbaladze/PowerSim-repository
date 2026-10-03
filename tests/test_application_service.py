@@ -30,3 +30,21 @@ def test_local_executor_persists_only_matching_gated_result(tmp_path):
     assert service.run_status(run['id'])['status']=='completed'
     assert service.result(run['id'])['results']=={'ok':True}
     assert manager.verify_run(run['id'])['valid']
+
+
+def test_workflow_adapter_detaches_immutable_compatibility_payload(tmp_path):
+    manager=RunManager(tmp_path)
+    project=ProjectContract.model_validate({
+        **payload(),
+        'legacy_payload': {'metadata': {'legacy': True}, 'assets': [{'id': 'stale'}]},
+    })
+    manager.save_project(project)
+    run=manager.create_run(project.id)
+    resolved=ResolvedInputContract.model_validate_json(
+        (manager._run_dir(run.id) / 'resolved_input.json').read_text(encoding='utf-8')
+    )
+    workflow=resolved_to_workflow_input(resolved)
+    workflow['metadata']['legacy']=False
+    workflow['metadata']['new']='solver-private'
+    assert resolved.legacy_payload['metadata']['legacy'] is True
+    assert 'new' not in resolved.metadata
