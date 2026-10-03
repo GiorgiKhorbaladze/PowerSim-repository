@@ -11,7 +11,7 @@ AppVersion={#AppVersion}
 AppPublisher={#AppPublisher}
 DefaultDirName={autopf}\{#AppName}
 DefaultGroupName={#AppName}
-OutputDir=dist\installer
+OutputDir=..\..\dist\installer
 OutputBaseFilename=PowerSim-{#AppVersion}-Windows-x64-Setup
 Compression=lzma2
 SolidCompression=yes
@@ -20,7 +20,7 @@ ArchitecturesInstallIn64BitMode=x64compatible
 UninstallDisplayName={#AppName}
 
 [Files]
-Source: "dist\PowerSim\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\..\dist\PowerSim\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
 Name: "{group}\PowerSim"; Filename: "{app}\{#AppExeName}"
