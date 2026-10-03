@@ -64,8 +64,11 @@ def test_visible_browser_run_round_trip(tmp_path: Path) -> None:
             page = browser.new_page()
             console_errors: list[str] = []
             failed_requests: list[str] = []
+            launch_statuses: list[int] = []
             page.on("console", lambda msg: console_errors.append(msg.text) if msg.type == "error" else None)
             page.on("requestfailed", lambda request: failed_requests.append(request.url))
+            page.on("response", lambda response: launch_statuses.append(response.status)
+                    if response.url.endswith("/launch") else None)
             page.goto(url, wait_until="networkidle")
             demo = page.locator("#powersim-backend-demo")
             demo.wait_for(state="attached")
@@ -85,6 +88,7 @@ def test_visible_browser_run_round_trip(tmp_path: Path) -> None:
                 "failed_requests": failed_requests,
             }
             assert page.locator("#pane-results").evaluate("element => element.classList.contains('active')")
+            assert 200 in launch_statuses
             assert not console_errors, console_errors
             assert not failed_requests, failed_requests
             browser.close()
