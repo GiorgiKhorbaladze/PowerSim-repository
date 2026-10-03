@@ -48,7 +48,7 @@ jobs:
             } while ($status.status -notin @("completed", "failed") -and (Get-Date) -lt $solveDeadline)
             if ($status.status -ne "completed") { throw "Packaged PowerSim compact solve did not complete: $($status.status)" }
             $result = Invoke-RestMethod -Uri "http://127.0.0.1:8765/api/runs/$($run.id)/result"
-            if ($result.qa.status -ne "pass" -or $result.validity -ne "valid") {
+            Write-Host ("Packaged result: " + ($result | ConvertTo-Json -Depth 8 -Compress))\n            if ($result.qa.status -ne "pass" -or $result.validity -ne "valid") {
               throw "Packaged PowerSim compact solve was not publishable"
             }
           } finally {
