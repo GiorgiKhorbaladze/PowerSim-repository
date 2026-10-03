@@ -1,4 +1,5 @@
 from datetime import datetime
+import time
 from powersim.application import ApplicationService
 from powersim.platform import RunManager
 from powersim.contracts import *
@@ -22,6 +23,25 @@ def test_local_executor_persists_only_matching_gated_result(tmp_path):
     service=ApplicationService(manager,LocalWorkflowExecutor(runner))
     run=service.create_run(service.save_project(payload())['project_id'])
     launched=service.launch(run['id'])
-    assert launched['accepted'] and launched['run']['status']=='completed'
+    assert launched['accepted'] and launched['run']['status']=='queued'
+    deadline=time.monotonic()+5
+    while service.run_status(run['id'])['status'] not in {'completed','failed'} and time.monotonic()<deadline:
+        time.sleep(.01)
+    assert service.run_status(run['id'])['status']=='completed'
     assert service.result(run['id'])['results']=={'ok':True}
     assert manager.verify_run(run['id'])['valid']
+
+
+def test_workflow_adapter_detaches_immutable_compatibility_payload(tmp_path):
+    manager=RunManager(tmp_path)
+    project=ProjectContract.model_validate({
+        **payload(),
+        'legacy_payload': {'metadata': {'legacy': True}, 'assets': [{'id': 'stale'}]},
+    })
+    run=manager.create_run(manager.save_project(project))
+    resolved=manager.get_resolved_input(run.id)
+    workflow=resolved_to_workflow_input(resolved)
+    workflow['metadata']['legacy']=False
+    workflow['metadata']['new']='solver-private'
+    assert resolved.legacy_payload['metadata']['legacy'] is True
+    assert 'new' not in resolved.metadata
