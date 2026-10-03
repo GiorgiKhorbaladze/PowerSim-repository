@@ -12,7 +12,10 @@ import math
 from collections.abc import Mapping
 from typing import Any
 
-from powersim_expansion import plan, plan_multi_year
+if __package__:  # Installed package path.
+    from .powersim_expansion import plan, plan_multi_year
+else:  # Compatibility for direct historical script execution.
+    from powersim_expansion import plan, plan_multi_year
 
 
 class ExpansionValidationError(ValueError):
