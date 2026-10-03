@@ -52,7 +52,7 @@ class SolverDiagnostics(ContractModel):
     @model_validator(mode="after")
     def incumbent_consistency(self) -> "SolverDiagnostics":
         status = self.normalized_status
-        if status in {SolverStatus.OPTIMAL, SolverStatus.FEASIBLE, SolverStatus.COMPLETED} and not self.has_incumbent:
+        if status in {SolverStatus.OPTIMAL, SolverStatus.FEASIBLE} and not self.has_incumbent:
             raise ValueError(f"{status.value} requires an incumbent")
         no_incumbent_statuses = {
             SolverStatus.INFEASIBLE, SolverStatus.UNBOUNDED,
