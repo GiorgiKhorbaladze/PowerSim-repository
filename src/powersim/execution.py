@@ -8,9 +8,28 @@ from __future__ import annotations
 import copy
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Mapping
 
-from powersim.contracts import QAReport, ResolvedInputContract, ResultEnvelope, SolverDiagnostics
+from powersim.contracts import (QACheckResult, QAReport, QAStatus, ResolvedInputContract,
+                                ResultEnvelope, ResultValidity, SolverDiagnostics, SolverStatus)
+
+
+def _mutable_copy(value: Any) -> Any:
+    """Detach contract data before passing it to legacy workflow code.
+
+    Resolved contracts deliberately use ``FrozenDict`` recursively.  The
+    established solver normalizes compatibility input in place, so a regular
+    ``deepcopy`` is not sufficient: ``FrozenDict.__deepcopy__`` correctly
+    preserves the immutable snapshot.  This adapter is the explicit boundary
+    where that immutable JSON graph becomes a private, mutable solver input.
+    """
+    if isinstance(value, Mapping):
+        return {str(key): _mutable_copy(item) for key, item in value.items()}
+    if isinstance(value, (tuple, list)):
+        return [_mutable_copy(item) for item in value]
+    if isinstance(value, frozenset):
+        return {_mutable_copy(item) for item in value}
+    return copy.deepcopy(value)
 
 
 def resolved_to_workflow_input(resolved: ResolvedInputContract) -> dict[str, Any]:
@@ -21,26 +40,29 @@ def resolved_to_workflow_input(resolved: ResolvedInputContract) -> dict[str, Any
     reserves and solver settings are always projected from the immutable
     resolved snapshot.
     """
-    base = copy.deepcopy(dict(resolved.legacy_payload or {}))
+    base = _mutable_copy(resolved.legacy_payload or {})
     base.setdefault("metadata", {})
-    base["metadata"].update(dict(resolved.metadata))
+    base["metadata"].update(_mutable_copy(resolved.metadata))
     base["metadata"]["project_id"] = resolved.project_id
     base["metadata"]["scenario_id"] = resolved.scenario_id
+    # The typed selector, not legacy metadata, chooses the authoritative
+    # workflow registry entry.
+    base["_powersim_workflow"] = resolved.workflow
     base["metadata"]["study_year"] = resolved.time.study_year
     base["metadata"]["timezone"] = resolved.time.timezone
     base["resolution_min"] = resolved.time.resolution_minutes
     base["profiles"] = {p.id: list(p.values) for p in resolved.profiles}
     assets = []
     for asset in resolved.assets:
-        raw = copy.deepcopy(dict(asset.legacy_extensions))
+        raw = _mutable_copy(asset.legacy_extensions)
         raw.update({"id": asset.id, "type": asset.kind, "pmin": asset.capacity_min_mw,
                     "pmax": asset.capacity_max_mw, "bus": asset.bus})
         for key, value in (("availability_profile", asset.profile_references[0] if asset.profile_references else None),):
             if value is not None: raw[key] = value
         assets.append({k: v for k, v in raw.items() if v is not None})
     base["assets"] = assets
-    base["reserve_products"] = [dict(x) for x in resolved.reserve_products]
-    base["solver_settings"] = dict(resolved.solver_settings)
+    base["reserve_products"] = [_mutable_copy(x) for x in resolved.reserve_products]
+    base["solver_settings"] = _mutable_copy(resolved.solver_settings)
     if resolved.network.buses:
         base["buses"] = [b.model_dump(mode="json", exclude={"provenance"}) for b in resolved.network.buses]
     if resolved.network.branches:
@@ -87,7 +109,67 @@ def run_deterministic_workflow(workflow: dict[str, Any], run_id: str, snapshot_f
                           solver=diagnostics, qa=qa, results=raw)
 
 
-class DeterministicLocalSolverExecutor(LocalWorkflowExecutor):
-    """Production deterministic UC/ED executor using the validated solver."""
+def _native_workflow_envelope(native: dict[str, Any], workflow_id: str,
+                              run_id: str, snapshot_fingerprint: str) -> ResultEnvelope:
+    """Adapt an already-gated workflow result without inventing optimizer data."""
+    raw_diagnostics = native.get("solver_diagnostics")
+    if isinstance(raw_diagnostics, dict):
+        diagnostics = SolverDiagnostics.model_validate(raw_diagnostics)
+    else:
+        qa_data = native.get("qa") or {}
+        qa_status = QAStatus(str(qa_data.get("status", "fail")))
+        validity = ResultValidity(str(native.get("result_validity", "invalid")))
+        diagnostics = SolverDiagnostics(
+            backend=workflow_id, termination_condition="workflow_completed",
+            normalized_status=SolverStatus.COMPLETED, has_incumbent=False,
+            result_validity=validity, qa_status=qa_status,
+            metadata={"workflow": workflow_id, "optimizer_diagnostics": "not_applicable"},
+        )
+    raw_qa = native.get("qa") or {}
+    if isinstance(raw_qa, dict) and "checks" in raw_qa:
+        qa = QAReport.model_validate(raw_qa)
+    else:
+        status = QAStatus(str(raw_qa.get("status", "fail"))) if isinstance(raw_qa, dict) else QAStatus.FAIL
+        qa = QAReport(status=status, checks=[QACheckResult(
+            check_id=f"{workflow_id}.native_qa", status=status,
+            message="native workflow canonical QA result", witness=dict(raw_qa) if isinstance(raw_qa, dict) else {},
+        )])
+    return ResultEnvelope(run_id=run_id, snapshot_fingerprint=snapshot_fingerprint,
+                          created_at=datetime.now(timezone.utc), validity=diagnostics.result_validity,
+                          solver=diagnostics, qa=qa,
+                          results={"workflow_id": workflow_id, **native})
+
+
+def run_registered_workflow(workflow: dict[str, Any], run_id: str,
+                            snapshot_fingerprint: str) -> ResultEnvelope:
+    """The single application registry for already validated workflow runners."""
+    workflow_id = str(workflow.pop("_powersim_workflow", "deterministic_uc"))
+    if workflow_id == "deterministic_uc":
+        return run_deterministic_workflow(workflow, run_id, snapshot_fingerprint)
+    if workflow_id == "stochastic_uc":
+        from solver.powersim_stochastic_shared import run_stochastic_shared
+        native = run_stochastic_shared(workflow)
+    elif workflow_id == "security_scuc":
+        from solver.powersim_security_shared import run_security_shared
+        native = run_security_shared(workflow)
+    elif workflow_id == "chronological_adequacy":
+        from solver.powersim_adequacy_chronological import run_chronological_adequacy
+        native = run_chronological_adequacy(workflow)
+    elif workflow_id == "scoped_expansion":
+        from solver.powersim_expansion_scoped import run_scoped_expansion
+        native = run_scoped_expansion(workflow)
+    else:
+        raise ValueError(f"unsupported workflow: {workflow_id}")
+    return _native_workflow_envelope(native, workflow_id, run_id, snapshot_fingerprint)
+
+
+class RegisteredLocalWorkflowExecutor(LocalWorkflowExecutor):
+    """Production executor for every validated workflow in the registry."""
     def __init__(self):
-        super().__init__(run_deterministic_workflow)
+        def registered(workflow: dict[str, Any], run_id: str, fingerprint: str) -> ResultEnvelope:
+            return run_registered_workflow(workflow, run_id, fingerprint)
+        super().__init__(registered)
+
+
+class DeterministicLocalSolverExecutor(RegisteredLocalWorkflowExecutor):
+    """Deprecated name retained for callers created before workflow selection."""
