@@ -211,3 +211,24 @@ jobs:
               --project-dir project_data \
               --config      tests/stage1_smoke_fleet.json \
               --keep-outputs out/ci_smoke_168h
+      - name: Complete pytest tree (no orphan pytest files)
+        run: python -m pytest -q tests
+
+  browser-e2e:
+    runs-on: ubuntu-latest
+    needs: compile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install application and browser test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[test]"
+          python -m pip install -r requirements.txt
+          python -m playwright install --with-deps chromium
+      - name: Browser hosted application E2E
+        env:
+          POWERSIM_BROWSER_E2E: "1"
+        run: python -m pytest -q tests/test_browser_e2e.py
