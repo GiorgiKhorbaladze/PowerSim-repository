@@ -13,7 +13,10 @@ from copy import deepcopy
 import math
 from typing import Any
 
-from powersim_solver import build_asset_map, build_gas_limits, build_result_store, slice_profiles, solve_all
+if __package__:  # Installed package path.
+    from .powersim_solver import build_asset_map, build_gas_limits, build_result_store, slice_profiles, solve_all
+else:  # Compatibility for direct historical script execution.
+    from powersim_solver import build_asset_map, build_gas_limits, build_result_store, slice_profiles, solve_all
 
 
 def _scenarios(inp: dict[str, Any]) -> list[dict[str, Any]]:
