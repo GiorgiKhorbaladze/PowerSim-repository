@@ -75,11 +75,16 @@ def test_visible_browser_run_round_trip(tmp_path: Path) -> None:
                 state="visible", timeout=30_000
             )
             page.wait_for_function(
-                "document.getElementById('powersim-backend-status')?.textContent.includes('QA: pass')",
+                "(() => { const text=document.getElementById('powersim-backend-status')?.textContent || ''; return text.includes('QA:') || text.startsWith('შეცდომა:'); })()",
                 timeout=30_000,
             )
+            visible_status = page.locator("#powersim-backend-status").inner_text()
+            assert "QA: pass" in visible_status, {
+                "visible_status": visible_status,
+                "console_errors": console_errors,
+                "failed_requests": failed_requests,
+            }
             assert page.locator("#pane-results").evaluate("element => element.classList.contains('active')")
-            assert "QA: pass" in page.locator("#powersim-backend-status").inner_text()
             assert not console_errors, console_errors
             assert not failed_requests, failed_requests
             browser.close()
