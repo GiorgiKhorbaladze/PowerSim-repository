@@ -51,7 +51,7 @@ def main(argv: list[str] | None = None) -> int:
             Timer(0.8, lambda: webbrowser.open(f"http://{args.host}:{port}/", new=1)).start()
         import uvicorn
         from powersim.server import create_application
-        uvicorn.run(create_application(workspace), host=args.host, port=port)
+        uvicorn.run(\n            create_application(workspace),\n            host=args.host,\n            port=port,\n            log_config=None,\n            access_log=False,\n        )
     except BaseException as error:
         _record_startup_error(workspace, error)
         return 1
