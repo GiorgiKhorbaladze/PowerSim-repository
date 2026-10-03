@@ -514,6 +514,18 @@
     "units": {
       "$ref": "#/$defs/UnitSystem"
     },
+    "workflow": {
+      "default": "deterministic_uc",
+      "enum": [
+        "deterministic_uc",
+        "stochastic_uc",
+        "security_scuc",
+        "chronological_adequacy",
+        "scoped_expansion"
+      ],
+      "title": "Workflow",
+      "type": "string"
+    },
     "workflow_model_version": {
       "default": "legacy-v4",
       "title": "Workflow Model Version",

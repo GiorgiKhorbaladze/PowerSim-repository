@@ -121,6 +121,18 @@
   async function status(runId){return request(`/runs/${encodeURIComponent(runId||state.runId)}`);}
   async function result(runId){return request(`/runs/${encodeURIComponent(runId||state.runId)}/result`);}
   async function compare(leftRunId,rightRunId){return request(`/runs/compare?left_run_id=${encodeURIComponent(leftRunId)}&right_run_id=${encodeURIComponent(rightRunId)}`);}
+  async function waitForCompletion(runId, timeoutMs){
+    const deadline=Date.now()+(timeoutMs||300000);
+    let latest;
+    while(Date.now()<deadline){
+      latest=await status(runId);
+      setRunStatus(`run: ${latest.status}`,'info');
+      if(latest.status==='completed') return latest;
+      if(latest.status==='failed'||latest.status==='cancelled') throw new Error(`Backend run ended with status ${latest.status}`);
+      await new Promise(resolve=>setTimeout(resolve,500));
+    }
+    throw new Error('Backend run did not complete before the UI timeout');
+  }
   // Adapts the static editor's persisted input to the typed application API.
   // This carries data only; all validation and electrical equations remain in Python.
   function projectFromLegacyPayload(payload, projectId){
@@ -173,6 +185,7 @@
     setRunStatus('solver მუშაობს...','info');
     const launched=await launch(run.id);
     if(!launched.accepted) throw new Error(launched.reason||'Backend did not accept the run');
+    await waitForCompletion(run.id);
     const envelope=await result(run.id);
     showBackendResult(envelope);
     setRunStatus(`დასრულდა - QA: ${envelope.qa.status}; გამოქვეყნებადი: ${envelope.validity==='valid'?'დიახ':'არა'}`,'ok');
@@ -203,6 +216,7 @@
     setRunStatus('solver მუშაობს...','info');
     const launched=await launch(run.id);
     if(!launched.accepted) throw new Error(launched.reason||'Backend did not accept the run');
+    await waitForCompletion(run.id);
     const envelope=await result(run.id);
     showBackendResult(envelope);
     setRunStatus(`სატესტო გამოთვლა დასრულდა - QA: ${envelope.qa.status}; გამოქვეყნებადი: ${envelope.validity==='valid'?'დიახ':'არა'}`,'ok');
@@ -236,7 +250,7 @@
     status.textContent='ადგილობრივი API: მზად';
     actions.append(button,demo,status);
   }
-  window.PowerSimApplicationAPI={setBaseUrl,saveProject,createRun,launch,status,result,compare,projectFromLegacyPayload,submitCurrentUiProject,runCurrentUiStudy,compactBackendDemo,runCompactBackendDemo,showBackendResult,installVisibleApplicationControls,get state(){return {...state};}};
+  window.PowerSimApplicationAPI={setBaseUrl,saveProject,createRun,launch,status,result,compare,waitForCompletion,projectFromLegacyPayload,submitCurrentUiProject,runCurrentUiStudy,compactBackendDemo,runCompactBackendDemo,showBackendResult,installVisibleApplicationControls,get state(){return {...state};}};
   document.addEventListener('DOMContentLoaded',installVisibleApplicationControls);
   installVisibleApplicationControls();
 })();

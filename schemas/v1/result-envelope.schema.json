@@ -325,7 +325,8 @@
         "infeasible",
         "unbounded",
         "numerical_error",
-        "solver_error"
+        "solver_error",
+        "completed"
       ],
       "title": "SolverStatus",
       "type": "string"

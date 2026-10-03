@@ -5,7 +5,7 @@ from pathlib import Path
 import sysconfig
 
 from powersim.application import ApplicationService, build_fastapi_app
-from powersim.execution import DeterministicLocalSolverExecutor
+from powersim.execution import RegisteredLocalWorkflowExecutor
 from powersim.platform import RunManager
 
 
@@ -32,7 +32,7 @@ def create_application(workspace: str | Path, static_dir: str | Path | None = No
     if not entrypoint.is_file():
         raise RuntimeError(f"PowerSim UI asset is unavailable: {entrypoint}")
     app = FastAPI(title="PowerSim", version="1.0")
-    service = ApplicationService(RunManager(workspace), DeterministicLocalSolverExecutor())
+    service = ApplicationService(RunManager(workspace), RegisteredLocalWorkflowExecutor())
     app.mount("/api", build_fastapi_app(service))
 
     @app.get("/", include_in_schema=False)
