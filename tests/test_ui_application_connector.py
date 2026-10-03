@@ -22,7 +22,7 @@ def test_ui_loads_solver_free_application_api_connector():
 
     assert '<script src="powersim_ror_autobind_2026.js"></script>' in html
     assert "window.PowerSimApplicationAPI" in source
-    for operation in ("saveProject", "createRun", "launch", "status", "result", "compare", "projectFromLegacyPayload", "submitCurrentUiProject", "runCurrentUiStudy", "runCompactBackendDemo"):
+    for operation in ("saveProject", "createRun", "launch", "status", "result", "compare", "waitForCompletion", "projectFromLegacyPayload", "submitCurrentUiProject", "runCurrentUiStudy", "runCompactBackendDemo"):
         assert operation in source
     assert "powersim-backend-run" in source
     assert "powersim-backend-demo" in source
