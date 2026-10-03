@@ -38,7 +38,8 @@ def test_workflow_adapter_detaches_immutable_compatibility_payload(tmp_path):
         **payload(),
         'legacy_payload': {'metadata': {'legacy': True}, 'assets': [{'id': 'stale'}]},
     })
-    run=manager.create_run(manager.save_project(project))
+    manager.save_project(project)
+    run=manager.create_run(project.id)
     resolved=ResolvedInputContract.model_validate_json(
         (manager._run_dir(run.id) / 'resolved_input.json').read_text(encoding='utf-8')
     )
