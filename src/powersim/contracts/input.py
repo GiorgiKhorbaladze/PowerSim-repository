@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import ConfigDict, Field
 
@@ -12,6 +12,7 @@ class ResolvedInputContract(ContractModel):
     contract_version: str = CONTRACT_VERSION
     workflow_model_version: str = WORKFLOW_MODEL_VERSION
     project_id: str
+    workflow: Literal["deterministic_uc", "stochastic_uc", "security_scuc", "chronological_adequacy", "scoped_expansion"] = "deterministic_uc"
     scenario_id: str | None = None
     metadata: FrozenDict = Field(default_factory=FrozenDict)
     units: UnitSystem
