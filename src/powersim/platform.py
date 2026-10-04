@@ -129,8 +129,14 @@ class RunManager:
                 continue
             if project_id is not None and manifest.get("project_id") != project_id:
                 continue
+            workflow=manifest.get("workflow")
+            if workflow is None:
+                try:
+                    workflow=json.loads((directory/"resolved_input.json").read_text(encoding="utf-8")).get("workflow")
+                except (OSError, json.JSONDecodeError):
+                    workflow=None
             listed.append({"id":run.id, "status":run.status.value, "project_id":manifest.get("project_id"),
-                           "scenario_id":manifest.get("scenario_id"), "workflow":manifest.get("workflow"),
+                           "scenario_id":manifest.get("scenario_id"), "workflow":workflow,
                            "created_at":manifest.get("created_at"),
                            "snapshot_fingerprint":run.snapshot_fingerprint,
                            "result_validity":manifest.get("result_validity")})
@@ -174,6 +180,11 @@ class RunManager:
         manifest=json.loads((self._run_dir(run_id)/"manifest.json").read_text(encoding="utf-8"))
         results=envelope.get("results", {})
         workflow=manifest.get("workflow") or results.get("workflow")
+        if workflow is None:
+            try:
+                workflow=json.loads((self._run_dir(run_id)/"resolved_input.json").read_text(encoding="utf-8")).get("workflow")
+            except (OSError, json.JSONDecodeError):
+                workflow=None
         common={"workflow":workflow, "scenario_id":manifest.get("scenario_id"),
                 "qa_status":(envelope.get("qa") or {}).get("status"),
                 "validity":envelope.get("validity"),
