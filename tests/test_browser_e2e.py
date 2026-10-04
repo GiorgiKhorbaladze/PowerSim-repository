@@ -84,8 +84,10 @@ def test_visible_browser_run_round_trip_and_compare(tmp_path: Path) -> None:
             demo.wait_for(state="attached")
             demo.click(force=True)
             _wait_for_valid_result(page)
+            page.locator("button[data-tab='workflow']").click()
             demo.click(force=True)
             _wait_for_valid_result(page)
+            page.locator("button[data-tab='workflow']").click()
 
             history = page.locator("#powersim-run-history").inner_text()
             assert history.count("deterministic_uc") == 2
