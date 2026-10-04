@@ -205,6 +205,7 @@
       if(options.length&&previous&&options.some(option=>option.value===previous)) select.value=previous;
       else if(options.length) select.selectedIndex=Math.min(index,options.length-1);
     });
+    if(options.length>1&&left&&right&&left.value===right.value) right.selectedIndex=1;
     if(history) history.textContent=options.length ? 'Run history: '+options.map(option=>option.label).join(' | ') : 'Run history: empty';
   }
   function rememberRun(run,workflow,statusValue){
