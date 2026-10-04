@@ -144,11 +144,11 @@
   }
 
   function selectedWorkflow(){
-    const control=document.getElementById('powersim-workflow-select');
+    const control=typeof document!=='undefined'&&typeof document.getElementById==='function'?document.getElementById('powersim-workflow-select'):null;
     return control&&control.value ? control.value : 'deterministic_uc';
   }
   function selectedScenario(){
-    const control=document.getElementById('powersim-scenario-select');
+    const control=typeof document!=='undefined'&&typeof document.getElementById==='function'?document.getElementById('powersim-scenario-select'):null;
     return control&&control.value ? control.value : null;
   }
 
