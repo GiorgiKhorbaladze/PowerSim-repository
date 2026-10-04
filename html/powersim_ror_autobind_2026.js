@@ -220,8 +220,7 @@
     state.projects=Array.isArray(projects)?projects:[];
     if(projectId!==undefined) state.currentProjectId=projectId||null;
     renderProjects();
-    const chosen=state.currentProjectId;
-    const runs=await listRuns(chosen||undefined);
+    const runs=await listRuns(projectId === undefined ? undefined : (state.currentProjectId||undefined));
     state.runHistory=Array.isArray(runs)?runs:[];
     renderRunHistory();
     return state.runHistory;
@@ -254,7 +253,7 @@
     setRunStatus('პროექტი ინახება...','info');
     const saved=await saveProject(project);
     state.currentProjectId=saved.project_id;
-    await refreshPersistedHistory(saved.project_id);
+    await refreshPersistedHistory();
     setRunStatus('run იქმნება...','info');
     const run=await createRun(saved.project_id,scenarioId);
     rememberRun(run,project.workflow,'queued');
