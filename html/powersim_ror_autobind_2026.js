@@ -305,6 +305,17 @@
     demo.addEventListener('click',async()=>{demo.disabled=true;try{await runCompactBackendDemo();}catch(error){setRunStatus('შეცდომა: '+error.message,'error');if(typeof window.showBanner==='function') window.showBanner('❌ Backend: '+error.message,'r',8000);}finally{demo.disabled=false;}});
     const left=selectControl('powersim-compare-left',[]);
     const right=selectControl('powersim-compare-right',[]);
+    const validateCompareSelection=()=>{
+      if(left.value&&right.value&&left.value===right.value){
+        const target=document.getElementById('powersim-compare-result');
+        if(target) target.textContent='Compare failed: Select two different runs to compare';
+        setRunStatus('შედარების შეცდომა: Select two different runs to compare','error');
+        return false;
+      }
+      return true;
+    };
+    left.addEventListener('change',validateCompareSelection);
+    right.addEventListener('change',validateCompareSelection);
     const compareButton=document.createElement('button');
     compareButton.id='powersim-compare-runs';compareButton.className='btn btn-b';compareButton.type='button';compareButton.textContent='⇄ Compare Runs';
     compareButton.addEventListener('click',async()=>{try{await compareSelectedRuns();}catch(error){setRunStatus('შედარების შეცდომა: '+error.message,'error');}});
