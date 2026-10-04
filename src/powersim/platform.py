@@ -24,6 +24,7 @@ _ALLOWED = {
     RunStatus.SOLVING:{RunStatus.VALIDATING_RESULTS,RunStatus.FAILED,RunStatus.CANCELLED}, RunStatus.VALIDATING_RESULTS:{RunStatus.REPORTING,RunStatus.FAILED},
     RunStatus.REPORTING:{RunStatus.COMPLETED,RunStatus.FAILED}, RunStatus.COMPLETED:set(), RunStatus.FAILED:set(), RunStatus.CANCELLED:set(),
 }
+_NONTERMINAL = {RunStatus.QUEUED, RunStatus.PREPARING, RunStatus.SOLVING, RunStatus.VALIDATING_RESULTS, RunStatus.REPORTING}
 _SAFE_IDENTIFIER = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 
 
@@ -38,11 +39,36 @@ def _hash(value: Any) -> str:
     raw=json.dumps(value, sort_keys=True, separators=(",",":"), ensure_ascii=False).encode()
     return "sha256:"+hashlib.sha256(raw).hexdigest()
 
+def _numeric(value: Any) -> float | int | None:
+    return value if isinstance(value, (int, float)) and not isinstance(value, bool) else None
+
+def _first_metric(value: Any, names: set[str]) -> float | int | None:
+    if isinstance(value, dict):
+        for key, item in value.items():
+            if key in names and _numeric(item) is not None:
+                return item
+        for item in value.values():
+            found = _first_metric(item, names)
+            if found is not None:
+                return found
+    return None
+
+def _metrics(value: Any, names: dict[str, set[str]]) -> dict[str, float | int]:
+    """Extract only explicitly emitted canonical scalar metrics.
+
+    This intentionally never derives a missing value from dispatch series: a
+    comparison must distinguish unavailable information from calculated data.
+    """
+    return {label: metric for label, aliases in names.items()
+            if (metric := _first_metric(value, aliases)) is not None}
+
+
 class RunManager:
     def __init__(self, root: str|Path):
         self.root=Path(root).resolve(); self.root.mkdir(parents=True,exist_ok=True)
         (self.root/"projects").mkdir(exist_ok=True); (self.root/"runs").mkdir(exist_ok=True)
         self._lock=RLock()
+        self.reconcile_interrupted_runs()
     def _project_path(self, project_id: str) -> Path:
         return self.root/"projects"/f"{_identifier(project_id, 'project')}.json"
     def _run_dir(self, run_id: str) -> Path:
@@ -57,6 +83,19 @@ class RunManager:
         payload=project.model_dump(mode="json"); fingerprint=_hash(payload); self._write(self._project_path(project.id),payload); return fingerprint
     def load_project(self, project_id:str)->ProjectContract:
         return ProjectContract.model_validate_json(self._project_path(project_id).read_text(encoding="utf-8"))
+    def list_projects(self) -> list[dict[str, Any]]:
+        """Return safe public project metadata, never workspace paths."""
+        projects=[]
+        for path in sorted((self.root/"projects").glob("*.json")):
+            try:
+                project=self.load_project(path.stem)
+            except (OSError, ValueError):
+                continue
+            projects.append({"id":project.id, "name":project.metadata.get("name", project.id),
+                             "workflow":project.workflow,
+                             "scenarios":[{"id":scenario.id, "name":scenario.name or scenario.id}
+                                          for scenario in project.scenarios]})
+        return projects
     def create_run(self, project_id:str, scenario_id:str|None=None, *, run_id:str|None=None)->RunContract:
         project_id=_identifier(project_id, "project")
         if scenario_id is not None: _identifier(scenario_id, "scenario")
@@ -76,6 +115,42 @@ class RunManager:
         self._write(self.root/"runs"/f"batch-{batch['batch_id']}.json",batch)
         return runs
     def get_run(self,run_id:str)->RunContract: return RunContract.model_validate_json((self._run_dir(run_id)/"run.json").read_text(encoding="utf-8"))
+    def list_runs(self, project_id: str|None=None) -> list[dict[str, Any]]:
+        """List persisted run metadata/status without exposing workspace paths."""
+        if project_id is not None: _identifier(project_id, "project")
+        listed=[]
+        for directory in sorted((self.root/"runs").iterdir()):
+            if not directory.is_dir() or not (directory/"run.json").is_file() or not _SAFE_IDENTIFIER.fullmatch(directory.name):
+                continue
+            try:
+                manifest=json.loads((directory/"manifest.json").read_text(encoding="utf-8"))
+                run=self.get_run(directory.name)
+            except (OSError, ValueError, json.JSONDecodeError):
+                continue
+            if project_id is not None and manifest.get("project_id") != project_id:
+                continue
+            listed.append({"id":run.id, "status":run.status.value, "project_id":manifest.get("project_id"),
+                           "scenario_id":manifest.get("scenario_id"), "workflow":manifest.get("workflow"),
+                           "created_at":manifest.get("created_at"),
+                           "snapshot_fingerprint":run.snapshot_fingerprint,
+                           "result_validity":manifest.get("result_validity")})
+        return sorted(listed, key=lambda row: (row.get("created_at") or "", row["id"]), reverse=True)
+    def reconcile_interrupted_runs(self) -> list[str]:
+        """Fail nonterminal runs left by an earlier process instead of faking recovery."""
+        interrupted=[]
+        runs_dir=self.root/"runs"
+        for directory in runs_dir.iterdir():
+            if not directory.is_dir() or not (directory/"run.json").is_file() or not _SAFE_IDENTIFIER.fullmatch(directory.name):
+                continue
+            try:
+                run=self.get_run(directory.name)
+            except (OSError, ValueError):
+                continue
+            if run.status in _NONTERMINAL:
+                self.transition(run.id, RunStatus.FAILED, "run interrupted before this PowerSim startup",
+                                {"reason":"process_interrupted"})
+                interrupted.append(run.id)
+        return interrupted
     def transition(self,run_id:str,status:RunStatus,message:str|None=None,details:dict[str,Any]|None=None)->RunContract:
         with self._lock:
             run=self.get_run(run_id)
@@ -93,9 +168,49 @@ class RunManager:
         directory=self._run_dir(run_id); manifest=json.loads((directory/"manifest.json").read_text(encoding="utf-8"))
         snapshot=json.loads((directory/"resolved_input.json").read_text(encoding="utf-8")); snapshot_ok=_hash(snapshot)==manifest.get("resolved_input_sha256")
         result_ok=None
-        if (directory/"result.json").exists(): result_ok=_hash(json.loads((directory/"result.json").read_text(encoding="utf-8")))==manifest.get("result_sha256")
+        if (directory/"result.json").exists(): result_ok=_hash(json.loads((directory/"result.json").read_text(encoding="utf-8"))) == manifest.get("result_sha256")
         return {"run_id":run_id,"snapshot_hash_valid":snapshot_ok,"result_hash_valid":result_ok,"valid":snapshot_ok and result_ok is not False}
+    def _comparison_summary(self, run_id: str, envelope: dict[str, Any]) -> dict[str, Any]:
+        manifest=json.loads((self._run_dir(run_id)/"manifest.json").read_text(encoding="utf-8"))
+        results=envelope.get("results", {})
+        workflow=manifest.get("workflow") or results.get("workflow")
+        common={"workflow":workflow, "scenario_id":manifest.get("scenario_id"),
+                "qa_status":(envelope.get("qa") or {}).get("status"),
+                "validity":envelope.get("validity"),
+                "publication":results.get("publication")}
+        if workflow == "chronological_adequacy":
+            common["metrics"]=_metrics(results, {"lole": {"lole", "lole_hours"},
+                                                  "lolp": {"lolp"},
+                                                  "eens_mwh": {"eens_mwh", "eens"}})
+        elif workflow == "scoped_expansion":
+            common["classification"]="screening"
+            common["metrics"]=_metrics(results, {"screening_objective_usd":{"screening_objective_usd","objective_usd"},
+                                                  "candidate_builds":{"candidate_builds"}})
+        else:
+            common["metrics"]=_metrics(results, {
+                "objective_usd":{"objective_usd","total_objective_usd","system_cost_usd","total_cost_usd"},
+                "demand_mwh":{"demand_mwh","total_demand_mwh","demand_energy_mwh"},
+                "imports_mwh":{"imports_mwh","exchange_mwh","import_energy_mwh"},
+                "renewable_curtailment_mwh":{"renewable_curtailment_mwh","vre_curtailment_mwh","curtailment_mwh"},
+                "unserved_energy_mwh":{"unserved_energy_mwh","eens_mwh"},
+                "bess_charge_mwh":{"bess_charge_mwh"},
+                "bess_discharge_mwh":{"bess_discharge_mwh"},
+                "storage_ending_mwh":{"storage_ending_mwh","ending_soc_mwh"},
+                "reserve_requirement_mwh":{"reserve_requirement_mwh"},
+                "reserve_provision_mwh":{"reserve_provision_mwh"},
+                "reserve_shortfall_mwh":{"reserve_shortfall_mwh"},
+                "gas_consumption_mm3":{"gas_consumption_mm3","gas_use_mm3"},
+            })
+        return {key:value for key,value in common.items() if value not in (None, {}, [])}
     def compare(self,left:str,right:str)->dict[str,Any]:
+        if left == right: raise ValueError("Select two different runs to compare")
         def result(rid): return json.loads((self._run_dir(rid)/"result.json").read_text(encoding="utf-8"))
         a,b=result(left),result(right)
-        return {"left_run_id":left,"right_run_id":right,"same_snapshot":a["snapshot_fingerprint"]==b["snapshot_fingerprint"],"result_hashes":{"left":_hash(a),"right":_hash(b)},"validity":{"left":a["validity"],"right":b["validity"]}}
+        left_summary=self._comparison_summary(left,a); right_summary=self._comparison_summary(right,b)
+        compatible=left_summary.get("workflow") == right_summary.get("workflow")
+        return {"left_run_id":left,"right_run_id":right,"same_snapshot":a["snapshot_fingerprint"]==b["snapshot_fingerprint"],
+                "compatible":compatible,
+                "compatibility_reason":None if compatible else "workflow-specific metrics are not directly comparable",
+                "result_hashes":{"left":_hash(a),"right":_hash(b)},
+                "validity":{"left":a["validity"],"right":b["validity"]},
+                "summaries":{"left":left_summary,"right":right_summary}}
