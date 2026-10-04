@@ -19,6 +19,8 @@ class ApplicationService:
         self._lock=RLock()
     def save_project(self, payload: dict[str,Any])->dict[str,Any]:
         project=ProjectContract.model_validate(payload); return {"project_id":project.id,"project_fingerprint":self.manager.save_project(project)}
+    def project_list(self)->list[dict[str,Any]]: return self.manager.list_projects()
+    def run_list(self, project_id:str|None=None)->list[dict[str,Any]]: return self.manager.list_runs(project_id)
     def create_run(self, project_id:str, scenario_id:str|None=None)->dict[str,Any]:
         run=self.manager.create_run(project_id,scenario_id); return run.model_dump(mode="json")
     def run_status(self, run_id:str)->dict[str,Any]: return self.manager.get_run(run_id).model_dump(mode="json")
@@ -70,18 +72,39 @@ def build_fastapi_app(service: ApplicationService):
     """Optional HTTP adapter. FastAPI is intentionally not a core solver dependency."""
     from fastapi import FastAPI, HTTPException
     app=FastAPI(title="PowerSim application API",version="1.0")
+    def _raise_client_error(exc: Exception):
+        raise HTTPException(status_code=422 if isinstance(exc, ValueError) else 404, detail=str(exc))
+
+    @app.get('/projects')
+    def project_list(): return service.project_list()
     @app.post('/projects')
-    def save_project(payload:dict[str,Any]): return service.save_project(payload)
+    def save_project(payload:dict[str,Any]):
+        try: return service.save_project(payload)
+        except ValueError as exc: _raise_client_error(exc)
+    @app.get('/projects/{project_id}/runs')
+    def project_runs(project_id:str):
+        try: return service.run_list(project_id)
+        except ValueError as exc: _raise_client_error(exc)
     @app.post('/projects/{project_id}/runs')
-    def create_run(project_id:str,scenario_id:str|None=None): return service.create_run(project_id,scenario_id)
+    def create_run(project_id:str,scenario_id:str|None=None):
+        try: return service.create_run(project_id,scenario_id)
+        except (ValueError, FileNotFoundError) as exc: _raise_client_error(exc)
+    @app.get('/runs')
+    def run_list(): return service.run_list()
     @app.post('/runs/{run_id}/launch')
-    def launch(run_id:str): return service.launch(run_id)
+    def launch(run_id:str):
+        try: return service.launch(run_id)
+        except (ValueError, FileNotFoundError) as exc: _raise_client_error(exc)
     @app.get('/runs/compare')
-    def compare(left_run_id:str,right_run_id:str): return service.compare(left_run_id,right_run_id)
+    def compare(left_run_id:str,right_run_id:str):
+        try: return service.compare(left_run_id,right_run_id)
+        except (ValueError, FileNotFoundError) as exc: _raise_client_error(exc)
     @app.get('/runs/{run_id}')
-    def status(run_id:str): return service.run_status(run_id)
+    def status(run_id:str):
+        try: return service.run_status(run_id)
+        except (ValueError, FileNotFoundError) as exc: _raise_client_error(exc)
     @app.get('/runs/{run_id}/result')
     def result(run_id:str):
         try: return service.result(run_id)
-        except FileNotFoundError as exc: raise HTTPException(status_code=404,detail=str(exc))
+        except (ValueError, FileNotFoundError) as exc: _raise_client_error(exc)
     return app
