@@ -261,7 +261,7 @@
       const target=document.getElementById('powersim-compare-result');
       if(target) target.textContent='Compare failed: '+message;
       setRunStatus('შედარების შეცდომა: '+message,'error');
-      throw new Error(message);
+      return null;
     };
     if(!left||!right||!left.value||!right.value) return fail('Select two completed runs to compare');
     if(left.value===right.value) return fail('Select two different runs to compare');
