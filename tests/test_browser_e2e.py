@@ -107,10 +107,10 @@ def test_visible_browser_run_round_trip_and_compare(tmp_path: Path) -> None:
             right.select_option(left.input_value())
             page.locator("#powersim-compare-runs").click(force=True)
             page.wait_for_function(
-                "document.getElementById('powersim-backend-status')?.textContent.includes('შედარების შეცდომა:')",
+                "document.getElementById('powersim-compare-result')?.textContent.includes('Compare failed:')",
                 timeout=10_000,
             )
-            assert "შედარების შეცდომა:" in page.locator("#powersim-backend-status").inner_text()
+            assert "Compare failed:" in page.locator("#powersim-compare-result").inner_text()
             assert page.locator("#pane-results").evaluate("element => element.classList.contains('active')")
             assert launch_statuses.count(200) >= 2
             unexpected_console_errors = [message for message in console_errors if "/api/ai/health" not in message]
