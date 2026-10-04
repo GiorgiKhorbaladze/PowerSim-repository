@@ -73,10 +73,13 @@ def test_visible_browser_run_round_trip_and_compare(tmp_path: Path) -> None:
             console_errors: list[str] = []
             failed_requests: list[str] = []
             launch_statuses: list[int] = []
+            comparison_requests: list[int] = []
             page.on("console", lambda msg: console_errors.append(msg.text) if msg.type == "error" else None)
             page.on("requestfailed", lambda request: failed_requests.append(request.url))
             page.on("response", lambda response: launch_statuses.append(response.status)
                     if response.url.endswith("/launch") else None)
+            page.on("response", lambda response: comparison_requests.append(response.status)
+                    if "/runs/compare?" in response.url else None)
             page.goto(url, wait_until="networkidle")
             assert page.locator("#powersim-workflow-select").is_visible()
             assert page.locator("#powersim-scenario-select").is_visible()
@@ -96,7 +99,7 @@ def test_visible_browser_run_round_trip_and_compare(tmp_path: Path) -> None:
             assert left.locator("option").count() == 2
             assert right.locator("option").count() == 2
             assert left.input_value() != right.input_value()
-            page.locator("#powersim-compare-runs").click(force=True)
+            page.locator("#powersim-compare-runs").click()
             page.wait_for_function(
                 "document.getElementById('powersim-compare-result')?.textContent.includes('Compare completed')",
                 timeout=30_000,
@@ -105,12 +108,15 @@ def test_visible_browser_run_round_trip_and_compare(tmp_path: Path) -> None:
 
             # A deliberate invalid UI action must be visible as an error, not as a result.
             right.select_option(left.input_value())
-            page.locator("#powersim-compare-runs").click(force=True)
+            assert right.input_value() == left.input_value()
             page.wait_for_function(
-                "document.getElementById('powersim-compare-result')?.textContent.includes('Compare failed:')",
+                "document.getElementById('powersim-compare-result')?.textContent.includes('Compare failed: Select two different runs to compare')",
                 timeout=10_000,
             )
-            assert "Compare failed:" in page.locator("#powersim-compare-result").inner_text()
+            page.locator("#powersim-compare-runs").click()
+            page.wait_for_timeout(250)
+            assert comparison_requests == [200]
+            assert "Compare failed: Select two different runs to compare" in page.locator("#powersim-compare-result").inner_text()
             assert page.locator("#pane-results").evaluate("element => element.classList.contains('active')")
             assert launch_statuses.count(200) >= 2
             unexpected_console_errors = [message for message in console_errors if "/api/ai/health" not in message]
