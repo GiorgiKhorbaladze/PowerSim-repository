@@ -48,3 +48,11 @@ def test_workflow_adapter_detaches_immutable_compatibility_payload(tmp_path):
     workflow['metadata']['new']='solver-private'
     assert resolved.legacy_payload['metadata']['legacy'] is True
     assert 'new' not in resolved.metadata
+
+
+def test_application_lists_persisted_projects_and_runs(tmp_path):
+    service=ApplicationService(RunManager(tmp_path))
+    saved=service.save_project(payload())
+    run=service.create_run(saved['project_id'])
+    assert service.project_list()[0]['id'] == saved['project_id']
+    assert service.run_list(saved['project_id'])[0]['id'] == run['id']

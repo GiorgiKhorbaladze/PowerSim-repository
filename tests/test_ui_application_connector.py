@@ -23,7 +23,7 @@ def test_ui_loads_solver_free_application_api_connector():
     assert '<script src="powersim_ror_autobind_2026.js"></script>' in html
     assert "window.PowerSimApplicationAPI" in source
     for operation in (
-        "saveProject", "createRun", "launch", "status", "result", "compare",
+        "saveProject", "createRun", "launch", "status", "result", "compare", "listProjects", "listRuns", "refreshPersistedHistory",
         "waitForCompletion", "projectFromLegacyPayload",
         "submitCurrentUiProject", "runCurrentUiStudy", "runCompactBackendDemo",
         "compareSelectedRuns",
@@ -31,7 +31,7 @@ def test_ui_loads_solver_free_application_api_connector():
         assert operation in source
     for control in (
         "powersim-backend-run", "powersim-backend-demo",
-        "powersim-workflow-select", "powersim-scenario-select",
+        "powersim-project-select", "powersim-workflow-select", "powersim-scenario-select",
         "powersim-run-history", "powersim-compare-runs",
     ):
         assert control in source
@@ -68,3 +68,10 @@ console.log(JSON.stringify(project));
     assert project.workflow == "deterministic_uc"
     assert project.time.resolution_minutes == 15
     assert project.assets[0].capacity_max_mw == 20
+
+
+def test_connector_keeps_compare_output_compact_and_human_readable():
+    source = CONNECTOR.read_text(encoding="utf-8")
+    assert "formatComparison" in source
+    assert "JSON.stringify(comparison)" not in source
+    assert "setScenarioOptions" in source
