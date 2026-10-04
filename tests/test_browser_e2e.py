@@ -85,10 +85,10 @@ def test_visible_browser_run_round_trip_and_compare(tmp_path: Path) -> None:
             assert page.locator("#powersim-scenario-select").is_visible()
             demo = page.locator("#powersim-backend-demo")
             demo.wait_for(state="attached")
-            demo.click(force=True)
+            demo.click()
             _wait_for_valid_result(page)
             page.locator("button[data-tab='workflow']").click()
-            demo.click(force=True)
+            demo.click()
             _wait_for_valid_result(page)
             page.locator("button[data-tab='workflow']").click()
 
