@@ -257,8 +257,14 @@
   async function compareSelectedRuns(){
     const left=document.getElementById('powersim-compare-left');
     const right=document.getElementById('powersim-compare-right');
-    if(!left||!right||!left.value||!right.value) throw new Error('Select two completed runs to compare');
-    if(left.value===right.value) throw new Error('Select two different runs to compare');
+    const fail=message=>{
+      const target=document.getElementById('powersim-compare-result');
+      if(target) target.textContent='Compare failed: '+message;
+      setRunStatus('შედარების შეცდომა: '+message,'error');
+      throw new Error(message);
+    };
+    if(!left||!right||!left.value||!right.value) return fail('Select two completed runs to compare');
+    if(left.value===right.value) return fail('Select two different runs to compare');
     const comparison=await compare(left.value,right.value);
     const target=document.getElementById('powersim-compare-result');
     if(target) target.textContent='Compare completed: '+JSON.stringify(comparison);
