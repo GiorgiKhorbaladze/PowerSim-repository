@@ -5,8 +5,8 @@ the loaded connector rather than duplicating application or solver behaviour.
 Browser-hosted E2E remains a separate release gate.
 """
 from pathlib import Path
-import subprocess
 import json
+import subprocess
 
 from powersim.contracts import ProjectContract
 
@@ -22,10 +22,19 @@ def test_ui_loads_solver_free_application_api_connector():
 
     assert '<script src="powersim_ror_autobind_2026.js"></script>' in html
     assert "window.PowerSimApplicationAPI" in source
-    for operation in ("saveProject", "createRun", "launch", "status", "result", "compare", "waitForCompletion", "projectFromLegacyPayload", "submitCurrentUiProject", "runCurrentUiStudy", "runCompactBackendDemo"):
+    for operation in (
+        "saveProject", "createRun", "launch", "status", "result", "compare",
+        "waitForCompletion", "projectFromLegacyPayload",
+        "submitCurrentUiProject", "runCurrentUiStudy", "runCompactBackendDemo",
+        "compareSelectedRuns",
+    ):
         assert operation in source
-    assert "powersim-backend-run" in source
-    assert "powersim-backend-demo" in source\n    assert "powersim-workflow-select" in source\n    assert "powersim-run-history" in source\n    assert "powersim-compare-runs" in source\n    assert "compareSelectedRuns" in source
+    for control in (
+        "powersim-backend-run", "powersim-backend-demo",
+        "powersim-workflow-select", "powersim-scenario-select",
+        "powersim-run-history", "powersim-compare-runs",
+    ):
+        assert control in source
     assert "patchChartFactory" in source
     assert "powersim_solver" not in source
     assert "pyomo" not in source.lower()
@@ -56,5 +65,6 @@ console.log(JSON.stringify(project));
     assert completed.returncode == 0, completed.stderr
     project = ProjectContract.model_validate(json.loads(completed.stdout))
     assert project.id == "ui-test"
+    assert project.workflow == "deterministic_uc"
     assert project.time.resolution_minutes == 15
-    assert project.assets[0].capacity_max_mw == 20\n    assert project.workflow == "deterministic_uc"
+    assert project.assets[0].capacity_max_mw == 20
