@@ -108,7 +108,7 @@
 (function(){
   'use strict';
   const sameOrigin=(window.location&&/^https?:$/.test(window.location.protocol))?String(window.location.origin)+'/api':'http://localhost:8000/api';
-  const state={baseUrl:localStorage.getItem('powersim.applicationApi')||sameOrigin,runId:null,runHistory:[]};
+  const state={baseUrl:localStorage.getItem('powersim.applicationApi')||sameOrigin,runId:null,runHistory:[],projects:[],currentProjectId:null};
 
   async function request(path,method,body){
     const response=await fetch(state.baseUrl.replace(/\/$/,'')+path,{method:method||'GET',headers:{'Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});
@@ -122,6 +122,8 @@
   async function status(runId){return request('/runs/'+encodeURIComponent(runId||state.runId));}
   async function result(runId){return request('/runs/'+encodeURIComponent(runId||state.runId)+'/result');}
   async function compare(leftRunId,rightRunId){return request('/runs/compare?left_run_id='+encodeURIComponent(leftRunId)+'&right_run_id='+encodeURIComponent(rightRunId));}
+  async function listProjects(){return request('/projects');}
+  async function listRuns(projectId){return request(projectId?'/projects/'+encodeURIComponent(projectId)+'/runs':'/runs');}
 
   function setRunStatus(message,kind){
     const target=document.getElementById('powersim-backend-status');
@@ -192,6 +194,38 @@
     if(typeof window.renderReports==='function') try{window.renderReports();}catch(error){console.warn('Reports render skipped:',error);}
   }
 
+  function setScenarioOptions(project){
+    const select=document.getElementById('powersim-scenario-select');
+    if(!select) return;
+    const previous=select.value;
+    select.replaceChildren();
+    const base=document.createElement('option'); base.value=''; base.textContent='Base scenario'; select.append(base);
+    (project?.scenarios||[]).forEach(scenario=>{const option=document.createElement('option');option.value=scenario.id;option.textContent=scenario.name||scenario.id;select.append(option);});
+    if(Array.from(select.options).some(option=>option.value===previous)) select.value=previous;
+  }
+  function renderProjects(){
+    const select=document.getElementById('powersim-project-select');
+    if(!select) return;
+    const previous=state.currentProjectId||select.value;
+    select.replaceChildren();
+    const placeholder=document.createElement('option');placeholder.value='';placeholder.textContent='Current editor project';select.append(placeholder);
+    state.projects.forEach(project=>{const option=document.createElement('option');option.value=project.id;option.textContent=(project.name||project.id)+' - '+project.workflow;select.append(option);});
+    if(previous&&Array.from(select.options).some(option=>option.value===previous)) select.value=previous;
+    else select.value='';
+    const current=state.projects.find(project=>project.id===select.value);
+    setScenarioOptions(current);
+  }
+  async function refreshPersistedHistory(projectId){
+    const projects=await listProjects();
+    state.projects=Array.isArray(projects)?projects:[];
+    if(projectId!==undefined) state.currentProjectId=projectId||null;
+    renderProjects();
+    const chosen=state.currentProjectId;
+    const runs=await listRuns(chosen||undefined);
+    state.runHistory=Array.isArray(runs)?runs:[];
+    renderRunHistory();
+    return state.runHistory;
+  }
   function renderRunHistory(){
     const left=document.getElementById('powersim-compare-left');
     const right=document.getElementById('powersim-compare-right');
@@ -219,6 +253,8 @@
   async function executeProject(project,scenarioId){
     setRunStatus('პროექტი ინახება...','info');
     const saved=await saveProject(project);
+    state.currentProjectId=saved.project_id;
+    await refreshPersistedHistory(saved.project_id);
     setRunStatus('run იქმნება...','info');
     const run=await createRun(saved.project_id,scenarioId);
     rememberRun(run,project.workflow,'queued');
@@ -267,8 +303,20 @@
     if(left.value===right.value) return fail('Select two different runs to compare');
     const comparison=await compare(left.value,right.value);
     const target=document.getElementById('powersim-compare-result');
-    if(target) target.textContent='Compare completed: '+JSON.stringify(comparison);
+    if(target) target.textContent=formatComparison(comparison);
     return comparison;
+  }
+
+  function formatComparison(comparison){
+    const left=comparison.summaries?.left||{}, right=comparison.summaries?.right||{};
+    const metricLines=Object.keys({...left.metrics,...right.metrics}).map(key=>{
+      const value=item=>item.metrics&&Object.prototype.hasOwnProperty.call(item.metrics,key)?item.metrics[key]:'not available';
+      return key+': '+value(left)+' -> '+value(right);
+    });
+    const header='Compare completed: '+(comparison.compatible?'compatible':'not directly comparable')+
+      '; '+(left.workflow||'unknown')+' / '+(right.workflow||'unknown');
+    return [header,'QA: '+(left.qa_status||'unknown')+' -> '+(right.qa_status||'unknown'),
+      'Validity: '+(left.validity||'unknown')+' -> '+(right.validity||'unknown'),...metricLines].join(' | ');
   }
 
   function labelledControl(labelText,control){
@@ -296,6 +344,14 @@
       {value:'chronological_adequacy',label:'Chronological Adequacy'},
       {value:'scoped_expansion',label:'Capacity Expansion Screening'}
     ]);
+    const project=selectControl('powersim-project-select',[{value:'',label:'Current editor project'}]);
+    project.addEventListener('change',async()=>{
+      state.currentProjectId=project.value||null;
+      const selected=state.projects.find(item=>item.id===state.currentProjectId);
+      setScenarioOptions(selected);
+      try{const runs=await listRuns(state.currentProjectId||undefined);state.runHistory=Array.isArray(runs)?runs:[];renderRunHistory();}
+      catch(error){setRunStatus('ისტორიის ჩატვირთვა ვერ მოხერხდა: '+error.message,'error');}
+    });
     const scenario=selectControl('powersim-scenario-select',[{value:'',label:'Base scenario'}]);
     const button=document.createElement('button');
     button.id='powersim-backend-run'; button.className='btn btn-p'; button.type='button';button.textContent='▶ Backend გამოთვლა';
@@ -325,7 +381,8 @@
     history.id='powersim-run-history';history.style.cssText='font-size:9px;color:var(--t2);line-height:1.4';history.textContent='Run history: empty';
     const comparison=document.createElement('div');
     comparison.id='powersim-compare-result';comparison.style.cssText='font-size:9px;color:var(--t2);line-height:1.4;max-height:70px;overflow:auto';
-    actions.append(labelledControl('Workflow',workflow),labelledControl('Scenario',scenario),button,demo,status,history,labelledControl('Compare left',left),labelledControl('Compare right',right),compareButton,comparison);
+    actions.append(labelledControl('Project',project),labelledControl('Workflow',workflow),labelledControl('Scenario',scenario),button,demo,status,history,labelledControl('Compare left',left),labelledControl('Compare right',right),compareButton,comparison);
+    refreshPersistedHistory().catch(()=>setRunStatus('ადგილობრივი API: მიუწვდომელია','info'));
   }
   function patchChartFactory(){
     if(typeof window.mkChart!=='function'||window.mkChart.__powersimTooltipPatched) return;
@@ -336,7 +393,7 @@
     };
     window.mkChart.__powersimTooltipPatched=true;
   }
-  window.PowerSimApplicationAPI={setBaseUrl,saveProject,createRun,launch,status,result,compare,waitForCompletion,projectFromLegacyPayload,submitCurrentUiProject,runCurrentUiStudy,compactBackendDemo,runCompactBackendDemo,compareSelectedRuns,showBackendResult,installVisibleApplicationControls,patchChartFactory,get state(){return {...state,runHistory:[...state.runHistory]};}};
+  window.PowerSimApplicationAPI={setBaseUrl,saveProject,createRun,launch,status,result,compare,listProjects,listRuns,refreshPersistedHistory,waitForCompletion,projectFromLegacyPayload,submitCurrentUiProject,runCurrentUiStudy,compactBackendDemo,runCompactBackendDemo,compareSelectedRuns,showBackendResult,installVisibleApplicationControls,patchChartFactory,get state(){return {...state,runHistory:[...state.runHistory],projects:[...state.projects]};}};
   document.addEventListener('DOMContentLoaded',()=>{patchChartFactory();installVisibleApplicationControls();});
   patchChartFactory();
   installVisibleApplicationControls();
