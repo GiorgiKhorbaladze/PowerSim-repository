@@ -103,7 +103,7 @@ class RunManager:
         directory=self._run_dir(rid)
         if directory.exists(): raise ValueError(f"run already exists: {rid}")
         directory.mkdir(); self._write(directory/"resolved_input.json",resolved.model_dump(mode="json"))
-        manifest={"run_id":rid,"project_id":project_id,"scenario_id":scenario_id,"snapshot_fingerprint":resolved.fingerprint(),"resolved_input_sha256":_hash(resolved.model_dump(mode="json")),"contract_version":CONTRACT_VERSION,"workflow_model_version":WORKFLOW_MODEL_VERSION,"software_version":PRODUCT_VERSION,"created_at":_utc().isoformat()}
+        manifest={"run_id":rid,"project_id":project_id,"scenario_id":scenario_id,"snapshot_fingerprint":resolved.fingerprint(),"workflow":resolved.workflow,"resolved_input_sha256":_hash(resolved.model_dump(mode="json")),"contract_version":CONTRACT_VERSION,"workflow_model_version":WORKFLOW_MODEL_VERSION,"software_version":PRODUCT_VERSION,"created_at":_utc().isoformat()}
         self._write(directory/"manifest.json",manifest)
         run=RunContract(id=rid,snapshot_fingerprint=resolved.fingerprint(),events=[RunEvent(sequence=0,timestamp=_utc(),status=RunStatus.DRAFT,message="immutable resolved input stored")])
         self._write(directory/"run.json",run.model_dump(mode="json")); return run
@@ -184,8 +184,9 @@ class RunManager:
                                                   "eens_mwh": {"eens_mwh", "eens"}})
         elif workflow == "scoped_expansion":
             common["classification"]="screening"
-            common["metrics"]=_metrics(results, {"screening_objective_usd":{"screening_objective_usd","objective_usd"},
-                                                  "candidate_builds":{"candidate_builds"}})
+            common["metrics"]=_metrics(results, {"screening_objective_usd":{"screening_objective_usd","objective_usd"}})
+            if isinstance(results.get("candidate_builds"), (dict, list)):
+                common["candidate_builds"]=results["candidate_builds"]
         else:
             common["metrics"]=_metrics(results, {
                 "objective_usd":{"objective_usd","total_objective_usd","system_cost_usd","total_cost_usd"},
