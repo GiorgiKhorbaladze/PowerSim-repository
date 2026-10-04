@@ -95,6 +95,7 @@ def test_visible_browser_run_round_trip_and_compare(tmp_path: Path) -> None:
             right = page.locator("#powersim-compare-right")
             assert left.locator("option").count() == 2
             assert right.locator("option").count() == 2
+            assert left.input_value() != right.input_value()
             page.locator("#powersim-compare-runs").click(force=True)
             page.wait_for_function(
                 "document.getElementById('powersim-compare-result')?.textContent.includes('Compare completed')",
