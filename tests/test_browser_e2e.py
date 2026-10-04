@@ -87,9 +87,11 @@ def test_visible_browser_run_round_trip_and_compare(tmp_path: Path) -> None:
             demo.wait_for(state="attached")
             demo.click()
             _wait_for_valid_result(page)
+            assert page.locator("#pane-results").evaluate("element => element.classList.contains('active')")
             page.locator("button[data-tab='workflow']").click()
             demo.click()
             _wait_for_valid_result(page)
+            assert page.locator("#pane-results").evaluate("element => element.classList.contains('active')")
             page.locator("button[data-tab='workflow']").click()
 
             history = page.locator("#powersim-run-history").inner_text()
@@ -117,7 +119,6 @@ def test_visible_browser_run_round_trip_and_compare(tmp_path: Path) -> None:
             page.wait_for_timeout(250)
             assert comparison_requests == [200]
             assert "Compare failed: Select two different runs to compare" in page.locator("#powersim-compare-result").inner_text()
-            assert page.locator("#pane-results").evaluate("element => element.classList.contains('active')")
             assert launch_statuses.count(200) >= 2
             unexpected_console_errors = [message for message in console_errors if "/api/ai/health" not in message]
             unexpected_failed_requests = [request for request in failed_requests if "/api/ai/health" not in request]
