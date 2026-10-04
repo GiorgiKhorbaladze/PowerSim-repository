@@ -215,7 +215,6 @@ class RunManager:
             })
         return {key:value for key,value in common.items() if value not in (None, {}, [])}
     def compare(self,left:str,right:str)->dict[str,Any]:
-        if left == right: raise ValueError("Select two different runs to compare")
         def result(rid): return json.loads((self._run_dir(rid)/"result.json").read_text(encoding="utf-8"))
         a,b=result(left),result(right)
         left_summary=self._comparison_summary(left,a); right_summary=self._comparison_summary(right,b)
