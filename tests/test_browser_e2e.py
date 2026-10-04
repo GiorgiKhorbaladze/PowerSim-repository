@@ -1,10 +1,8 @@
 """Browser-hosted acceptance of the same-origin queued PowerSim application.
 
-The test deliberately clicks the visible backend demonstration control.  It
-therefore covers browser -> API -> RunManager -> local solver -> canonical QA
--> persisted envelope -> browser without using the page's JavaScript API as a
-test shortcut.  It is opt-in locally because Chromium is intentionally not a
-runtime dependency of PowerSim; release CI enables it.
+The test clicks visible controls only. It covers browser to API to RunManager to
+the local solver to canonical QA to persisted envelopes and back to the UI.
+Playwright is opt-in locally; release CI enables it.
 """
 from __future__ import annotations
 
@@ -45,8 +43,18 @@ def _wait_for_server(url: str, process: subprocess.Popen[str]) -> None:
     raise AssertionError("powersim serve did not become ready within 30 seconds")
 
 
-def test_visible_browser_run_round_trip(tmp_path: Path) -> None:
-    """A real Chromium browser runs the compact UI study and sees its result."""
+def _wait_for_valid_result(page) -> str:
+    page.wait_for_function(
+        "(() => { const text=document.getElementById('powersim-backend-status')?.textContent || ''; return text.includes('QA:') || text.startsWith('შეცდომა:'); })()",
+        timeout=30_000,
+    )
+    visible_status = page.locator("#powersim-backend-status").inner_text()
+    assert "QA: pass" in visible_status, visible_status
+    return visible_status
+
+
+def test_visible_browser_run_round_trip_and_compare(tmp_path: Path) -> None:
+    """The browser performs two real runs, compares them and displays failure honestly."""
     from playwright.sync_api import sync_playwright
 
     port = _free_port()
@@ -70,25 +78,38 @@ def test_visible_browser_run_round_trip(tmp_path: Path) -> None:
             page.on("response", lambda response: launch_statuses.append(response.status)
                     if response.url.endswith("/launch") else None)
             page.goto(url, wait_until="networkidle")
+            assert page.locator("#powersim-workflow-select").is_visible()
+            assert page.locator("#powersim-scenario-select").is_visible()
             demo = page.locator("#powersim-backend-demo")
             demo.wait_for(state="attached")
             demo.click(force=True)
-            page.locator("#powersim-backend-status").wait_for(state="visible")
-            page.locator("#powersim-backend-status").wait_for(
-                state="visible", timeout=30_000
-            )
+            _wait_for_valid_result(page)
+            demo.click(force=True)
+            _wait_for_valid_result(page)
+
+            history = page.locator("#powersim-run-history").inner_text()
+            assert history.count("deterministic_uc") == 2
+            left = page.locator("#powersim-compare-left")
+            right = page.locator("#powersim-compare-right")
+            assert left.locator("option").count() == 2
+            assert right.locator("option").count() == 2
+            page.locator("#powersim-compare-runs").click(force=True)
             page.wait_for_function(
-                "(() => { const text=document.getElementById('powersim-backend-status')?.textContent || ''; return text.includes('QA:') || text.startsWith('შეცდომა:'); })()",
+                "document.getElementById('powersim-compare-result')?.textContent.includes('Compare completed')",
                 timeout=30_000,
             )
-            visible_status = page.locator("#powersim-backend-status").inner_text()
-            assert "QA: pass" in visible_status, {
-                "visible_status": visible_status,
-                "console_errors": console_errors,
-                "failed_requests": failed_requests,
-            }
+            assert "Compare completed" in page.locator("#powersim-compare-result").inner_text()
+
+            # A deliberate invalid UI action must be visible as an error, not as a result.
+            right.select_option(left.input_value())
+            page.locator("#powersim-compare-runs").click(force=True)
+            page.wait_for_function(
+                "document.getElementById('powersim-backend-status')?.textContent.includes('შედარების შეცდომა:')",
+                timeout=10_000,
+            )
+            assert "შედარების შეცდომა:" in page.locator("#powersim-backend-status").inner_text()
             assert page.locator("#pane-results").evaluate("element => element.classList.contains('active')")
-            assert 200 in launch_statuses
+            assert launch_statuses.count(200) >= 2
             unexpected_console_errors = [message for message in console_errors if "/api/ai/health" not in message]
             unexpected_failed_requests = [request for request in failed_requests if "/api/ai/health" not in request]
             assert not unexpected_console_errors, unexpected_console_errors
