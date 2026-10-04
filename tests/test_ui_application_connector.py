@@ -25,7 +25,7 @@ def test_ui_loads_solver_free_application_api_connector():
     for operation in ("saveProject", "createRun", "launch", "status", "result", "compare", "waitForCompletion", "projectFromLegacyPayload", "submitCurrentUiProject", "runCurrentUiStudy", "runCompactBackendDemo"):
         assert operation in source
     assert "powersim-backend-run" in source
-    assert "powersim-backend-demo" in source
+    assert "powersim-backend-demo" in source\n    assert "powersim-workflow-select" in source\n    assert "powersim-run-history" in source\n    assert "powersim-compare-runs" in source\n    assert "compareSelectedRuns" in source
     assert "patchChartFactory" in source
     assert "powersim_solver" not in source
     assert "pyomo" not in source.lower()
@@ -57,4 +57,4 @@ console.log(JSON.stringify(project));
     project = ProjectContract.model_validate(json.loads(completed.stdout))
     assert project.id == "ui-test"
     assert project.time.resolution_minutes == 15
-    assert project.assets[0].capacity_max_mw == 20
+    assert project.assets[0].capacity_max_mw == 20\n    assert project.workflow == "deterministic_uc"
