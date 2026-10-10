@@ -84,7 +84,11 @@ class ObjectiveReconstructionCheck:
     def run(self, resolved_input: Any, result: Any, tolerance: TolerancePolicy, *, persisted: bool = False) -> QACheckResult:
         if hasattr(result, "model_dump"): result = result.model_dump(mode="python")
         breakdown = ((result or {}).get("diagnostics") or {}).get("objective_breakdown") if isinstance(result, dict) else None
-        if not isinstance(breakdown, dict) or breakdown.get("pyomo_objective") is None:
+        if not isinstance(breakdown, dict):
+            return QACheckResult(check_id=self.check_id,status=QAStatus.NOT_RUN,
+                message="solver objective or canonical reconstruction is unavailable", witness={})
+        rolling_committed = breakdown.get("objective_reference_scope") == "rolling_committed_canonical"
+        if breakdown.get("pyomo_objective") is None and not rolling_committed:
             return QACheckResult(check_id=self.check_id,status=QAStatus.NOT_RUN,
                 message="solver objective or canonical reconstruction is unavailable", witness={})
         if "total_reconstructed" not in breakdown:
@@ -145,7 +149,7 @@ class ObjectiveReconstructionCheck:
                     witness={"cost_stream_total_usd": stream_total, "declared_total_usd": declared},
                     tolerance=stream_limit, max_violation=abs(stream_total - declared_float))
         try:
-            objective = float(breakdown["pyomo_objective"])
+            objective = float(breakdown["total_reconstructed"]) if rolling_committed else float(breakdown["pyomo_objective"])
             reconstructed = float(breakdown["total_reconstructed"])
         except (TypeError, ValueError):
             return QACheckResult(check_id=self.check_id,status=QAStatus.FAIL,
@@ -162,9 +166,14 @@ class ObjectiveReconstructionCheck:
         limit = tolerance.limit(scale, persisted=persisted)
         if breakdown.get("validated_full_precision") is not True:
             limit = max(limit, 5e-3 * scale)
+        reference_label = "committed_canonical_objective_usd" if rolling_committed else "solver_objective_usd"
+        message = ("rolling committed canonical objective cost streams close"
+                   if rolling_committed and violation <= limit
+                   else f"objective reconstruction residual is {violation:g} USD")
         return QACheckResult(check_id=self.check_id,status=QAStatus.PASS if violation <= limit else QAStatus.FAIL,
-            message=f"objective reconstruction residual is {violation:g} USD",
-            witness={"solver_objective_usd": objective, "reconstructed_objective_usd": reconstructed,
+            message=message,
+            witness={reference_label: objective, "reconstructed_objective_usd": reconstructed,
                      "cost_stream_total_usd": stream_total if breakdown.get("validated_full_precision") is True else None,
+                     "objective_reference_scope": "rolling_committed_canonical" if rolling_committed else "single_pyomo_incumbent",
                      "tolerance_mode":"persisted" if persisted else "internal"},
             tolerance=limit,max_violation=violation,checked_count=1)
