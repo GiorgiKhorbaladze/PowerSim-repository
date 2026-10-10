@@ -2,7 +2,7 @@
 
 ## Current release status
 
-The engineering migration is complete at release-preparation commit `8a1d8fb1d7e6ab3aeb8eddb2463ce30a8c916f39`.
+The engineering migration and release operation are complete. PowerSim 1.0.0 was published as `v1.0.0` at `02fbdcd1bc21a8c2e85ce31dc305707b010d1c3e` on 10 October 2026.
 
 Validated evidence on the release-preparation PR:
 
@@ -13,7 +13,7 @@ Validated evidence on the release-preparation PR:
 - The sanitized Georgia 2026 baseline completed a fresh 8,760-hour rolling acceptance with QA pass and publishable result.
 - The full pytest tree and no-orphan-test gate passed.
 
-The repository is versioned as PowerSim `1.0.0`. The tag `v1.0.0` and GitHub Release still must be created by a release-authorized API path; no tag or release has been claimed yet.
+The repository is versioned as PowerSim `1.0.0`. The tag-triggered release workflow completed successfully and the public GitHub Release **PowerSim 1.0** is available at https://github.com/GiorgiKhorbaladze/PowerSim-repository/releases/tag/v1.0.0. Published tag-derived artifacts are the Python wheel, source distribution and Windows x64 portable ZIP.
 
 ## Completed architecture
 
@@ -56,6 +56,6 @@ Key final release engineering PRs:
 - #116: final capability, limitation, guide, release-note and audit documents.
 - #117: 1.0.0 versioning, final installer metadata and tag-release artifact workflow.
 
-## Exact next action
+## Release completion
 
-Use a release-authorized GitHub API to create annotated tag `v1.0.0` from `8a1d8fb1d7e6ab3aeb8eddb2463ce30a8c916f39`, let the tag workflow build its assets, then publish the GitHub Release **PowerSim 1.0**. Only after that workflow is green may the final audit be marked release-ready.
+No repository-side release action remains. Future work should be tracked as a new versioned scope and must preserve the capability and limitation boundaries above.
