@@ -55,6 +55,48 @@ jobs:
           } finally {
             Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
           }
+      - name: Verify silent installer, persisted workspace and uninstaller
+        shell: pwsh
+        run: |
+          $installDir = Join-Path $env:RUNNER_TEMP "PowerSim-installed"
+          $workspace = Join-Path $env:RUNNER_TEMP "powersim-installed-workspace"
+          $installer = Get-ChildItem "dist/installer/PowerSim-*-Windows-x64-Setup.exe" | Select-Object -First 1
+          if ($null -eq $installer) { throw "Windows installer was not produced" }
+          $install = Start-Process -FilePath $installer.FullName -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /DIR=$installDir" -Wait -PassThru
+          if ($install.ExitCode -ne 0 -or -not (Test-Path "$installDir/PowerSim.exe")) { throw "Silent Windows install failed" }
+          function Invoke-InstalledSolve([int]$Port) {
+            $process = Start-Process -FilePath "$installDir/PowerSim.exe" -ArgumentList "--no-browser --port $Port --workspace $workspace" -PassThru
+            try {
+              $deadline = (Get-Date).AddSeconds(30)
+              do {
+                try { $response = Invoke-WebRequest -UseBasicParsing "http://127.0.0.1:$Port/" -TimeoutSec 2 } catch { Start-Sleep -Milliseconds 250; continue }
+              } while ($response.StatusCode -ne 200 -and (Get-Date) -lt $deadline)
+              if ($response.StatusCode -ne 200) { throw "Installed PowerSim did not respond on localhost" }
+              $project = Get-Content "samples/application_compact_demo.json" -Raw
+              $saved = Invoke-RestMethod -Uri "http://127.0.0.1:$Port/api/projects" -Method Post -ContentType "application/json" -Body $project
+              $run = Invoke-RestMethod -Uri "http://127.0.0.1:$Port/api/projects/$($saved.project_id)/runs" -Method Post
+              $launch = Invoke-RestMethod -Uri "http://127.0.0.1:$Port/api/runs/$($run.id)/launch" -Method Post
+              if (-not $launch.accepted -or -not $launch.queued) { throw "Installed PowerSim did not queue solve" }
+              $solveDeadline = (Get-Date).AddSeconds(60)
+              do { Start-Sleep -Milliseconds 250; $status = Invoke-RestMethod -Uri "http://127.0.0.1:$Port/api/runs/$($run.id)" } while ($status.status -notin @("completed", "failed") -and (Get-Date) -lt $solveDeadline)
+              if ($status.status -ne "completed") { throw "Installed solve did not complete: $($status.status)" }
+              $result = Invoke-RestMethod -Uri "http://127.0.0.1:$Port/api/runs/$($run.id)/result"
+              if ($result.qa.status -ne "pass" -or $result.validity -ne "valid") { throw "Installed result was not publishable" }
+            } finally { Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue }
+          }
+          Invoke-InstalledSolve 8766
+          $restart = Start-Process -FilePath "$installDir/PowerSim.exe" -ArgumentList "--no-browser --port 8767 --workspace $workspace" -PassThru
+          try {
+            $deadline = (Get-Date).AddSeconds(30)
+            do {
+              try { $runs = Invoke-RestMethod -Uri "http://127.0.0.1:8767/api/runs" -TimeoutSec 2 } catch { Start-Sleep -Milliseconds 250; continue }
+            } while ($null -eq $runs -and (Get-Date) -lt $deadline)
+            if ($null -eq $runs -or @($runs).Count -lt 1) { throw "Installed restart did not retain persisted run history" }
+          } finally { Stop-Process -Id $restart.Id -Force -ErrorAction SilentlyContinue }
+          $uninstaller = Join-Path $installDir "unins000.exe"
+          if (-not (Test-Path $uninstaller)) { throw "Installer did not create an uninstaller" }
+          $uninstall = Start-Process -FilePath $uninstaller -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART" -Wait -PassThru
+          if ($uninstall.ExitCode -ne 0 -or (Test-Path "$installDir/PowerSim.exe")) { throw "Silent Windows uninstall failed" }
       - name: Publish Windows artifacts
         uses: actions/upload-artifact@v4
         with:
