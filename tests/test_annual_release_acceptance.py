@@ -51,6 +51,7 @@ def test_georgia_2026_annual_application_run_is_publishable(tmp_path):
     status = service.run_status(run["id"])
     assert status["status"] == "completed"
     envelope = service.result(run["id"])
+    print("ANNUAL_RELEASE_QA=" + json.dumps(envelope["qa"], sort_keys=True))
     assert envelope["qa"]["status"] == "pass"
     assert envelope["validity"] == "valid"
     assert envelope["results"]["publication"]["publishable"] is True
