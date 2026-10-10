@@ -1,5 +1,5 @@
 {
-  "_comment": "PowerSim v4.0 — Stage 1 smoke fleet. 8 assets × 168h. NOT for production.",
+  "_comment": "PowerSim v4.0 — Stage 1 smoke fleet. 8 assets × 168h. Synthetic publishable release smoke - not an operational study.",
   "version": "1.0",
   "study_year": 2026,
   "scenario": "A_mean",
@@ -141,7 +141,7 @@
       "committable": false,
       "vom": 55.0,
       "pmin_profile": null,
-      "pmax_profile": 700.0
+      "pmax_profile": 3000.0
     },
     {
       "id":   "bess_1",
