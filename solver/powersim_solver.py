@@ -3218,10 +3218,20 @@ def build_result_store(hourly: list, assets: dict, inp: dict, solve_time: float,
         "storage_target_penalty_usd": stor_target_pen,
     }
 
+    # A rolling run is a sequence of overlapping window models, not one
+    # global Pyomo objective.  Never present the former prorated look-ahead
+    # sum as an incumbent objective.  The publishable study objective is the
+    # exact full-precision sum reconstructed from the committed canonical
+    # periods below; its scope is explicit for independent QA.
+    rolling_objective_scope = len(getattr(hourly, "window_diagnostics", []) or []) > 1
+    if rolling_objective_scope:
+        obj_total = None
     if obj_total is None or obj_total != obj_total:      # NaN / not supplied
         closure_gap  = None
         closure_ok   = None
-        closure_note = "objective unavailable; closure skipped"
+        closure_note = ("rolling committed canonical objective; no single "
+                        "global Pyomo objective exists" if rolling_objective_scope
+                        else "objective unavailable; closure skipped")
     else:
         denom       = max(abs(obj_total), 1.0)
         closure_gap = abs(obj_total - reconstructed) / denom
@@ -3243,6 +3253,8 @@ def build_result_store(hourly: list, assets: dict, inp: dict, solve_time: float,
         "storage_target_penalty": stor_target_pen,
         "total_reconstructed": reconstructed,
         "pyomo_objective": None if obj_total is None or obj_total != obj_total else obj_total,
+        "objective_reference_scope": ("rolling_committed_canonical"
+                                      if rolling_objective_scope else "single_pyomo_incumbent"),
         "closure_gap_pct": None if closure_gap is None else round(closure_gap * 100, 6),
         "validated_full_precision": not unsupported_objective_terms,
         "unsupported_legacy_terms": unsupported_objective_terms,
