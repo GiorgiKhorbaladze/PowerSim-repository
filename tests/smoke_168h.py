@@ -1,5 +1,5 @@
 """
-PowerSim v4.0 — Stage 1 Smoke Test
+PowerSim release smoke test
 ===================================
 End-to-end verification that the full Stage 1 pipeline runs:
 
@@ -188,6 +188,20 @@ def stage_validate_output(results_path: Path) -> dict:
             fail(f"HTML importResults would reject: hourly_by_unit['{gid}'] length {len(rows)} ≠ {H}")
     ok("validate_output passed")
     ok("HTML importResults() structural check passed")
+
+    # A release smoke is not merely a JSON shape check.  The old fixture could
+    # return a structurally valid but non-publishable result with unserved load.
+    # Fail closed unless the solver's own canonical QA/publication gate accepts it.
+    solver_diagnostics = (res.get("diagnostics") or {}).get("solver_diagnostics") or {}
+    qa = res.get("qa") or {}
+    publication = res.get("publication") or {}
+    if solver_diagnostics.get("result_validity") != "valid":
+        fail("solver result is not valid")
+    if qa.get("status") != "pass":
+        fail("canonical QA did not pass")
+    if publication.get("publishable") is not True:
+        fail("publication gate did not accept the result")
+    ok("result QA and publication gate passed")
     return res
 
 
@@ -227,7 +241,7 @@ def stage_report(res: dict) -> None:
 # CLI
 # ──────────────────────────────────────────────────────────────────────
 def main(argv=None) -> int:
-    ap = argparse.ArgumentParser(description="PowerSim v4.0 Stage 1 smoke test")
+    ap = argparse.ArgumentParser(description="PowerSim release smoke test")
     ap.add_argument("--project-dir", default=os.environ.get("POWERSIM_PROJECT_DIR", "/mnt/project"),
                     help="Directory containing the uploaded project files.")
     ap.add_argument("--config", default=str(_resolve_repo_file("tests", "stage1_smoke_fleet.json")),
@@ -270,7 +284,7 @@ def main(argv=None) -> int:
     print(f"  Total wallclock: {time.time()-t_total:.1f}s")
     print(f"  Artifacts in:    {out_dir}")
     print()
-    print("  🎉  Stage 1 smoke test PASSED — HTML → JSON → solver → JSON → HTML")
+    print("  🎉  Release smoke test PASSED — HTML → JSON → solver → JSON → HTML")
     print("      round-trip is intact.")
     return 0
 
