@@ -1,5 +1,5 @@
 """
-PowerSim v4.0 — Stage 1 Smoke Test
+PowerSim legacy structural smoke test
 ===================================
 End-to-end verification that the full Stage 1 pipeline runs:
 
@@ -188,6 +188,13 @@ def stage_validate_output(results_path: Path) -> dict:
             fail(f"HTML importResults would reject: hourly_by_unit['{gid}'] length {len(rows)} ≠ {H}")
     ok("validate_output passed")
     ok("HTML importResults() structural check passed")
+
+    # This retained script verifies only the historical HTML -> JSON -> legacy
+    # solver -> JSON compatibility path.  It is not a release acceptance test:
+    # legacy results may correctly be invalid under the current QA gate.
+    solver_diagnostics = (res.get("diagnostics") or {}).get("solver_diagnostics") or {}
+    if solver_diagnostics.get("result_validity") != "valid":
+        print("⚠️ Legacy structural smoke produced a non-publishable result; this is not a release acceptance signal.")
     return res
 
 
@@ -227,7 +234,7 @@ def stage_report(res: dict) -> None:
 # CLI
 # ──────────────────────────────────────────────────────────────────────
 def main(argv=None) -> int:
-    ap = argparse.ArgumentParser(description="PowerSim v4.0 Stage 1 smoke test")
+    ap = argparse.ArgumentParser(description="PowerSim release smoke test")
     ap.add_argument("--project-dir", default=os.environ.get("POWERSIM_PROJECT_DIR", "/mnt/project"),
                     help="Directory containing the uploaded project files.")
     ap.add_argument("--config", default=str(_resolve_repo_file("tests", "stage1_smoke_fleet.json")),
@@ -270,7 +277,7 @@ def main(argv=None) -> int:
     print(f"  Total wallclock: {time.time()-t_total:.1f}s")
     print(f"  Artifacts in:    {out_dir}")
     print()
-    print("  🎉  Stage 1 smoke test PASSED — HTML → JSON → solver → JSON → HTML")
+    print("  🎉  Legacy structural smoke test PASSED — HTML → JSON → solver → JSON → HTML")
     print("      round-trip is intact.")
     return 0
 
