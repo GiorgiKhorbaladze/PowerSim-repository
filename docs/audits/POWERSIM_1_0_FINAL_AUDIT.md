@@ -2,9 +2,9 @@
 
 ## Audit status
 
-Release-candidate engineering evidence is complete at `8a1d8fb1d7e6ab3aeb8eddb2463ce30a8c916f39`, which versions the application as PowerSim 1.0.0.
+PowerSim 1.0.0 was released as tag `v1.0.0` at `02fbdcd1bc21a8c2e85ce31dc305707b010d1c3e` on 10 October 2026. The tag-triggered release workflow completed successfully and the public GitHub Release **PowerSim 1.0** was published with tag-derived artifacts.
 
-The release tag and GitHub Release have not yet been created. This audit must not be read as evidence that a tag-derived release artifact exists until the tag workflow completes.
+Release: https://github.com/GiorgiKhorbaladze/PowerSim-repository/releases/tag/v1.0.0
 
 ## Verified release-candidate evidence
 
@@ -17,7 +17,7 @@ The release tag and GitHub Release have not yet been created. This audit must no
 | Windows | Portable application and silent installer lifecycle passed: install, real queued deterministic solve, restart with persisted history and uninstall. |
 | Annual acceptance | A fresh sanitized Georgia 2026 8,760-hour rolling application acceptance passed with QA and publication gating. |
 | Resolution/workflows | Compact 15-minute and rolling deterministic, stochastic, N-1 security, chronological adequacy and scoped expansion tests are in the validated CI tree. |
-| Release automation | `.github/workflows/release.yml` builds wheel, sdist, Windows zip and installer from a `v*` tag and publishes those tag-derived assets. |
+| Release automation | `.github/workflows/release.yml` built and published tag-derived wheel, sdist and Windows portable ZIP assets from `v1.0.0`. |
 
 ## Architecture ownership
 
@@ -33,6 +33,6 @@ The committed Georgia baseline is sanitized and aggregated. Its 131-asset demons
 
 Keep as compatibility-only or explicitly unsupported: committable reservoir UC, reservoir `end_level_penalty`, optional BESS depth/end-target behavior, the one-sided BESS/pumped-hydro depth selector, rolling delayed cascades, unvalidated pumped-hydro/DR reserves and unvalidated reserve activation-time deliverability. No AC, voltage/reactive-power, EMT, protection or market-settlement capability is claimed.
 
-## Remaining release operation
+## Release record
 
-Create annotated tag `v1.0.0` at `8a1d8fb1d7e6ab3aeb8eddb2463ce30a8c916f39`, verify the tag workflow succeeds, and publish **PowerSim 1.0** with the tag-built artifacts. At that point update this audit with the tag workflow run and GitHub Release URL.
+The release operation is complete. The published release contains the Python wheel, source distribution and Windows x64 portable ZIP, all built by GitHub Actions from the `v1.0.0` tag. This record does not expand the capability boundary documented above.
