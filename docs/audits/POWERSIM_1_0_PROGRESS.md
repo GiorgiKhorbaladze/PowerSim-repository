@@ -1,15 +1,13 @@
 # PowerSim 1.0 migration progress
 
-> **Current release-hardening status (2026-10-10):** PRs #102-#114 are
-> merged.  PR #115 is intentionally not mergeable yet. Its real 8760-hour
-> application gate exposed two rolling-horizon defects: the original scheduler
-> committed only 8,616 of 8,760 periods, and the corrected scheduler then
-> exposed non-closing aggregate objective accounting. The first defect is fixed
-> on the PR branch. The remaining blocker is to derive the rolling committed
-> objective from exact committed-period solver terms, rather than prorating
-> overlapping look-ahead window objectives. QA and publication remain fail-closed
-> until that objective closes. No v1.0.0 tag or final release claim is permitted
-> before this gate passes.
+> **Current release-hardening status (2026-10-10):** PRs #102-#115 are
+> merged. PR #115 fixed annual rolling-period completion and made rolling
+> objective scope truthful: the system no longer reports a fabricated global
+> Pyomo objective for overlapping windows. It publishes the explicit committed
+> canonical objective only after full-precision cost-stream QA closes. The
+> sanitized Georgia 2026 8760-hour application acceptance now passes. Remaining
+> release work is final version/tag artifact production and final audit
+> completion; no v1.0.0 tag exists yet.
 
 
 ## Current state
