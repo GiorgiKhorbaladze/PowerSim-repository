@@ -39,6 +39,7 @@ def test_georgia_2026_annual_application_run_is_publishable(tmp_path):
     manager.save_project(project)
     service = ApplicationService(manager, RegisteredLocalWorkflowExecutor())
     run = service.create_run(project.id)
+    started = time.monotonic()
     launched = service.launch(run["id"])
     assert launched["accepted"] and launched["queued"]
 
@@ -57,6 +58,7 @@ def test_georgia_2026_annual_application_run_is_publishable(tmp_path):
 
     diagnostics = envelope["solver"]
     evidence = {
+        "runtime_seconds": round(time.monotonic() - started, 3),
         "periods": project.time.periods,
         "run_id": run["id"],
         "snapshot_fingerprint": envelope["snapshot_fingerprint"],
