@@ -26,7 +26,7 @@ def project(**changes):
     return ProjectContract(**data)
 
 def test_import_version_and_cli():
-    assert PRODUCT_VERSION == "1.0.0-dev"
+    assert PRODUCT_VERSION == "1.0.0"
     out = subprocess.run([sys.executable, "-m", "powersim", "--version"], check=True, capture_output=True, text=True)
     assert out.stdout.strip() == "PowerSim 1.0.0-dev"
 
