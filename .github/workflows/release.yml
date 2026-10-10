@@ -58,7 +58,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           name: PowerSim 1.0
-          body_path: release-assets/powersim-python-distributions/../README_DOES_NOT_EXIST
+          body: "PowerSim 1.0 release. See docs/POWERSIM_1_0_RELEASE_NOTES.md in this tagged source."
           files: |
             release-assets/powersim-python-distributions/*
             release-assets/powersim-windows-release/PowerSim-1.0.0-Windows-x64.zip
