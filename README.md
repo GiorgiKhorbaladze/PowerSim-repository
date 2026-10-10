@@ -10,8 +10,17 @@ Download and install `PowerSim-1.0.0-Windows-x64-Setup.exe`. Launch **PowerSim**
 
 ### Developer installation
 
+From a source checkout:
+
 ```bash
-pip install powersim
+python -m pip install .
+powersim serve --workspace ./powersim_workspace
+```
+
+Or install the wheel built by the release workflow:
+
+```bash
+python -m pip install dist/powersim-1.0.0-py3-none-any.whl
 powersim serve --workspace ./powersim_workspace
 ```
 
