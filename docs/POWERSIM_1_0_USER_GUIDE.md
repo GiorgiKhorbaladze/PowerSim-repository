@@ -2,7 +2,7 @@
 
 ## Install and launch
 
-For developers, install with `pip install powersim` and start with `powersim serve --workspace ./powersim_workspace`.
+From a source checkout, install with `python -m pip install .` and start with `powersim serve --workspace ./powersim_workspace`. To install a release artifact, use `python -m pip install dist/powersim-1.0.0-py3-none-any.whl`.
 
 Open the local URL printed by the server. The Windows installer launches the same local application and opens the browser automatically.
 
