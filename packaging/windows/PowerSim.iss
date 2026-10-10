@@ -1,6 +1,6 @@
 ; Reproducible Windows x64 installer. AppVersion is updated only in the final release PR.
 #define AppName "PowerSim"
-#define AppVersion "1.0.0-dev"
+#define AppVersion "1.0.0"
 #define AppPublisher "PowerSim"
 #define AppExeName "PowerSim.exe"
 

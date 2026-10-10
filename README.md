@@ -1,347 +1,50 @@
-# PowerSim v4.0 — Georgian Power System Simulation Platform
+# PowerSim 1.0
 
-Decision-support platform for the Georgian electricity system. End-to-end
-unit-commitment + economic-dispatch (UC/ED), 1-hour resolution, 8760h
-non-leap year, Asia/Tbilisi calendar.
+PowerSim is a local electricity-system planning, simulation and optimization application. Its Python/Pyomo backend owns the electrical equations; the browser UI manages projects, scenarios, runs, QA and results.
 
-```
-                      ┌───────────────┐                     ┌──────────────────┐
-                      │  HTML UI      │                     │  Python solver   │
-   user input      → │  Export Input │── powersim_input ──▶│  pyomo + highs   │
-   (browser)         │   JSON        │     (schema v1.2)   │  rolling horizon │
-                      │               │◀── powersim_results │                  │
-   user views      ←  │  Import Results JSON                │                  │
-                      └───────────────┘                     └──────────────────┘
-```
+## Quick start
 
-The HTML manages **inputs and visualisation**. The Python side runs the
-**MIP solver**. The two never share a process — they only share two JSON
-files. See [`docs/JSON_HANDOFF.md`](docs/JSON_HANDOFF.md) for the contract.
+### Windows
 
----
+Download and install `PowerSim-1.0.0-Windows-x64-Setup.exe`. Launch **PowerSim** from the Start Menu. It starts a loopback-only local server and opens the browser UI.
 
-## What's in this repo
+### Developer installation
 
-```
-.
-├── html/
-│   └── PowerSim_v4.html          ← open in any browser (no build step)
-├── solver/
-│   ├── powersim_solver.py        ← MIP UC/ED, rolling horizon (Pyomo + HiGHS)
-│   ├── powersim_dataio.py        ← raw GSE files → input JSON
-│   └── powersim_asset_mapper.py  ← installed-capacity workbook → asset list
-├── schema/
-│   └── powersim_schema.py        ← v1.2 input + output validators
-├── tests/
-│   ├── smoke_168h.py             ← end-to-end CI smoke test
-│   ├── stage1_smoke_fleet.json   ← 8-asset minimal fleet (CI only)
-│   ├── gse_2026_baseline.json    ← 27-asset GSE 2026 fleet, v10 LOCKED
-│   └── reservoir_overrides_template.csv
-├── scripts/
-│   ├── build_demo_project.py     ← synthesize project_data/ for trials
-│   ├── run_horizon.py            ← single-scenario horizon run
-│   └── run_mc_sweep.py           ← P10/P50/P90 MC sweep
-├── samples/
-│   ├── sample_input_168h.json                  ← smoke fleet input
-│   ├── sample_input_gse_2026_168h.json         ← GSE 2026 baseline input
-│   ├── sample_results_168h.json                ← smoke fleet results
-│   ├── sample_results_720h.json
-│   ├── sample_results_gse_2026_720h.json       ← GSE baseline 720h results
-│   ├── sample_mc_summary_720h.json
-│   └── sample_mc_summary_gse_720h.json         ← GSE 4-scenario MC summary
-├── docs/
-│   ├── WHAT_IS_POWERSIM.md       ← v1.0 RC product overview
-│   ├── RELEASE_CANDIDATE_CHECKLIST.md ← RC checklist, inputs, blockers
-│   ├── DEMO_SCRIPT.md            ← Giorgi demo runbook
-│   ├── HAPPY_PATH.md             ← clone → result in 5 minutes
-│   ├── JSON_HANDOFF.md           ← input/output schema reference
-│   ├── COLAB.md                  ← run on Google Colab
-│   └── TROUBLESHOOTING.md
-├── requirements.txt
-└── README.md
-```
-
-`project_data/` and `out/` are local working folders — kept out of git.
-
----
-
-## Quick start (5 minutes)
+From a source checkout:
 
 ```bash
-git clone <this repo> powersim && cd powersim
-python3 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-
-# 1. synthetic data so you can try without GSE files
-python scripts/build_demo_project.py --out project_data
-
-# 2. 168-hour CI smoke test (≈5 s, 8-asset minimal fleet)
-python tests/smoke_168h.py \
-    --project-dir project_data \
-    --config      tests/stage1_smoke_fleet.json \
-    --keep-outputs out/smoke_168h
-
-# 3. or — full GSE 2026 baseline 168h (≈35 s, 27 assets, v10 LOCKED)
-python scripts/run_horizon.py \
-    --project-dir project_data \
-    --config      tests/gse_2026_baseline.json \
-    --hours       168 \
-    --out-dir     out/gse_168h
-
-# 4. open the HTML
-xdg-open html/PowerSim_v4.html      # or just double-click
-# → click "🏭 GSE 2026 Demo ჩატვირთვა"  (loads the same 27-asset fleet)
-# → click "📥 Import Results JSON" → pick out/gse_168h/powersim_results.json
+python -m pip install .
+powersim serve --workspace ./powersim_workspace
 ```
 
-Full walkthrough: [`docs/HAPPY_PATH.md`](docs/HAPPY_PATH.md).
-Colab walkthrough: [`docs/COLAB.md`](docs/COLAB.md).
-
-For v1.0 Release Candidate preparation, see:
-
-* [`docs/WHAT_IS_POWERSIM.md`](docs/WHAT_IS_POWERSIM.md) — product overview and boundaries.
-* [`docs/RELEASE_CANDIDATE_CHECKLIST.md`](docs/RELEASE_CANDIDATE_CHECKLIST.md) — checklist, required input files, known limitations, and blockers.
-* [`docs/DEMO_SCRIPT.md`](docs/DEMO_SCRIPT.md) — suggested final demo flow for Giorgi.
-
----
-
-## Running real horizons
-
-### Reference numbers (GSE 2026 baseline, demo project_data)
-
-These should be reproducible verbatim from a clean clone — they are the
-acceptance check for the v10 LOCKED calibration on the demo project_data.
-
-| Horizon | Fleet | Wallclock | Total cost | Avg λ | Unserved | Gas |
-|---------|-------|-----------|------------|-------|----------|-----|
-| 168h    | 27 assets | 35 s  | $9.9 M    | $37.12/MWh | 0 MWh | 20.8 Mm³ |
-| 720h    | 27 assets | 44 s  | $66.2 M   | $49.04/MWh | 0 MWh | 87.3 Mm³ |
-| 8760h   | 27 assets | 217 s | $780.9 M  | $52.27/MWh | 0 MWh | 1069.6 Mm³ |
-| MC sweep 720h × 4 | 27 assets | 180 s | P10/P50/P90 ≈ $66.14M / $66.20M / $66.22M | — | — | gas-cap binding |
-
-Annual gas usage (1069.6 Mm³) is within the 1170 Mm³ cap; closure_gap ≈ 0%
-on every run; all four MC scenarios converge to optimal.
-
-### 720-hour run (1 month)
+Or install the wheel built by the release workflow:
 
 ```bash
-python scripts/run_horizon.py \
-    --project-dir project_data \
-    --config      tests/gse_2026_baseline.json \
-    --hours       720 \
-    --mip-gap     0.02 \
-    --rolling-window 168 --rolling-step 168 \
-    --out-dir     out/gse_720h
+python -m pip install dist/powersim-1.0.0-py3-none-any.whl
+powersim serve --workspace ./powersim_workspace
 ```
 
-Rolling horizon: 720 h ÷ 168 h windows × 168 h step = 5 windows. Each
-window's terminal storage / commitment carries over to the next.
+Open the local URL printed by the command.
 
-### 8760-hour annual run
+## Study workflow
 
-```bash
-python scripts/run_horizon.py \
-    --project-dir project_data \
-    --config      tests/gse_2026_baseline.json \
-    --hours       8760 \
-    --mip-gap     0.03 \
-    --rolling-window 168 --rolling-step 168 \
-    --time-limit  600 \
-    --out-dir     out/gse_8760h
-```
+1. Load or create a typed project.
+2. Select a scenario and a workflow.
+3. Validate, save, create and launch a run.
+4. Monitor queued, solving, QA and publication state.
+5. Inspect results only when QA passes and the result is valid/publishable.
+6. Compare compatible saved runs.
 
-### Monte-Carlo P10 / P50 / P90 sweep
+The sanitized, aggregated Georgia planning demonstration is at `samples/projects/georgia_2026_baseline.json`; it includes editable 2027-2030 demand scenarios. It is not private GSE operational data and is not an official dispatch case.
 
-```bash
-python scripts/run_mc_sweep.py \
-    --project-dir project_data \
-    --config      tests/gse_2026_baseline.json \
-    --hours       720 \
-    --scenarios   A_mean MC_P10 MC_P50 MC_P90 \
-    --out-dir     out/gse_mc_720h
-```
+## Validated workflows
 
-Each scenario writes its own subdirectory; `mc_sweep_720h/mc_summary.json`
-aggregates `total_cost_usd`, `avg_lambda_usd_mwh`, `total_unserved_mwh`,
-`total_gas_mm3` with **P10 / P50 / P90 percentiles** of the cost
-distribution across the requested scenarios.
+- Deterministic UC/ED, rolling horizon and sub-hourly operation within the documented component scope.
+- Stochastic UC extensive form.
+- Deterministic N-1 security UC within non-islanding contingency scope.
+- Chronological probabilistic adequacy.
+- Scoped capacity-expansion screening.
 
-### Full-fleet (131-plant) build from the GSE workbook
+PowerSim does not claim AC load flow, voltage/reactive-power studies, transient stability, EMT, protection coordination or commercial market settlement.
 
-```bash
-python solver/powersim_asset_mapper.py \
-    --excel /path/to/დადგმული_სიმძლავრე__2026.xlsx \
-    --hydro-overrides tests/reservoir_overrides_template.csv \
-    --out tests/full_fleet_2026.json
-```
-
-Then point any of the scripts above at `--config tests/full_fleet_2026.json`.
-
----
-
-## What the user does vs. what's automated
-
-| You | Automated |
-|-----|-----------|
-| Open HTML, enter / import inputs, click **Export Input JSON** | Schema v1.2 validation, time index generation, derived profile keys, SHA-256 fingerprints |
-| Run one Python script (locally or in Colab) | Asset preprocessing, gas-constraint pro-rating, rolling-horizon decomposition, MIP UC + LP ED resolve, closure check, output validation, Excel export |
-| Open HTML, click **Import Results JSON** | Output validation, KPI cards, dispatch chart, lambda chart, monthly bar, per-asset summary |
-
-That's the whole product loop.
-
----
-
-## Calibration baseline (v10 LOCKED — do not change without justification)
-
-| Parameter | Value |
-|-----------|-------|
-| Hydro pmax derate | 0.65 (inflow-driven only; Section I excluded) |
-| Gas fuel price | $5.50/MMBtu |
-| Gas startup / no-load | $1000 / $50 |
-| Coal startup / no-load | $4000 / $100 |
-| Thermal pmin | 25% of pmax |
-| Section-I water values | Enguri/Vardnili $35, Zhinvali/Khrami $42, Shaori/Dzevrula $37 |
-| Section-I end-level target | 85% of `reservoir_max` |
-| Section-I end-level penalty | $20/Mm³ |
-| Cascade Enguri → Vardnili | delay = 2 h, gain = 0.97 |
-| Cascade Khrami_1 → Khrami_2 | delay = 1 h, gain = 0.95 |
-| Monthly gas caps | annual 1170 Mm³ (winter ~180, summer ~40) |
-
-These are encoded in the asset mapper and reservoir override template.
-
----
-
-## Versioning
-
-| Component | Version | Source of truth |
-|-----------|---------|-----------------|
-| Schema    | 1.2     | `schema/powersim_schema.py::SCHEMA_VERSION` (1.0 / 1.1 still load with a warning) |
-| Loader    | 1.0.1   | `solver/powersim_dataio.py::LOADER_VERSION` |
-| Solver    | 1.6.0   | `solver/powersim_solver.py::SOLVER_VERSION` |
-| HTML UI   | 1.2     | `html/PowerSim_v4.html::SCHEMA_VERSION` |
-
----
-
-## Troubleshooting
-
-See [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md) for installation,
-schema, solver, and HTML issues.
-
----
-
-## BESS Sizing (Georgia 2030)
-
-PowerSim includes a Python LP module for the Georgia 2030 BESS-sizing study:
-`solver/bess_sizing.py`.  The model co-optimizes BESS power (`Pbess`, MW) and
-energy (`Ebess`, MWh) over the full 8760-hour chronological year using HiGHS via
-Pyomo's `appsi_highs` interface.
-
-### Inputs and data rules
-
-The loader can read the uploaded `plexos model.zip` and uses the original
-hourly profile CSVs for available generation:
-
-* `Load.csv` for internal Georgian demand;
-* `load 2026-2030.xlsx` or another CSV/XLS/XLSX demand workbook as absolute
-  hourly MW demand via `--demand-mode absolute --demand-profile <file>`. For
-  workbooks with separate 2026…2030 columns, the loader picks the column that
-  matches `study_year` unless `--demand-column` is supplied;
-* `Export.csv` for curtailable export demand, capped at 800 MW in the model;
-* `PV * Average.csv`, `Wind * Average.csv`, and `RoR * Medium.csv` as available
-  renewable / run-of-river generation profiles.
-
-It deliberately does **not** use `Model BEST Solution/Interval/ST
-Generator.Generation.csv` as the main renewable input, because those files are
-PLEXOS dispatch outputs and may already include curtailment or other dispatch
-logic rather than unconstrained available generation.
-
-Regulated hydro must be supplied with both monthly energy limits and monthly
-Pmax limits.  The default monthly energy limits are:
-
-```text
-[296, 276, 491, 429, 830, 890, 1050, 766, 498, 367, 319, 367] GWh
-```
-
-The CLI requires `--reg-pmax-mw` as 12 comma-separated monthly MW values.  If
-those Pmax values cannot be extracted or supplied, the module stops with a clear
-validation error rather than assuming an arbitrary regulated-hydro capacity.
-
-### Modes
-
-* **Reliability-constrained least-cost** (`--mode reliability`): minimizes
-  annualized BESS capex subject to an EENS target.  The implementation includes
-  tiny dispatch-cleanup penalties so the least-cost solution does not rely on
-  arbitrary simultaneous charge/discharge, spill, or export allocation.
-* **Economic optimum** (`--mode economic`): minimizes annualized BESS capex plus
-  dispatch terms (`VoLL × internal ENS`, BESS VOM, and export value).  The EENS
-  constraint is not enforced in this mode.
-* **Fixed-BESS validation** (`--mode fixed --fixed-p-mw 800 --fixed-e-mwh 1400`):
-  fixes BESS size for validation against the corrected PLEXOS 800 MW / 1400 MWh
-  case.
-
-### Reliability accounting
-
-Internal EENS is always calculated as:
-
-```text
-sum(internal ENS MWh) / sum(internal Load MWh)
-```
-
-Export curtailment is reported separately as **Export ENS** and never enters the
-internal EENS denominator or numerator.  Spill / curtailment is also reported
-separately and is never counted as ENS.
-
-### Example run
-
-```bash
-python -m solver.bess_sizing \
-  --plexos-zip "plexos model.zip" \
-  --mode reliability \
-  --reg-pmax-mw 1200,1200,1200,1200,1200,1200,1200,1200,1200,1200,1200,1200 \
-  --out out/bess_sizing_results.json
-```
-
-For corrected PLEXOS validation, use fixed-BESS mode:
-
-```bash
-python -m solver.bess_sizing \
-  --plexos-zip "plexos model.zip" \
-  --mode fixed \
-  --fixed-p-mw 800 \
-  --fixed-e-mwh 1400 \
-  --reg-pmax-mw <12 monthly RegPmax MW values> \
-  --out out/bess_fixed_800_1400_validation.json
-```
-
-Do not validate the zero-BESS baseline against the corrected PLEXOS
-`Internal ENS ≈ 59 GWh / EENS ≈ 0.33%` result.  That corrected anchor belongs to
-the fixed 800 MW / 1400 MWh BESS case.  A separate `Pbess = 0`, `Ebess = 0`
-run is expected to be worse and should be reported as its own baseline.
-
-### Solver hardening v1.6.0
-
-PowerSim Solver v1.6.0 keeps `system_summary.total_cost_usd` as the backward-compatible production/gross cost and adds `system_summary.total_objective_cost_usd` plus `diagnostics.objective_breakdown` for the full optimization objective. The full objective includes production costs, BESS degradation/end-SOC penalties, DR and pumped-hydro operating costs, unserved-energy penalties, reserve-shortfall penalties, hydro end-level penalties, and hydro spill penalties.
-
-Reserve products now support BESS provision with inverter headroom and SOC/empty-SOC duration limits. Unsupported eligible providers such as DR or pumped hydro are reported in diagnostics instead of being silently dropped. Rolling-horizon solves enforce first-period ramp limits from previous-window dispatch when carryover dispatch is available. Stochastic summaries are based on full scenario solve outputs and objective costs, with warnings when scenario profile overrides are not actually switched.
-
-Remaining limitations: PowerSim is not a full PLEXOS clone; DC-OPF is simplified; AC power flow, voltage, and reactive power are not modeled; reserve market settlement is not modeled.
-
-### Adequacy & Expansion Stage 1
-
-PowerSim now includes a screening-level adequacy workflow for LOLE/LOLP/EENS, reserve margin, duration-limited BESS firm capacity, and least-cost candidate expansion recommendations. Use:
-
-```bash
-python scripts/run_adequacy.py --input samples/sample_input_168h.json --out-dir out/adequacy_demo --mode deterministic_derated --write-expanded-input
-```
-
-The workflow writes adequacy summaries and optional expanded inputs for subsequent UC/ED dispatch testing. It is deterministic/reviewable by design and is not a full PLEXOS PASA or investment-grade optimization without further validation.
-
-For a separate seeded chronological probabilistic adequacy simulation, use
-`solver.powersim_adequacy_chronological.run_chronological_adequacy`. This
-workflow carries BESS SOC across the supplied periods and reports study-horizon
-LOLE, LOLP and EENS. It is deliberately not the screening API above and its
-current validated scope excludes network constraints, UC, hydro chronology and
-correlated outages.
-## Optional AI Assistant
-
-PowerSim can be paired with an optional embedded AI assistant backend for scenario explanation, proposed input edits, confirmation-gated solver actions, and report summaries. The base PowerSim workflow does not require AI features. See [AI Assistant Architecture](docs/AI_ASSISTANT_ARCHITECTURE.md) and [AI Assistant Safety](docs/AI_ASSISTANT_SAFETY.md) for the integration contract, confirmation flow, and safety boundaries.
+Read the [capabilities](docs/POWERSIM_1_0_CAPABILITIES.md), [limitations](docs/POWERSIM_1_0_LIMITATIONS.md) and [user guide](docs/POWERSIM_1_0_USER_GUIDE.md) before conducting real studies.
