@@ -24,7 +24,10 @@ jobs:
           python -m pip install "assetra==2026.09.08" || python -m pip install "git+https://github.com/ijbd/assetra.git"
       - name: Run synthetic-assisted PowerSim 2027 model with ASSETRA
         run: |
-          python scripts/assetra_georgia_2027.py --trials 60 --seed 2027
+          python scripts/assetra_georgia_2027.py --trials 300 --seed 2027
+      - name: Compute illustrative ELCC for additional 300MW thermal and 200MW/200MWh BESS
+        run: |
+          python scripts/assetra_elcc_2027.py --trials 300 --seed 2027
       - name: Publish reproducible output
         if: always()
         uses: actions/upload-artifact@v4
