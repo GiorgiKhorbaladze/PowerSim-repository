@@ -527,7 +527,7 @@
       "type": "string"
     },
     "workflow_model_version": {
-      "default": "legacy-v4",
+      "default": "powersim-1.0",
       "title": "Workflow Model Version",
       "type": "string"
     }
