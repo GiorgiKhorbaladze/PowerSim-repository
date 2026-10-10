@@ -2501,7 +2501,13 @@ def solve_all(inp: dict, assets: dict, profiles: dict, gas_limits: dict) -> tupl
         )
         return rows, swall, obj_val
 
-    n_windows = math.ceil((H_total_p - window_p) / step_p) + 1
+    # Every period must be committed exactly once.  The former expression
+    # counted enough *look-ahead* windows but stopped after a shortened final
+    # prefix when (H_total_p - window_p) was an exact multiple of step_p
+    # (for example 8760 h with a 168 h / 24 h rolling plan committed only
+    # 8616 h).  Window length controls look-ahead; commit count is governed
+    # solely by the horizon and step.
+    n_windows = math.ceil(H_total_p / step_p)
     print(f"⚙️  Rolling Horizon: {H_total_h}h ÷ {window_h}h window × {step_h}h step "
           f"= {n_windows} windows  (dt={r_min}min, warm_start={warm_start_enabled})")
 
