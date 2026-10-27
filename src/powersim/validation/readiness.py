@@ -39,6 +39,8 @@ REMEDIATION = {
     "scenario_resolution_failed": "Correct the scenario overlay so it resolves against the project.",
     "protected_scenario_overlay": "Scenario overlays cannot change project identity or version lineage.",
     "reference_asset_disabled": "The asset is part of the project but excluded from runs until enabled.",
+    "profile_length_mismatch": ("Give the profile exactly time.periods values, 8760 hourly values, or one full year "
+                                "at the study resolution."),
 }
 
 
@@ -60,6 +62,14 @@ def readiness_issues(value, prefix: str = "") -> list[dict[str, Any]]:
     enabled = [asset for asset in value.assets if asset.enabled]
     if not enabled:
         issues.append(_entry("no_enabled_assets", "error", prefix + "assets", "no asset is enabled"))
+    if 60 % value.time.resolution_minutes == 0:
+        accepted = {value.time.periods, 8760, 8760 * (60 // value.time.resolution_minutes)}
+        for index, profile in enumerate(value.profiles):
+            if len(profile.values) not in accepted:
+                issues.append(_entry("profile_length_mismatch", "error", f"{prefix}profiles[{index}].values",
+                                     f"profile {profile.id!r} has {len(profile.values)} values; expected "
+                                     f"{value.time.periods} (time.periods) or a full year",
+                                     {"profile_id": profile.id, "length": len(profile.values)}))
     for index, asset in enumerate(value.assets):
         path = f"{prefix}assets[{index}]"
         provenance = asset.provenance

@@ -8,6 +8,7 @@ Not yet released or versioned. Merging is subject to CI and independent review.
 - New application API endpoints: system/capability status, samples, project get/validate/validated save/export, validation-gated run creation, run cancel/summary/export, gated compare, and reference catalogue browse/quality/review/import.
 - Results are shown and exported only for valid, QA-passing, publishable runs; failure causes are persisted and shown.
 - Disabled assets are now excluded from solver input. Before this change the solver ignored `enabled = false`.
+- Explicit-period profiles are now solved at their native values. Before this change a profile shorter than a year (for example a 4-period demand `[20, 22, 25, 21]`) was stretched over the whole year by the solver's resampling and solved as `[20, 20, 20, 20]`. Profile lengths other than `time.periods`, 8,760 hourly values or one full year at the study resolution are now a blocking validation error.
 - Plant-parameter reference catalogue rebuilt section-aware from the workbook, with quality checks and an auditable field-level import (see `docs/REFERENCE_DATA.md`).
 - Tests: browser E2E of the full user journey, reference catalogue/import tests, API tests, a `powersim serve` smoke test, and clean installs on Python 3.10-3.12 in CI.
 - Known issue: see the import/no-heat-rate cost double count in the limitations document.

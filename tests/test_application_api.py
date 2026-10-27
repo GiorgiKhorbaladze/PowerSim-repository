@@ -213,3 +213,33 @@ def test_publication_state_is_fail_closed():
     assert not publication_state({"validity": "invalid", "qa": {"status": "fail"}})["publishable"]
     assert not publication_state({})["publishable"]
     assert publication_state({"validity": "valid_with_warnings", "qa": {"status": "warn"}})["qualified"]
+
+
+def test_explicit_period_profile_is_solved_at_its_native_values(tmp_path):
+    """Regression: a 4-period demand [20, 22, 25, 21] was stretched over a year
+    by the solver's profile resampling and solved as [20, 20, 20, 20]."""
+    client, _ = _client(tmp_path, RegisteredLocalWorkflowExecutor())
+    project = _compact()
+    project["profiles"][0]["values"] = [20, 22, 25, 21]
+    project["legacy_payload"].pop("profiles", None)
+    client.post("/projects/save", json=project)
+    run = client.post("/projects/application-compact-demo/runs").json()
+    assert client.post(f"/runs/{run['id']}/launch").json()["accepted"]
+    envelope = client.get(f"/runs/{run['id']}/result").json()
+    loads = [row["load_mw"] for row in envelope["results"]["hourly_system"]]
+    assert loads == [20, 22, 25, 21]
+    assert envelope["results"]["system_summary"]["total_energy_mwh"] == 88
+    assert envelope["qa"]["status"] == "pass"
+
+
+def test_uninterpretable_profile_length_is_rejected(tmp_path):
+    project = ProjectContract.model_validate({**_compact(), "profiles": [{"id": "demand", "unit": "MW", "values": [1, 2, 3]}]})
+    with pytest.raises(ValueError, match="time.periods"):
+        resolved_to_workflow_input(resolve_scenario(project))
+    client, _ = _client(tmp_path, _gated_runner())
+    body = client.post("/projects/validate", json=project.model_dump(mode="json")).json()
+    assert body["contract_valid"] and not body["run_ready"]
+    assert body["issues"][0]["code"] == "profile_length_mismatch"
+    shifted = ProjectContract.model_validate({**_compact(), "legacy_payload": {"study_horizon": {"start_hour": 2, "horizon_hours": 4}}})
+    workflow = resolved_to_workflow_input(resolve_scenario(shifted))
+    assert workflow["profiles"]["demand"][2:6] == [20, 20, 20, 20] and len(workflow["profiles"]["demand"]) == 8760

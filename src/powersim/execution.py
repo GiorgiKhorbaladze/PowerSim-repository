@@ -32,6 +32,50 @@ def _mutable_copy(value: Any) -> Any:
     return copy.deepcopy(value)
 
 
+_HOURS_PER_YEAR = 8760
+_SOLVER_RESOLUTIONS = (1, 5, 15, 30, 60)
+
+
+def _place_explicit_period_profiles(resolved: ResolvedInputContract, base: dict[str, Any]) -> None:
+    """Deliver explicit-period profiles at their native position in the year.
+
+    The established solver reads a profile either as a full year at the study
+    resolution (passed through) or as an hourly year (resampled), and then
+    slices ``study_horizon``.  Any other length is stretched over the whole
+    year, so a 4-period profile ``[20, 22, 25, 21]`` silently became
+    ``[20, 20, 20, 20]``.  A profile whose length equals ``time.periods`` is
+    therefore placed at the horizon start inside a full-year array; values
+    outside the horizon are never read by the slice.  Lengths that cannot be
+    interpreted are rejected instead of being reinterpreted.
+    """
+    resolution = resolved.time.resolution_minutes
+    if resolution not in _SOLVER_RESOLUTIONS:
+        return  # the solver rejects the resolution itself
+    per_hour = 60 // resolution
+    per_year = _HOURS_PER_YEAR * per_hour
+    periods = resolved.time.periods
+    explicit = [key for key, values in base["profiles"].items()
+                if len(values) not in {per_year, _HOURS_PER_YEAR}]
+    if not explicit:
+        return
+    wrong = sorted(key for key in explicit if len(base["profiles"][key]) != periods)
+    if wrong:
+        raise ValueError(f"profiles {wrong} must have {periods} values (time.periods), {_HOURS_PER_YEAR} hourly "
+                         f"values or {per_year} values per year at the study resolution")
+    if periods % per_hour:
+        raise ValueError("an explicit-period study must cover whole hours")
+    horizon = dict(base.get("study_horizon") or {})
+    horizon.setdefault("start_hour", 0)
+    horizon.setdefault("horizon_hours", periods // per_hour)
+    start = int(horizon["start_hour"]) * per_hour
+    if int(horizon["horizon_hours"]) * per_hour != periods or start + periods > per_year:
+        raise ValueError("study_horizon must cover exactly time.periods inside one year for explicit-period profiles")
+    base["study_horizon"] = horizon
+    for key in explicit:
+        values = base["profiles"][key]
+        base["profiles"][key] = [values[0]] * start + values + [values[-1]] * (per_year - start - periods)
+
+
 def resolved_to_workflow_input(resolved: ResolvedInputContract) -> dict[str, Any]:
     """Build the existing workflow input with typed fields taking precedence.
 
@@ -52,6 +96,7 @@ def resolved_to_workflow_input(resolved: ResolvedInputContract) -> dict[str, Any
     base["metadata"]["timezone"] = resolved.time.timezone
     base["resolution_min"] = resolved.time.resolution_minutes
     base["profiles"] = {p.id: list(p.values) for p in resolved.profiles}
+    _place_explicit_period_profiles(resolved, base)
     assets = []
     for asset in resolved.assets:
         # A disabled asset stays in the project document but is not part of

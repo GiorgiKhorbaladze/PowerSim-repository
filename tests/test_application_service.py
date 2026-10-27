@@ -16,7 +16,9 @@ def test_application_service_is_solver_free_and_fails_closed(tmp_path):
 def test_local_executor_persists_only_matching_gated_result(tmp_path):
     manager=RunManager(tmp_path)
     def runner(workflow, run_id, fingerprint):
-        assert workflow['profiles']['d']==[1]
+        # explicit-period profiles are placed at the horizon start of a full year
+        assert workflow['profiles']['d'][:1]==[1] and len(workflow['profiles']['d'])==8760
+        assert workflow['study_horizon']=={'start_hour':0,'horizon_hours':1}
         diagnostics=SolverDiagnostics(backend='test',termination_condition='optimal',normalized_status='optimal',has_incumbent=True,incumbent_objective=1,best_bound=1,actual_mip_gap=0,result_validity='valid',qa_status='pass')
         qa=QAReport(status='pass')
         return ResultEnvelope(run_id=run_id,snapshot_fingerprint=fingerprint,created_at=datetime.now(),validity='valid',solver=diagnostics,qa=qa,results={'ok':True})
