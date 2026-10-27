@@ -20,5 +20,9 @@ def test_windows_distribution_defines_installer_and_local_launcher():
     assert "/api/runs/" in workflow
     assert "compact solve was not publishable" in workflow
     assert fixture.is_file()
+    # the frozen build ships the 1.0 UI (package data), reference catalogue and samples, not the v4 HTML
+    assert '"html;html"' not in script
+    assert "data/reference/plant_parameters" in script and "samples/projects" in script
+    assert "<title>PowerSim 1.0</title>" in workflow and "/api/reference" in workflow
     assert "def _ensure_standard_streams" in desktop
     assert _available_port("127.0.0.1") > 0

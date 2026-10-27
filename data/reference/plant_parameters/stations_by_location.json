@@ -1,0 +1,2851 @@
+{
+ "schema": "powersim.reference.table.v2",
+ "table": "stations",
+ "source_workbook": "Power Plant Parameters English.xlsx",
+ "source_sha256": "f8c8b90f61ccbfcda12ea7b4d353c96fa27aac3bc9e58a8bfb7ee56a845ff4ca",
+ "source_sheet": "Stations by Location",
+ "columns": [
+  {
+   "key": "plant_name",
+   "source_header": "Power Plant Name",
+   "unit": null
+  },
+  {
+   "key": "generating_units",
+   "source_header": "Generating Units",
+   "unit": "units x MW"
+  },
+  {
+   "key": "installed_capacity_mw",
+   "source_header": "Installed Capacity (MW)",
+   "unit": "MW"
+  },
+  {
+   "key": "available_capacity_mw",
+   "source_header": "Available Capacity (MW)",
+   "unit": "MW"
+  },
+  {
+   "key": "design_generation_gwh",
+   "source_header": "Design Generation (million kWh)",
+   "unit": "million kWh"
+  },
+  {
+   "key": "year_commissioned",
+   "source_header": "Year Commissioned",
+   "unit": "year"
+  },
+  {
+   "key": "regulation_type",
+   "source_header": "Regulation Type",
+   "unit": null
+  },
+  {
+   "key": "river",
+   "source_header": "River",
+   "unit": null
+  },
+  {
+   "key": "river_basin",
+   "source_header": "River Basin",
+   "unit": null
+  },
+  {
+   "key": "region",
+   "source_header": "Region",
+   "unit": null
+  },
+  {
+   "key": "city_village",
+   "source_header": "City / Village",
+   "unit": null
+  }
+ ],
+ "layout_notes": [
+  "Row 1 is the column header.",
+  "Rows whose only value is a name are section headings; rows named 'Total ...' are aggregates.",
+  "The first section has no heading row in the workbook and is labelled 'Hydro Power Plants'."
+ ],
+ "records": [
+  {
+   "record_id": "stations:r2",
+   "source_sheet": "Stations by Location",
+   "source_row": 2,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Abhesi HPP",
+    "generating_units": "1x0,888;2x0,56",
+    "installed_capacity_mw": 2.008,
+    "available_capacity_mw": 2.008,
+    "design_generation_gwh": 5.31,
+    "year_commissioned": 1928,
+    "regulation_type": "Run-of-river",
+    "river": "Abasha",
+    "river_basin": "Tekhuri",
+    "region": "Samegrelo",
+    "city_village": "Martvili"
+   }
+  },
+  {
+   "record_id": "stations:r3",
+   "source_sheet": "Stations by Location",
+   "source_row": 3,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Avani HPP",
+    "generating_units": "2x2.3",
+    "installed_capacity_mw": 4.6,
+    "available_capacity_mw": 4.6,
+    "design_generation_gwh": 15.51,
+    "year_commissioned": 2019,
+    "regulation_type": "Run-of-river",
+    "river": "Duruji",
+    "river_basin": "Alazani",
+    "region": "Kakheti",
+    "city_village": "Kvareli"
+   }
+  },
+  {
+   "record_id": "stations:r4",
+   "source_sheet": "Stations by Location",
+   "source_row": 4,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Alazani HPP",
+    "generating_units": "2x3.032",
+    "installed_capacity_mw": 6.064,
+    "available_capacity_mw": 6.064,
+    "design_generation_gwh": 20,
+    "year_commissioned": 1942,
+    "regulation_type": "Run-of-river",
+    "river": "Alazani",
+    "river_basin": "Alazani",
+    "region": "Kakheti",
+    "city_village": "Gurjaani"
+   }
+  },
+  {
+   "record_id": "stations:r5",
+   "source_sheet": "Stations by Location",
+   "source_row": 5,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Alazani HPP 2",
+    "generating_units": "2x3.032",
+    "installed_capacity_mw": 6.064,
+    "available_capacity_mw": 6.064,
+    "design_generation_gwh": 26.27,
+    "year_commissioned": 2013,
+    "regulation_type": "Run-of-river",
+    "river": "Alazani",
+    "river_basin": "Alazani",
+    "region": "Kakheti",
+    "city_village": "Gurjaani"
+   }
+  },
+  {
+   "record_id": "stations:r6",
+   "source_sheet": "Stations by Location",
+   "source_row": 6,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Aragvi 2 HPP",
+    "generating_units": "1x95",
+    "installed_capacity_mw": 1.95,
+    "available_capacity_mw": 1.95,
+    "design_generation_gwh": 13,
+    "year_commissioned": 2018,
+    "regulation_type": "Run-of-river",
+    "river": "Mleta",
+    "river_basin": "Aragvi",
+    "region": "Mtskheta-Mtianeti",
+    "city_village": "Kvemo Mleta"
+   }
+  },
+  {
+   "record_id": "stations:r7",
+   "source_sheet": "Stations by Location",
+   "source_row": 7,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Aragvi HPP",
+    "generating_units": "2x4",
+    "installed_capacity_mw": 8,
+    "available_capacity_mw": 8,
+    "design_generation_gwh": 51.07,
+    "year_commissioned": 2014,
+    "regulation_type": "Run-of-river",
+    "river": "Mleta",
+    "river_basin": "Aragvi",
+    "region": "Mtskheta-Mtianeti",
+    "city_village": "Zemo Mleta"
+   }
+  },
+  {
+   "record_id": "stations:r8",
+   "source_sheet": "Stations by Location",
+   "source_row": 8,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Ats HPP",
+    "generating_units": "10.4+8",
+    "installed_capacity_mw": 18.4,
+    "available_capacity_mw": 18.4,
+    "design_generation_gwh": 97,
+    "year_commissioned": 1937,
+    "regulation_type": "Run-of-river",
+    "river": "Acharistskali",
+    "river_basin": "Chorokhi",
+    "region": "Adjara",
+    "city_village": "Zeda Makhuntseti"
+   }
+  },
+  {
+   "record_id": "stations:r9",
+   "source_sheet": "Stations by Location",
+   "source_row": 9,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Achi HPP",
+    "generating_units": "1x0,74; 1x0,288",
+    "installed_capacity_mw": 1.028,
+    "available_capacity_mw": 1.028,
+    "design_generation_gwh": 5.8263,
+    "year_commissioned": 1958,
+    "regulation_type": "Run-of-river",
+    "river": "Achistskali",
+    "river_basin": "Natanebi",
+    "region": "Guria",
+    "city_village": "Achi"
+   }
+  },
+  {
+   "record_id": "stations:r10",
+   "source_sheet": "Stations by Location",
+   "source_row": 10,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Akhalkalaki 1 HPP",
+    "generating_units": "3x2.5",
+    "installed_capacity_mw": 7.5,
+    "available_capacity_mw": 7.5,
+    "design_generation_gwh": 39.2,
+    "year_commissioned": 2022,
+    "regulation_type": "Run-of-river",
+    "river": "Paravani",
+    "river_basin": "Mtkvari",
+    "region": "Samtskhe-Javakheti",
+    "city_village": "Akhalkalaki"
+   }
+  },
+  {
+   "record_id": "stations:r11",
+   "source_sheet": "Stations by Location",
+   "source_row": 11,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Akhalkalaki 2 HPP",
+    "generating_units": "1x1.6",
+    "installed_capacity_mw": 1.6,
+    "available_capacity_mw": 1.6,
+    "design_generation_gwh": 9.8,
+    "year_commissioned": 2022,
+    "regulation_type": "Run-of-river",
+    "river": "Jangjaguri (Kokhistskali)",
+    "river_basin": "Mtkvari",
+    "region": "Samtskhe-Javakheti",
+    "city_village": "Akhalkalaki"
+   }
+  },
+  {
+   "record_id": "stations:r12",
+   "source_sheet": "Stations by Location",
+   "source_row": 12,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Akhatani HPP",
+    "generating_units": "2x0,3",
+    "installed_capacity_mw": 0.315,
+    "available_capacity_mw": 0.315,
+    "design_generation_gwh": 2.8,
+    "year_commissioned": 2021,
+    "regulation_type": "Run-of-river",
+    "river": "Saguramo Irrigation System",
+    "river_basin": "Aragvi",
+    "region": "Mtskheta-Mtianeti",
+    "city_village": "Akhatani"
+   }
+  },
+  {
+   "record_id": "stations:r13",
+   "source_sheet": "Stations by Location",
+   "source_row": 13,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Akhmeta HPP",
+    "generating_units": "2x4.7",
+    "installed_capacity_mw": 9.2,
+    "available_capacity_mw": 9.2,
+    "design_generation_gwh": 56,
+    "year_commissioned": 2014,
+    "regulation_type": "Run-of-river",
+    "river": "Irrigation Canal",
+    "river_basin": "Alazani",
+    "region": "Kakheti",
+    "city_village": "Akhmeta"
+   }
+  },
+  {
+   "record_id": "stations:r14",
+   "source_sheet": "Stations by Location",
+   "source_row": 14,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Basra 1 HPP",
+    "generating_units": "1x6,29, 1x24",
+    "installed_capacity_mw": 12.53,
+    "available_capacity_mw": 12.53,
+    "design_generation_gwh": 47.9,
+    "year_commissioned": 2025,
+    "regulation_type": "Run-of-river",
+    "river": "Basra",
+    "river_basin": "Bzhuzha",
+    "region": "Guria",
+    "city_village": "Ozurgeti"
+   }
+  },
+  {
+   "record_id": "stations:r15",
+   "source_sheet": "Stations by Location",
+   "source_row": 15,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Basra 2 HPP",
+    "generating_units": "1x6,24, 1x3,1",
+    "installed_capacity_mw": 9.43,
+    "available_capacity_mw": 9.43,
+    "design_generation_gwh": 37.9,
+    "year_commissioned": 2026,
+    "regulation_type": "Run-of-river",
+    "river": "Basra",
+    "river_basin": "Bzhuzha",
+    "region": "Guria",
+    "city_village": "Ozurgeti"
+   }
+  },
+  {
+   "record_id": "stations:r16",
+   "source_sheet": "Stations by Location",
+   "source_row": 16,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Basra 3 HPP",
+    "generating_units": "1x3.924",
+    "installed_capacity_mw": 3.924,
+    "available_capacity_mw": 3.924,
+    "design_generation_gwh": 15.6,
+    "year_commissioned": 2025,
+    "regulation_type": "Run-of-river",
+    "river": "Basra",
+    "river_basin": "Bzhuzha",
+    "region": "Guria",
+    "city_village": "Ozurgeti"
+   }
+  },
+  {
+   "record_id": "stations:r17",
+   "source_sheet": "Stations by Location",
+   "source_row": 17,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Bakhvi HPP 3",
+    "generating_units": "2x4+1x1.8",
+    "installed_capacity_mw": 9.8,
+    "available_capacity_mw": 9.8,
+    "design_generation_gwh": 39.89,
+    "year_commissioned": 2013,
+    "regulation_type": "Run-of-river",
+    "river": "Bakhvistskali",
+    "river_basin": "Supsa",
+    "region": "Guria",
+    "city_village": "Zeda Bakhvi"
+   }
+  },
+  {
+   "record_id": "stations:r18",
+   "source_sheet": "Stations by Location",
+   "source_row": 18,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Bodorna HPP",
+    "generating_units": "1x2.465",
+    "installed_capacity_mw": 2.465,
+    "available_capacity_mw": 2.465,
+    "design_generation_gwh": 15,
+    "year_commissioned": 2018,
+    "regulation_type": "Run-of-river",
+    "river": "Aragvi",
+    "river_basin": "Aragvi",
+    "region": "Mtskheta-Mtianeti",
+    "city_village": "Bodorna"
+   }
+  },
+  {
+   "record_id": "stations:r19",
+   "source_sheet": "Stations by Location",
+   "source_row": 19,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Boldoda (Lopota) HPP",
+    "generating_units": "2*1.250",
+    "installed_capacity_mw": 2.5,
+    "available_capacity_mw": 1.37,
+    "design_generation_gwh": 55,
+    "year_commissioned": 2009,
+    "regulation_type": "Run-of-river",
+    "river": "Lopota",
+    "river_basin": "Alazani",
+    "region": "Kakheti",
+    "city_village": "Napareuli"
+   }
+  },
+  {
+   "record_id": "stations:r20",
+   "source_sheet": "Stations by Location",
+   "source_row": 20,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Bzhuzha HPP",
+    "generating_units": "3x4,08",
+    "installed_capacity_mw": 12.24,
+    "available_capacity_mw": 12.24,
+    "design_generation_gwh": 63,
+    "year_commissioned": 1956,
+    "regulation_type": "Run-of-river",
+    "river": "Bzhuzha",
+    "river_basin": "Natanebi",
+    "region": "Guria",
+    "city_village": "Bzhuzha"
+   }
+  },
+  {
+   "record_id": "stations:r21",
+   "source_sheet": "Stations by Location",
+   "source_row": 21,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Gumati HPP-1",
+    "generating_units": "2x12.7+11+12",
+    "installed_capacity_mw": 46.7,
+    "available_capacity_mw": 48.4,
+    "design_generation_gwh": 256,
+    "year_commissioned": 1956,
+    "regulation_type": "Run-of-river",
+    "river": "Rioni",
+    "river_basin": "Rioni",
+    "region": "Imereti",
+    "city_village": "Kutaisi"
+   }
+  },
+  {
+   "record_id": "stations:r22",
+   "source_sheet": "Stations by Location",
+   "source_row": 22,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Gumati HPP-2",
+    "generating_units": "3x7.6",
+    "installed_capacity_mw": 22.8,
+    "available_capacity_mw": 22.8,
+    "design_generation_gwh": 138,
+    "year_commissioned": 1958,
+    "regulation_type": "Run-of-river",
+    "river": "Rioni",
+    "river_basin": "Rioni",
+    "region": "Imereti",
+    "city_village": "Kutaisi"
+   }
+  },
+  {
+   "record_id": "stations:r23",
+   "source_sheet": "Stations by Location",
+   "source_row": 23,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Dariali HPP",
+    "generating_units": "3x36",
+    "installed_capacity_mw": 108,
+    "available_capacity_mw": 108,
+    "design_generation_gwh": 502,
+    "year_commissioned": 2016,
+    "regulation_type": "Run-of-river",
+    "river": "Tergi",
+    "river_basin": "Tergi",
+    "region": "Mtskheta-Mtianeti",
+    "city_village": "Kazbegi"
+   }
+  },
+  {
+   "record_id": "stations:r24",
+   "source_sheet": "Stations by Location",
+   "source_row": 24,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Dagheti HPP",
+    "generating_units": "2x0,405",
+    "installed_capacity_mw": 0.81,
+    "available_capacity_mw": 0.81,
+    "design_generation_gwh": 5.8,
+    "year_commissioned": 2025,
+    "regulation_type": "Run-of-river",
+    "river": "Khrami",
+    "river_basin": "Mtkvari",
+    "region": "Kvemo Kartli",
+    "city_village": "Dagheti"
+   }
+  },
+  {
+   "record_id": "stations:r25",
+   "source_sheet": "Stations by Location",
+   "source_row": 25,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Dashbashi (Ktsia) HPP",
+    "generating_units": "3x0,42",
+    "installed_capacity_mw": 1.26,
+    "available_capacity_mw": 1.26,
+    "design_generation_gwh": 10.7424,
+    "year_commissioned": 1935,
+    "regulation_type": "Run-of-river",
+    "river": "Khrami",
+    "river_basin": "Mtkvari",
+    "region": "Kvemo Kartli",
+    "city_village": "Dashbashi"
+   }
+  },
+  {
+   "record_id": "stations:r26",
+   "source_sheet": "Stations by Location",
+   "source_row": 26,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Debeda HPP",
+    "generating_units": "2x1.6",
+    "installed_capacity_mw": 3.2,
+    "available_capacity_mw": 3.2,
+    "design_generation_gwh": 13,
+    "year_commissioned": 2016,
+    "regulation_type": "Run-of-river",
+    "river": "Debeda",
+    "river_basin": "Khrami",
+    "region": "Kvemo Kartli",
+    "city_village": "Tekali"
+   }
+  },
+  {
+   "record_id": "stations:r27",
+   "source_sheet": "Stations by Location",
+   "source_row": 27,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Dvirula HPP",
+    "generating_units": "2x1",
+    "installed_capacity_mw": 1.995,
+    "available_capacity_mw": 1.995,
+    "design_generation_gwh": 10,
+    "year_commissioned": 2021,
+    "regulation_type": "Run-of-river",
+    "river": "Dvirula",
+    "river_basin": "Mtkvari",
+    "region": "Samtskhe-Javakheti",
+    "city_village": "Village Dviri"
+   }
+  },
+  {
+   "record_id": "stations:r28",
+   "source_sheet": "Stations by Location",
+   "source_row": 28,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Dmanisi HPP",
+    "generating_units": "1 x 1.98",
+    "installed_capacity_mw": 1.98,
+    "available_capacity_mw": 1.98,
+    "design_generation_gwh": 13.02,
+    "year_commissioned": 2023,
+    "regulation_type": "Run-of-river",
+    "river": "Mashavera",
+    "river_basin": "Khrami",
+    "region": "Kvemo Kartli",
+    "city_village": "Dmanisi"
+   }
+  },
+  {
+   "record_id": "stations:r29",
+   "source_sheet": "Stations by Location",
+   "source_row": 29,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Enguri HPP",
+    "generating_units": "5x260",
+    "installed_capacity_mw": 1300,
+    "available_capacity_mw": 1250,
+    "design_generation_gwh": 3700,
+    "year_commissioned": 1978,
+    "regulation_type": "Annual",
+    "river": "Enguri",
+    "river_basin": "Enguri",
+    "region": "Abkhazia",
+    "city_village": "Cheghali"
+   }
+  },
+  {
+   "record_id": "stations:r30",
+   "source_sheet": "Stations by Location",
+   "source_row": 30,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Energetiki (Akhalkalaki) HPP",
+    "generating_units": "1x0.592",
+    "installed_capacity_mw": 0.492,
+    "available_capacity_mw": 0.492,
+    "design_generation_gwh": 1.4409,
+    "year_commissioned": 2006,
+    "regulation_type": "Run-of-river",
+    "river": "Paravani",
+    "river_basin": "Mtkvari",
+    "region": "Samtskhe-Javakheti",
+    "city_village": "Akhalkalaki"
+   }
+  },
+  {
+   "record_id": "stations:r31",
+   "source_sheet": "Stations by Location",
+   "source_row": 31,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Vardnili HPP",
+    "generating_units": "3x73,33",
+    "installed_capacity_mw": 220,
+    "available_capacity_mw": 185,
+    "design_generation_gwh": 700,
+    "year_commissioned": 1971,
+    "regulation_type": "Annual (Cascade)",
+    "river": "Enguri, Eristskali",
+    "river_basin": "Enguri",
+    "region": "Abkhazia",
+    "city_village": "Gali"
+   }
+  },
+  {
+   "record_id": "stations:r32",
+   "source_sheet": "Stations by Location",
+   "source_row": 32,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Vartsikhe HPP-1",
+    "generating_units": "2x23",
+    "installed_capacity_mw": 46,
+    "available_capacity_mw": 40,
+    "design_generation_gwh": 248,
+    "year_commissioned": 1976,
+    "regulation_type": "Run-of-river",
+    "river": "Rioni, Kvirila, Khanistskali",
+    "river_basin": "Rioni",
+    "region": "Imereti",
+    "city_village": "Vartsikhe"
+   }
+  },
+  {
+   "record_id": "stations:r33",
+   "source_sheet": "Stations by Location",
+   "source_row": 33,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Vartsikhe HPP-2",
+    "generating_units": "2x23",
+    "installed_capacity_mw": 46,
+    "available_capacity_mw": 40,
+    "design_generation_gwh": 248,
+    "year_commissioned": 1976,
+    "regulation_type": "Run-of-river",
+    "river": "Rioni, Kvirila, Khanistskali",
+    "river_basin": "Rioni",
+    "region": "Imereti",
+    "city_village": "Vartsikhe"
+   }
+  },
+  {
+   "record_id": "stations:r34",
+   "source_sheet": "Stations by Location",
+   "source_row": 34,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Vartsikhe HPP-3",
+    "generating_units": "2x23",
+    "installed_capacity_mw": 46,
+    "available_capacity_mw": 40,
+    "design_generation_gwh": 248,
+    "year_commissioned": 1977,
+    "regulation_type": "Run-of-river",
+    "river": "Rioni, Kvirila, Khanistskali",
+    "river_basin": "Rioni",
+    "region": "Imereti",
+    "city_village": "Vartsikhe"
+   }
+  },
+  {
+   "record_id": "stations:r35",
+   "source_sheet": "Stations by Location",
+   "source_row": 35,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Vartsikhe HPP-4",
+    "generating_units": "2x23",
+    "installed_capacity_mw": 46,
+    "available_capacity_mw": 40,
+    "design_generation_gwh": 248,
+    "year_commissioned": 1977,
+    "regulation_type": "Run-of-river",
+    "river": "Rioni, Kvirila, Khanistskali",
+    "river_basin": "Rioni",
+    "region": "Imereti",
+    "city_village": "Vartsikhe"
+   }
+  },
+  {
+   "record_id": "stations:r36",
+   "source_sheet": "Stations by Location",
+   "source_row": 36,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Zahesi HPP",
+    "generating_units": "4x3.2+2x12",
+    "installed_capacity_mw": 42,
+    "available_capacity_mw": 40,
+    "design_generation_gwh": 210,
+    "year_commissioned": 1927,
+    "regulation_type": "Run-of-river",
+    "river": "Mtkvari, Aragvi",
+    "river_basin": "Mtkvari",
+    "region": "Mtskheta-Mtianeti",
+    "city_village": "Tbilisi"
+   }
+  },
+  {
+   "record_id": "stations:r37",
+   "source_sheet": "Stations by Location",
+   "source_row": 37,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Tetrikhevi HPP",
+    "generating_units": "2x6,2",
+    "installed_capacity_mw": 12.4,
+    "available_capacity_mw": 12.4,
+    "design_generation_gwh": 49,
+    "year_commissioned": 1952,
+    "regulation_type": "Run-of-river",
+    "river": "Tetrikhevi",
+    "river_basin": "Mtkvari",
+    "region": "Kvemo Kartli",
+    "city_village": "Orkhevi"
+   }
+  },
+  {
+   "record_id": "stations:r38",
+   "source_sheet": "Stations by Location",
+   "source_row": 38,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Igoeti HPP",
+    "generating_units": "1.25+0.525",
+    "installed_capacity_mw": 1.775,
+    "available_capacity_mw": 1.775,
+    "design_generation_gwh": 2.7406,
+    "year_commissioned": 1953,
+    "regulation_type": "Run-of-river",
+    "river": "Feeder Canal",
+    "river_basin": "Mtkvari",
+    "region": "Shida Kartli",
+    "city_village": "Igoeti"
+   }
+  },
+  {
+   "record_id": "stations:r39",
+   "source_sheet": "Stations by Location",
+   "source_row": 39,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Intsoba HPP",
+    "generating_units": "3x0,5",
+    "installed_capacity_mw": 1.5,
+    "available_capacity_mw": 1.5,
+    "design_generation_gwh": 8.0803,
+    "year_commissioned": 1998,
+    "regulation_type": "Run-of-river",
+    "river": "Intsoba",
+    "river_basin": "Alazani",
+    "region": "Kakheti",
+    "city_village": "Kvareli"
+   }
+  },
+  {
+   "record_id": "stations:r40",
+   "source_sheet": "Stations by Location",
+   "source_row": 40,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Ipari HPP",
+    "generating_units": "2x1,49",
+    "installed_capacity_mw": 3.315,
+    "available_capacity_mw": 3.315,
+    "design_generation_gwh": 17,
+    "year_commissioned": 2020,
+    "regulation_type": "Run-of-river",
+    "river": "Ipari",
+    "river_basin": "Enguri",
+    "region": "Svaneti",
+    "city_village": "Ipari"
+   }
+  },
+  {
+   "record_id": "stations:r41",
+   "source_sheet": "Stations by Location",
+   "source_row": 41,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Kabali HPP",
+    "generating_units": "3x0,5",
+    "installed_capacity_mw": 1.5,
+    "available_capacity_mw": 1.5,
+    "design_generation_gwh": 5.815,
+    "year_commissioned": 1953,
+    "regulation_type": "Run-of-river",
+    "river": "Kabali",
+    "river_basin": "Alazani",
+    "region": "Kakheti",
+    "city_village": "Lagodekhi"
+   }
+  },
+  {
+   "record_id": "stations:r42",
+   "source_sheet": "Stations by Location",
+   "source_row": 42,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Kazreti HPP",
+    "generating_units": "2x1.6+0.1",
+    "installed_capacity_mw": 3.3,
+    "available_capacity_mw": 3.3,
+    "design_generation_gwh": 14.85,
+    "year_commissioned": 2015,
+    "regulation_type": "Run-of-river",
+    "river": "Mashavera",
+    "river_basin": "Khrami",
+    "region": "Kvemo Kartli",
+    "city_village": "Kazreti"
+   }
+  },
+  {
+   "record_id": "stations:r43",
+   "source_sheet": "Stations by Location",
+   "source_row": 43,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Kasleti HPP 1",
+    "generating_units": "2x3,6",
+    "installed_capacity_mw": 7.2,
+    "available_capacity_mw": 7.2,
+    "design_generation_gwh": 43.5,
+    "year_commissioned": 2025,
+    "regulation_type": "Run-of-river",
+    "river": "Kasleti",
+    "river_basin": "Enguri",
+    "region": "Svaneti",
+    "city_village": "Zeda Tsvirmindi / Mestia"
+   }
+  },
+  {
+   "record_id": "stations:r44",
+   "source_sheet": "Stations by Location",
+   "source_row": 44,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Kasleti HPP 2",
+    "generating_units": "2x4.55",
+    "installed_capacity_mw": 9.1,
+    "available_capacity_mw": 9.1,
+    "design_generation_gwh": 46,
+    "year_commissioned": 2018,
+    "regulation_type": "Run-of-river",
+    "river": "Kasleti",
+    "river_basin": "Enguri",
+    "region": "Svaneti",
+    "city_village": "Kasleti"
+   }
+  },
+  {
+   "record_id": "stations:r45",
+   "source_sheet": "Stations by Location",
+   "source_row": 45,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Kakhareti HPP",
+    "generating_units": "2x1,04",
+    "installed_capacity_mw": 2.08,
+    "available_capacity_mw": 2.08,
+    "design_generation_gwh": 7.5724,
+    "year_commissioned": 1957,
+    "regulation_type": "Run-of-river",
+    "river": "Kvabliani",
+    "river_basin": "Mtkvari",
+    "region": "Samtskhe-Javakheti",
+    "city_village": "Kakhareti"
+   }
+  },
+  {
+   "record_id": "stations:r46",
+   "source_sheet": "Stations by Location",
+   "source_row": 46,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Kinkisha HPP",
+    "generating_units": "2x0,432",
+    "installed_capacity_mw": 0.864,
+    "available_capacity_mw": 0.864,
+    "design_generation_gwh": 2.1084,
+    "year_commissioned": 1954,
+    "regulation_type": "Run-of-river",
+    "river": "Kinkisha",
+    "river_basin": "Kintrishi",
+    "region": "Adjara",
+    "city_village": "Zeda Sameba"
+   }
+  },
+  {
+   "record_id": "stations:r47",
+   "source_sheet": "Stations by Location",
+   "source_row": 47,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Kintrisha HPP",
+    "generating_units": "2x2.75",
+    "installed_capacity_mw": 5.5,
+    "available_capacity_mw": 5.5,
+    "design_generation_gwh": 30,
+    "year_commissioned": 2017,
+    "regulation_type": "Run-of-river",
+    "river": "Kintrishi",
+    "river_basin": "Kintrishi",
+    "region": "Adjara",
+    "city_village": "Varjanauli"
+   }
+  },
+  {
+   "record_id": "stations:r48",
+   "source_sheet": "Stations by Location",
+   "source_row": 48,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Kirnati HPP",
+    "generating_units": "4x11.66:1x1.9",
+    "installed_capacity_mw": 52.62,
+    "available_capacity_mw": 29,
+    "design_generation_gwh": 219,
+    "year_commissioned": 2018,
+    "regulation_type": "Run-of-river",
+    "river": "Chorokhi",
+    "river_basin": "Chorokhi",
+    "region": "Adjara",
+    "city_village": "Kirnati"
+   }
+  },
+  {
+   "record_id": "stations:r49",
+   "source_sheet": "Stations by Location",
+   "source_row": 49,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Korsha 1 HPP",
+    "generating_units": "1 x 1.020",
+    "installed_capacity_mw": 1.02,
+    "available_capacity_mw": 1.02,
+    "design_generation_gwh": 5.1,
+    "year_commissioned": 2023,
+    "regulation_type": "Run-of-river",
+    "river": "Okherkhevi",
+    "river_basin": "Aragvi",
+    "region": "Mtskheta-Mtianeti",
+    "city_village": "Okherkhevi"
+   }
+  },
+  {
+   "record_id": "stations:r50",
+   "source_sheet": "Stations by Location",
+   "source_row": 50,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Korsha HPP",
+    "generating_units": "1x1.5",
+    "installed_capacity_mw": 1.505,
+    "available_capacity_mw": 1.505,
+    "design_generation_gwh": 5.7,
+    "year_commissioned": 2023,
+    "regulation_type": "Run-of-river",
+    "river": "Okherkhevi",
+    "river_basin": "Aragvi",
+    "region": "Mtskheta-Mtianeti",
+    "city_village": "Korsha"
+   }
+  },
+  {
+   "record_id": "stations:r51",
+   "source_sheet": "Stations by Location",
+   "source_row": 51,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Larsi HPP",
+    "generating_units": "3x6,5",
+    "installed_capacity_mw": 19,
+    "available_capacity_mw": 19,
+    "design_generation_gwh": 110,
+    "year_commissioned": 2014,
+    "regulation_type": "Run-of-river",
+    "river": "Tergi",
+    "river_basin": "Tergi",
+    "region": "Mtskheta-Mtianeti",
+    "city_village": "Kazbegi"
+   }
+  },
+  {
+   "record_id": "stations:r52",
+   "source_sheet": "Stations by Location",
+   "source_row": 52,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Lakhami HPP 1",
+    "generating_units": "2x3,5",
+    "installed_capacity_mw": 7.14,
+    "available_capacity_mw": 7.14,
+    "design_generation_gwh": 32,
+    "year_commissioned": 2020,
+    "regulation_type": "Run-of-river",
+    "river": "Lakhami",
+    "river_basin": "Enguri",
+    "region": "Svaneti",
+    "city_village": "Lakhami"
+   }
+  },
+  {
+   "record_id": "stations:r53",
+   "source_sheet": "Stations by Location",
+   "source_row": 53,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Lakhami HPP 2",
+    "generating_units": "3x3.6",
+    "installed_capacity_mw": 10.71,
+    "available_capacity_mw": 10.71,
+    "design_generation_gwh": 55,
+    "year_commissioned": 2020,
+    "regulation_type": "Run-of-river",
+    "river": "Lakhami",
+    "river_basin": "Enguri",
+    "region": "Svaneti",
+    "city_village": "Lakhami"
+   }
+  },
+  {
+   "record_id": "stations:r54",
+   "source_sheet": "Stations by Location",
+   "source_row": 54,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Lajanuri HPP",
+    "generating_units": "2x39.144+37.28",
+    "installed_capacity_mw": 115.6,
+    "available_capacity_mw": 115.568,
+    "design_generation_gwh": 505,
+    "year_commissioned": 1960,
+    "regulation_type": "Daily",
+    "river": "Lajanuri, Tskhenistskali",
+    "river_basin": "Rioni",
+    "region": "Lechkhumi",
+    "city_village": "Alpana"
+   }
+  },
+  {
+   "record_id": "stations:r55",
+   "source_sheet": "Stations by Location",
+   "source_row": 55,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Marneuli HPP",
+    "generating_units": "1x0.25",
+    "installed_capacity_mw": 0.25,
+    "available_capacity_mw": 0.25,
+    "design_generation_gwh": 1.9,
+    "year_commissioned": 2016,
+    "regulation_type": "Run-of-river",
+    "river": "Algeti",
+    "river_basin": "Mtkvari",
+    "region": "Kvemo Kartli",
+    "city_village": "Marneuli"
+   }
+  },
+  {
+   "record_id": "stations:r56",
+   "source_sheet": "Stations by Location",
+   "source_row": 56,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Martkopi HPP",
+    "generating_units": "1x3,87",
+    "installed_capacity_mw": 3.87,
+    "available_capacity_mw": 3.87,
+    "design_generation_gwh": 15,
+    "year_commissioned": 1952,
+    "regulation_type": "Run-of-river",
+    "river": "Upper Samgori Canal",
+    "river_basin": "Mtkvari",
+    "region": "Kvemo Kartli",
+    "city_village": "Martkopi"
+   }
+  },
+  {
+   "record_id": "stations:r57",
+   "source_sheet": "Stations by Location",
+   "source_row": 57,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Mashavera (Demi) HPP",
+    "generating_units": "2x0.5",
+    "installed_capacity_mw": 1,
+    "available_capacity_mw": 1,
+    "design_generation_gwh": 2.1492,
+    "year_commissioned": 1949,
+    "regulation_type": "Run-of-river",
+    "river": "Mashavera",
+    "river_basin": "Khrami",
+    "region": "Kvemo Kartli",
+    "city_village": "Balichi"
+   }
+  },
+  {
+   "record_id": "stations:r58",
+   "source_sheet": "Stations by Location",
+   "source_row": 58,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Machakhela (Bakuri) HPP",
+    "generating_units": "1x2.175",
+    "installed_capacity_mw": 2.175,
+    "available_capacity_mw": 2.175,
+    "design_generation_gwh": 7.6081,
+    "year_commissioned": 1957,
+    "regulation_type": "Run-of-river",
+    "river": "Machakhlistskali",
+    "river_basin": "Chorokhi",
+    "region": "Adjara",
+    "city_village": "Machakhela"
+   }
+  },
+  {
+   "record_id": "stations:r59",
+   "source_sheet": "Stations by Location",
+   "source_row": 59,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Mestiachala HPP 1",
+    "generating_units": "2x10,632",
+    "installed_capacity_mw": 21.3,
+    "available_capacity_mw": 21.264,
+    "design_generation_gwh": 69.15,
+    "year_commissioned": 2019,
+    "regulation_type": "Run-of-river",
+    "river": "Mestiachala",
+    "river_basin": "Enguri",
+    "region": "Svaneti",
+    "city_village": "Mestia"
+   }
+  },
+  {
+   "record_id": "stations:r60",
+   "source_sheet": "Stations by Location",
+   "source_row": 60,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Mestiachala HPP 2",
+    "generating_units": "3x10",
+    "installed_capacity_mw": 31.9,
+    "available_capacity_mw": 30,
+    "design_generation_gwh": 106,
+    "year_commissioned": 2019,
+    "regulation_type": "Run-of-river",
+    "river": "Mestiachala",
+    "river_basin": "Enguri",
+    "region": "Svaneti",
+    "city_village": "Mestia"
+   }
+  },
+  {
+   "record_id": "stations:r61",
+   "source_sheet": "Stations by Location",
+   "source_row": 61,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Misaktsieli (Ento) HPP",
+    "generating_units": "1.75+1.0",
+    "installed_capacity_mw": 2.75,
+    "available_capacity_mw": 2.75,
+    "design_generation_gwh": 8.8101,
+    "year_commissioned": 1964,
+    "regulation_type": "Run-of-river",
+    "river": "Mukhransheni Canal",
+    "river_basin": "Aragvi",
+    "region": "Mtskheta-Mtianeti",
+    "city_village": "Misaktsieli"
+   }
+  },
+  {
+   "record_id": "stations:r62",
+   "source_sheet": "Stations by Location",
+   "source_row": 62,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Mtkvari HPP",
+    "generating_units": "2X27,05",
+    "installed_capacity_mw": 54.1,
+    "available_capacity_mw": 54.1,
+    "design_generation_gwh": 259.8,
+    "year_commissioned": 2025,
+    "regulation_type": "Run-of-river",
+    "river": "Mtkvari",
+    "river_basin": "Mtkvari",
+    "region": "Samtskhe-Javakheti",
+    "city_village": "Akhaltsikhe"
+   }
+  },
+  {
+   "record_id": "stations:r63",
+   "source_sheet": "Stations by Location",
+   "source_row": 63,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Nabeghlavi HPP",
+    "generating_units": "2x1",
+    "installed_capacity_mw": 2,
+    "available_capacity_mw": 2,
+    "design_generation_gwh": 13,
+    "year_commissioned": 2017,
+    "regulation_type": "Run-of-river",
+    "river": "Gubazeuli",
+    "river_basin": "Supsa",
+    "region": "Guria",
+    "city_village": "Nabeghlavi"
+   }
+  },
+  {
+   "record_id": "stations:r64",
+   "source_sheet": "Stations by Location",
+   "source_row": 64,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Nakra HPP",
+    "generating_units": "2x4.5",
+    "installed_capacity_mw": 9.95,
+    "available_capacity_mw": 9.95,
+    "design_generation_gwh": 35,
+    "year_commissioned": 2022,
+    "regulation_type": "Run-of-river",
+    "river": "Nakra",
+    "river_basin": "Enguri",
+    "region": "Svaneti",
+    "city_village": "Nakra"
+   }
+  },
+  {
+   "record_id": "stations:r65",
+   "source_sheet": "Stations by Location",
+   "source_row": 65,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Natseshari HPP",
+    "generating_units": "1x1.88",
+    "installed_capacity_mw": 1.879,
+    "available_capacity_mw": 1.879,
+    "design_generation_gwh": 9,
+    "year_commissioned": 2022,
+    "regulation_type": "Run-of-river",
+    "river": "Natseshari",
+    "river_basin": "Enguri",
+    "region": "Svaneti",
+    "city_village": "Mestia"
+   }
+  },
+  {
+   "record_id": "stations:r66",
+   "source_sheet": "Stations by Location",
+   "source_row": 66,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Okami 2007 HPP",
+    "generating_units": "2*1.250",
+    "installed_capacity_mw": 1.6,
+    "available_capacity_mw": 1.6,
+    "design_generation_gwh": 8,
+    "year_commissioned": 2009,
+    "regulation_type": "Run-of-river",
+    "river": "Feeder Canal",
+    "river_basin": "Mtkvari",
+    "region": "Shida Kartli",
+    "city_village": "Okami"
+   }
+  },
+  {
+   "record_id": "stations:r67",
+   "source_sheet": "Stations by Location",
+   "source_row": 67,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Old Energy HPP",
+    "generating_units": "3x7.13",
+    "installed_capacity_mw": 21.39,
+    "available_capacity_mw": 21.4,
+    "design_generation_gwh": 129,
+    "year_commissioned": 2018,
+    "regulation_type": "Run-of-river",
+    "river": "Gumi",
+    "river_basin": "Enguri",
+    "region": "Abkhazia",
+    "city_village": "Sokhumi"
+   }
+  },
+  {
+   "record_id": "stations:r68",
+   "source_sheet": "Stations by Location",
+   "source_row": 68,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Ortachala HPP",
+    "generating_units": "3x6",
+    "installed_capacity_mw": 18,
+    "available_capacity_mw": 12,
+    "design_generation_gwh": 90,
+    "year_commissioned": 1954,
+    "regulation_type": "Run-of-river",
+    "river": "Mtkvari, Aragvi",
+    "river_basin": "Mtkvari",
+    "region": "Mtskheta-Mtianeti",
+    "city_village": "Tbilisi"
+   }
+  },
+  {
+   "record_id": "stations:r69",
+   "source_sheet": "Stations by Location",
+   "source_row": 69,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Oro HPP",
+    "generating_units": "1x1.12",
+    "installed_capacity_mw": 1.12,
+    "available_capacity_mw": 1.12,
+    "design_generation_gwh": 8,
+    "year_commissioned": 2019,
+    "regulation_type": "Run-of-river",
+    "river": "Orozmani",
+    "river_basin": "Khrami",
+    "region": "Kvemo Kartli",
+    "city_village": "Orozmani"
+   }
+  },
+  {
+   "record_id": "stations:r70",
+   "source_sheet": "Stations by Location",
+   "source_row": 70,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Zhinvali HPP",
+    "generating_units": "4x32,5",
+    "installed_capacity_mw": 130,
+    "available_capacity_mw": 88,
+    "design_generation_gwh": 500,
+    "year_commissioned": 1984,
+    "regulation_type": "Annual",
+    "river": "Tetri and Shavi Aragvi",
+    "river_basin": "Aragvi",
+    "region": "Mtskheta-Mtianeti",
+    "city_village": "Ananuri"
+   }
+  },
+  {
+   "record_id": "stations:r71",
+   "source_sheet": "Stations by Location",
+   "source_row": 71,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Racha HPP",
+    "generating_units": "2x5.5",
+    "installed_capacity_mw": 11,
+    "available_capacity_mw": 11,
+    "design_generation_gwh": 51.75,
+    "year_commissioned": 2013,
+    "regulation_type": "Run-of-river",
+    "river": "Rioni",
+    "river_basin": "Rioni",
+    "region": "Racha",
+    "city_village": "Ambrolauri"
+   }
+  },
+  {
+   "record_id": "stations:r72",
+   "source_sheet": "Stations by Location",
+   "source_row": 72,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Rioni HPP",
+    "generating_units": "2x15+2x12",
+    "installed_capacity_mw": 54,
+    "available_capacity_mw": 54,
+    "design_generation_gwh": 325,
+    "year_commissioned": 1933,
+    "regulation_type": "Run-of-river",
+    "river": "Rioni",
+    "river_basin": "Rioni",
+    "region": "Imereti",
+    "city_village": "Kutaisi"
+   }
+  },
+  {
+   "record_id": "stations:r73",
+   "source_sheet": "Stations by Location",
+   "source_row": 73,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Ritseula HPP",
+    "generating_units": "1x4,08;2x1,12",
+    "installed_capacity_mw": 6.32,
+    "available_capacity_mw": 6.32,
+    "design_generation_gwh": 14.6,
+    "year_commissioned": 1967,
+    "regulation_type": "Run-of-river",
+    "river": "Ritseula",
+    "river_basin": "Rioni",
+    "region": "Racha",
+    "city_village": "Sadmeli"
+   }
+  },
+  {
+   "record_id": "stations:r74",
+   "source_sheet": "Stations by Location",
+   "source_row": 74,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Roshka HPP",
+    "generating_units": "1 x 1.505",
+    "installed_capacity_mw": 1.505,
+    "available_capacity_mw": 1.505,
+    "design_generation_gwh": 5.08,
+    "year_commissioned": 2023,
+    "regulation_type": "Run-of-river",
+    "river": "Roshka",
+    "river_basin": "Aragvi",
+    "region": "Mtskheta-Mtianeti",
+    "city_village": "Roshka"
+   }
+  },
+  {
+   "record_id": "stations:r75",
+   "source_sheet": "Stations by Location",
+   "source_row": 75,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Roshka 1 HPP",
+    "generating_units": "1x1.041",
+    "installed_capacity_mw": 1.041,
+    "available_capacity_mw": 1.041,
+    "design_generation_gwh": 5.7,
+    "year_commissioned": 2023,
+    "regulation_type": "Run-of-river",
+    "river": "Roshka",
+    "river_basin": "Aragvi",
+    "region": "Mtskheta-Mtianeti",
+    "city_village": "Roshka"
+   }
+  },
+  {
+   "record_id": "stations:r76",
+   "source_sheet": "Stations by Location",
+   "source_row": 76,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Roshka 2 HPP",
+    "generating_units": "1x1.990",
+    "installed_capacity_mw": 1.99,
+    "available_capacity_mw": 1.99,
+    "design_generation_gwh": 8.55,
+    "year_commissioned": 2021,
+    "regulation_type": "Run-of-river",
+    "river": "Roshka",
+    "river_basin": "Aragvi",
+    "region": "Mtskheta-Mtianeti",
+    "city_village": "Roshka"
+   }
+  },
+  {
+   "record_id": "stations:r77",
+   "source_sheet": "Stations by Location",
+   "source_row": 77,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Roshka 3 HPP",
+    "generating_units": "1x1,058",
+    "installed_capacity_mw": 1.058,
+    "available_capacity_mw": 1.058,
+    "design_generation_gwh": 4.3,
+    "year_commissioned": 2021,
+    "regulation_type": "Run-of-river",
+    "river": "Roshka",
+    "river_basin": "Aragvi",
+    "region": "Mtskheta-Mtianeti",
+    "city_village": "Roshka"
+   }
+  },
+  {
+   "record_id": "stations:r78",
+   "source_sheet": "Stations by Location",
+   "source_row": 78,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Saguramo HPP",
+    "generating_units": "2x25",
+    "installed_capacity_mw": 4.5,
+    "available_capacity_mw": 4.5,
+    "design_generation_gwh": 36.4,
+    "year_commissioned": 2016,
+    "regulation_type": "Run-of-river",
+    "river": "Aragvi",
+    "river_basin": "Aragvi",
+    "region": "Mtskheta-Mtianeti",
+    "city_village": "Saguramo"
+   }
+  },
+  {
+   "record_id": "stations:r79",
+   "source_sheet": "Stations by Location",
+   "source_row": 79,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Sanalia HPP",
+    "generating_units": "2x2.1",
+    "installed_capacity_mw": 4.2,
+    "available_capacity_mw": 4.2,
+    "design_generation_gwh": 16,
+    "year_commissioned": 2007,
+    "regulation_type": "Run-of-river",
+    "river": "Sanalia",
+    "river_basin": "Acharistskali",
+    "region": "Adjara",
+    "city_village": "Shubani"
+   }
+  },
+  {
+   "record_id": "stations:r80",
+   "source_sheet": "Stations by Location",
+   "source_row": 80,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Sashuala HPP",
+    "generating_units": "1x2.2",
+    "installed_capacity_mw": 2.203,
+    "available_capacity_mw": 2.203,
+    "design_generation_gwh": 10.6,
+    "year_commissioned": 2022,
+    "regulation_type": "Run-of-river",
+    "river": "Sashuala",
+    "river_basin": "Supsa",
+    "region": "Guria",
+    "city_village": "Village Khidistavi"
+   }
+  },
+  {
+   "record_id": "stations:r81",
+   "source_sheet": "Stations by Location",
+   "source_row": 81,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Sashuala HPP 1",
+    "generating_units": "2x3.93",
+    "installed_capacity_mw": 7.86,
+    "available_capacity_mw": 7.86,
+    "design_generation_gwh": 34.7,
+    "year_commissioned": 2021,
+    "regulation_type": "Run-of-river",
+    "river": "Sashuala",
+    "river_basin": "Supsa",
+    "region": "Guria",
+    "city_village": "Village Khidistavi"
+   }
+  },
+  {
+   "record_id": "stations:r82",
+   "source_sheet": "Stations by Location",
+   "source_row": 82,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Sashuala HPP 2",
+    "generating_units": "1x5",
+    "installed_capacity_mw": 5.06,
+    "available_capacity_mw": 5.06,
+    "design_generation_gwh": 23,
+    "year_commissioned": 2019,
+    "regulation_type": "Run-of-river",
+    "river": "Sashuala",
+    "river_basin": "Supsa",
+    "region": "Guria",
+    "city_village": "Village Khidistavi"
+   }
+  },
+  {
+   "record_id": "stations:r83",
+   "source_sheet": "Stations by Location",
+   "source_row": 83,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Satskheni HPP",
+    "generating_units": "2x7",
+    "installed_capacity_mw": 14,
+    "available_capacity_mw": 14,
+    "design_generation_gwh": 61,
+    "year_commissioned": 1952,
+    "regulation_type": "Run-of-river",
+    "river": "Satskhenistskali",
+    "river_basin": "Mtkvari",
+    "region": "Kvemo Kartli",
+    "city_village": "Village Saakadze"
+   }
+  },
+  {
+   "record_id": "stations:r84",
+   "source_sheet": "Stations by Location",
+   "source_row": 84,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Sioni HPP",
+    "generating_units": "2x4,57",
+    "installed_capacity_mw": 9.14,
+    "available_capacity_mw": 9.14,
+    "design_generation_gwh": 33,
+    "year_commissioned": 1964,
+    "regulation_type": "Run-of-river",
+    "river": "Iori",
+    "river_basin": "Iori",
+    "region": "Mtskheta-Mtianeti",
+    "city_village": "Sioni"
+   }
+  },
+  {
+   "record_id": "stations:r85",
+   "source_sheet": "Stations by Location",
+   "source_row": 85,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Skurdidi HPP",
+    "generating_units": "2x0.64",
+    "installed_capacity_mw": 1.28,
+    "available_capacity_mw": 1.28,
+    "design_generation_gwh": 7,
+    "year_commissioned": 2019,
+    "regulation_type": "Run-of-river",
+    "river": "Skurdidi",
+    "river_basin": "Chorokhi",
+    "region": "Adjara",
+    "city_village": "Skurdidi"
+   }
+  },
+  {
+   "record_id": "stations:r86",
+   "source_sheet": "Stations by Location",
+   "source_row": 86,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Sulori HPP",
+    "generating_units": "2*0.4",
+    "installed_capacity_mw": 0.8,
+    "available_capacity_mw": 0.8,
+    "design_generation_gwh": 2.4,
+    "year_commissioned": 2009,
+    "regulation_type": "Run-of-river",
+    "river": "Sulori",
+    "river_basin": "Rioni",
+    "region": "Imereti",
+    "city_village": "Sulori"
+   }
+  },
+  {
+   "record_id": "stations:r87",
+   "source_sheet": "Stations by Location",
+   "source_row": 87,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Skuri HPP",
+    "generating_units": "2x0.514",
+    "installed_capacity_mw": 1.028,
+    "available_capacity_mw": 1.028,
+    "design_generation_gwh": 4.5992,
+    "year_commissioned": 1958,
+    "regulation_type": "Run-of-river",
+    "river": "Skuri",
+    "river_basin": "Chanistskali",
+    "region": "Samegrelo",
+    "city_village": "Skuri Resort"
+   }
+  },
+  {
+   "record_id": "stations:r88",
+   "source_sheet": "Stations by Location",
+   "source_row": 88,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Skhalta HPP",
+    "generating_units": "3x3",
+    "installed_capacity_mw": 9,
+    "available_capacity_mw": 9,
+    "design_generation_gwh": 27,
+    "year_commissioned": 2021,
+    "regulation_type": "Run-of-river",
+    "river": "Skhaltistskali, Chirukhistskali",
+    "river_basin": "Acharistskali",
+    "region": "Adjara",
+    "city_village": "Skhalta"
+   }
+  },
+  {
+   "record_id": "stations:r89",
+   "source_sheet": "Stations by Location",
+   "source_row": 89,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Tiriponi HPP",
+    "generating_units": "2x1,6",
+    "installed_capacity_mw": 3.2,
+    "available_capacity_mw": 3.2,
+    "design_generation_gwh": 5.1972,
+    "year_commissioned": 1951,
+    "regulation_type": "Run-of-river",
+    "river": "Kirbalula",
+    "river_basin": "Mtkvari",
+    "region": "Shida Kartli",
+    "city_village": "Kvemo Sobisi"
+   }
+  },
+  {
+   "record_id": "stations:r90",
+   "source_sheet": "Stations by Location",
+   "source_row": 90,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Toloshi HPP",
+    "generating_units": "1 x 1.69",
+    "installed_capacity_mw": 1.69,
+    "available_capacity_mw": 1.69,
+    "design_generation_gwh": 10.57,
+    "year_commissioned": 2023,
+    "regulation_type": "Run-of-river",
+    "river": "Tashli-Kishla",
+    "river_basin": "Mtkvari",
+    "region": "Samtskhe-Javakheti",
+    "city_village": "Village Toloshi"
+   }
+  },
+  {
+   "record_id": "stations:r91",
+   "source_sheet": "Stations by Location",
+   "source_row": 91,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Paravani HPP",
+    "generating_units": "2x43.27",
+    "installed_capacity_mw": 86.54,
+    "available_capacity_mw": 87,
+    "design_generation_gwh": 445,
+    "year_commissioned": 2014,
+    "regulation_type": "Run-of-river",
+    "river": "Paravani",
+    "river_basin": "Mtkvari",
+    "region": "Samtskhe-Javakheti",
+    "city_village": "Village Khertvisi"
+   }
+  },
+  {
+   "record_id": "stations:r92",
+   "source_sheet": "Stations by Location",
+   "source_row": 92,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Pshavela (Stori Power) HPP",
+    "generating_units": "1x1.935",
+    "installed_capacity_mw": 1.935,
+    "available_capacity_mw": 1.935,
+    "design_generation_gwh": 11.45,
+    "year_commissioned": 2014,
+    "regulation_type": "Run-of-river",
+    "river": "Stori",
+    "river_basin": "Alazani",
+    "region": "Kakheti",
+    "city_village": "Village Pshaveli (Telavi District)"
+   }
+  },
+  {
+   "record_id": "stations:r93",
+   "source_sheet": "Stations by Location",
+   "source_row": 93,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Pshavela HPP",
+    "generating_units": "1*1.92",
+    "installed_capacity_mw": 2.9,
+    "available_capacity_mw": 1.9,
+    "design_generation_gwh": 17.34,
+    "year_commissioned": 2010,
+    "regulation_type": "Run-of-river",
+    "river": "Aragvi",
+    "river_basin": "Aragvi",
+    "region": "Mtskheta-Mtianeti",
+    "city_village": "Pshaveli"
+   }
+  },
+  {
+   "record_id": "stations:r94",
+   "source_sheet": "Stations by Location",
+   "source_row": 94,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Kazbegi HPP",
+    "generating_units": "2x3.2",
+    "installed_capacity_mw": 6.4,
+    "available_capacity_mw": 6.4,
+    "design_generation_gwh": 39.25,
+    "year_commissioned": 2014,
+    "regulation_type": "Run-of-river",
+    "river": "Brolistskali",
+    "river_basin": "Tergi",
+    "region": "Mtskheta-Mtianeti",
+    "city_village": "Kazbegi"
+   }
+  },
+  {
+   "record_id": "stations:r95",
+   "source_sheet": "Stations by Location",
+   "source_row": 95,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Kazbegi HPP-2",
+    "generating_units": "1x0,38",
+    "installed_capacity_mw": 0.38,
+    "available_capacity_mw": 0.38,
+    "design_generation_gwh": 0,
+    "year_commissioned": 2014,
+    "regulation_type": "Run-of-river",
+    "river": "Brolistskali",
+    "river_basin": "Tergi",
+    "region": "Mtskheta-Mtianeti",
+    "city_village": "Kazbegi"
+   }
+  },
+  {
+   "record_id": "stations:r96",
+   "source_sheet": "Stations by Location",
+   "source_row": 96,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Berali HPP LLC",
+    "generating_units": "1x0.85",
+    "installed_capacity_mw": 0.85,
+    "available_capacity_mw": 0.85,
+    "design_generation_gwh": 5.3,
+    "year_commissioned": 2022,
+    "regulation_type": "Run-of-river",
+    "river": "Berali-Porkhushuli",
+    "river_basin": "Rioni",
+    "region": "Racha",
+    "city_village": "Patara Ghebi"
+   }
+  },
+  {
+   "record_id": "stations:r97",
+   "source_sheet": "Stations by Location",
+   "source_row": 97,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Shaori HPP",
+    "generating_units": "2x10.6+2x9.6",
+    "installed_capacity_mw": 40.32,
+    "available_capacity_mw": 38,
+    "design_generation_gwh": 148,
+    "year_commissioned": 1955,
+    "regulation_type": "Annual",
+    "river": "Shareula",
+    "river_basin": "Rioni",
+    "region": "Imereti",
+    "city_village": "Tkibuli"
+   }
+  },
+  {
+   "record_id": "stations:r98",
+   "source_sheet": "Stations by Location",
+   "source_row": 98,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Shakshaketi HPP",
+    "generating_units": "1x1.875",
+    "installed_capacity_mw": 1.875,
+    "available_capacity_mw": 1.875,
+    "design_generation_gwh": 7.6,
+    "year_commissioned": 2016,
+    "regulation_type": "Run-of-river",
+    "river": "Prone",
+    "river_basin": "Mtkvari",
+    "region": "Shida Kartli",
+    "city_village": "Kareli"
+   }
+  },
+  {
+   "record_id": "stations:r99",
+   "source_sheet": "Stations by Location",
+   "source_row": 99,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Shevaburi HPP",
+    "generating_units": "1x1.96",
+    "installed_capacity_mw": 1.96,
+    "available_capacity_mw": 1.96,
+    "design_generation_gwh": 15.4,
+    "year_commissioned": 2024,
+    "regulation_type": "Run-of-river",
+    "river": "Akavreta",
+    "river_basin": "Chorokhi",
+    "region": "Adjara",
+    "city_village": "Kedi"
+   }
+  },
+  {
+   "record_id": "stations:r100",
+   "source_sheet": "Stations by Location",
+   "source_row": 100,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Shilda HPP",
+    "generating_units": "2x2.5",
+    "installed_capacity_mw": 5,
+    "available_capacity_mw": 5,
+    "design_generation_gwh": 34.2,
+    "year_commissioned": 2013,
+    "regulation_type": "Run-of-river",
+    "river": "Chelti",
+    "river_basin": "Alazani",
+    "region": "Kakheti",
+    "city_village": "Shilda"
+   }
+  },
+  {
+   "record_id": "stations:r101",
+   "source_sheet": "Stations by Location",
+   "source_row": 101,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Shilda HPP 1",
+    "generating_units": "1x1.2",
+    "installed_capacity_mw": 1.2,
+    "available_capacity_mw": 1.2,
+    "design_generation_gwh": 11.4,
+    "year_commissioned": 2018,
+    "regulation_type": "Run-of-river",
+    "river": "Chelti",
+    "river_basin": "Alazani",
+    "region": "Kakheti",
+    "city_village": "Shilda"
+   }
+  },
+  {
+   "record_id": "stations:r102",
+   "source_sheet": "Stations by Location",
+   "source_row": 102,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Shuakhevi HPP",
+    "generating_units": "2x89.358",
+    "installed_capacity_mw": 178.716,
+    "available_capacity_mw": 180,
+    "design_generation_gwh": 437,
+    "year_commissioned": 2017,
+    "regulation_type": "Daily",
+    "river": "Acharistskali, Skhalta",
+    "river_basin": "Chorokhi",
+    "region": "Adjara",
+    "city_village": "Shuakhevi"
+   }
+  },
+  {
+   "record_id": "stations:r103",
+   "source_sheet": "Stations by Location",
+   "source_row": 103,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Chala (Kindzmarauli) HPP",
+    "generating_units": "3x05",
+    "installed_capacity_mw": 1.5,
+    "available_capacity_mw": 1.5,
+    "design_generation_gwh": 4.1,
+    "year_commissioned": 1941,
+    "regulation_type": "Run-of-river",
+    "river": "Bursa",
+    "river_basin": "Alazani",
+    "region": "Kakheti",
+    "city_village": "Kvareli"
+   }
+  },
+  {
+   "record_id": "stations:r104",
+   "source_sheet": "Stations by Location",
+   "source_row": 104,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Chitakhevi HPP",
+    "generating_units": "3x7",
+    "installed_capacity_mw": 21,
+    "available_capacity_mw": 21,
+    "design_generation_gwh": 120,
+    "year_commissioned": 1949,
+    "regulation_type": "Run-of-river",
+    "river": "Mtkvari",
+    "river_basin": "Mtkvari",
+    "region": "Samtskhe-Javakheti",
+    "city_village": "Borjomi"
+   }
+  },
+  {
+   "record_id": "stations:r105",
+   "source_sheet": "Stations by Location",
+   "source_row": 105,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Chordula HPP",
+    "generating_units": "1x2.7",
+    "installed_capacity_mw": 2.691,
+    "available_capacity_mw": 2.691,
+    "design_generation_gwh": 9,
+    "year_commissioned": 2022,
+    "regulation_type": "Run-of-river",
+    "river": "Chordula",
+    "river_basin": "Rioni",
+    "region": "Racha",
+    "city_village": "Chordi"
+   }
+  },
+  {
+   "record_id": "stations:r106",
+   "source_sheet": "Stations by Location",
+   "source_row": 106,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Chkhor HPP",
+    "generating_units": "2x3",
+    "installed_capacity_mw": 6,
+    "available_capacity_mw": 6,
+    "design_generation_gwh": 22,
+    "year_commissioned": 1967,
+    "regulation_type": "Run-of-river",
+    "river": "Khobistskali",
+    "river_basin": "Khobistskali",
+    "region": "Samegrelo",
+    "city_village": "Chkhorotsku"
+   }
+  },
+  {
+   "record_id": "stations:r107",
+   "source_sheet": "Stations by Location",
+   "source_row": 107,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Dzama HPP",
+    "generating_units": "0.540+0.256",
+    "installed_capacity_mw": 0.796,
+    "available_capacity_mw": 0.796,
+    "design_generation_gwh": 5,
+    "year_commissioned": 2020,
+    "regulation_type": "Run-of-river",
+    "river": "Dzama",
+    "river_basin": "Mtkvari",
+    "region": "Shida Kartli",
+    "city_village": "Gverdzineti"
+   }
+  },
+  {
+   "record_id": "stations:r108",
+   "source_sheet": "Stations by Location",
+   "source_row": 108,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Dzevrula (Tkibuli) HPP",
+    "generating_units": "4x20",
+    "installed_capacity_mw": 80,
+    "available_capacity_mw": 67,
+    "design_generation_gwh": 165,
+    "year_commissioned": 1956,
+    "regulation_type": "Annual",
+    "river": "Tkibula",
+    "river_basin": "Rioni",
+    "region": "Imereti",
+    "city_village": "Village Dzevri"
+   }
+  },
+  {
+   "record_id": "stations:r109",
+   "source_sheet": "Stations by Location",
+   "source_row": 109,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Chapala HPP",
+    "generating_units": "1x0,43",
+    "installed_capacity_mw": 0.72,
+    "available_capacity_mw": 0.72,
+    "design_generation_gwh": 3,
+    "year_commissioned": 2019,
+    "regulation_type": "Run-of-river",
+    "river": "Mashavera",
+    "river_basin": "Khrami",
+    "region": "Kvemo Kartli",
+    "city_village": "Bolnisi"
+   }
+  },
+  {
+   "record_id": "stations:r110",
+   "source_sheet": "Stations by Location",
+   "source_row": 110,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Khadori HPP",
+    "generating_units": "2x12",
+    "installed_capacity_mw": 24,
+    "available_capacity_mw": 26,
+    "design_generation_gwh": 142,
+    "year_commissioned": 2004,
+    "regulation_type": "Run-of-river",
+    "river": "Alazani",
+    "river_basin": "Alazani",
+    "region": "Kakheti",
+    "city_village": "Akhmeta"
+   }
+  },
+  {
+   "record_id": "stations:r111",
+   "source_sheet": "Stations by Location",
+   "source_row": 111,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Khadori HPP 2",
+    "generating_units": "2x2.7",
+    "installed_capacity_mw": 5.4,
+    "available_capacity_mw": 5.4,
+    "design_generation_gwh": 30,
+    "year_commissioned": 2012,
+    "regulation_type": "Run-of-river",
+    "river": "Alazani, Samkuristskali",
+    "river_basin": "Alazani",
+    "region": "Kakheti",
+    "city_village": "Akhmeta"
+   }
+  },
+  {
+   "record_id": "stations:r112",
+   "source_sheet": "Stations by Location",
+   "source_row": 112,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Khelvachauri HPP",
+    "generating_units": "5X9.4;1x1.9",
+    "installed_capacity_mw": 47.9,
+    "available_capacity_mw": 44.5,
+    "design_generation_gwh": 229,
+    "year_commissioned": 2016,
+    "regulation_type": "Run-of-river",
+    "river": "Chorokhi, Acharistskali",
+    "river_basin": "Chorokhi",
+    "region": "Adjara",
+    "city_village": "Batumi"
+   }
+  },
+  {
+   "record_id": "stations:r113",
+   "source_sheet": "Stations by Location",
+   "source_row": 113,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Khelra HPP",
+    "generating_units": "2x1,67",
+    "installed_capacity_mw": 3.74,
+    "available_capacity_mw": 3.74,
+    "design_generation_gwh": 17,
+    "year_commissioned": 2020,
+    "regulation_type": "Run-of-river",
+    "river": "Khelra",
+    "river_basin": "Enguri",
+    "region": "Svaneti",
+    "city_village": "Ipari"
+   }
+  },
+  {
+   "record_id": "stations:r114",
+   "source_sheet": "Stations by Location",
+   "source_row": 114,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Kheori HPP",
+    "generating_units": "1x1.48",
+    "installed_capacity_mw": 1.48,
+    "available_capacity_mw": 1.411,
+    "design_generation_gwh": 7,
+    "year_commissioned": 2018,
+    "regulation_type": "Run-of-river",
+    "river": "Kheoristskali",
+    "river_basin": "Rioni",
+    "region": "Racha",
+    "city_village": "Sadmeli Sanctuary"
+   }
+  },
+  {
+   "record_id": "stations:r115",
+   "source_sheet": "Stations by Location",
+   "source_row": 115,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Khobi HPP 2",
+    "generating_units": "2x23,35",
+    "installed_capacity_mw": 46.7,
+    "available_capacity_mw": 46.7,
+    "design_generation_gwh": 195,
+    "year_commissioned": 2024,
+    "regulation_type": "Run-of-river",
+    "river": "Khobistskali",
+    "river_basin": "Khobistskali",
+    "region": "Samegrelo",
+    "city_village": "Chkhorotsku"
+   }
+  },
+  {
+   "record_id": "stations:r116",
+   "source_sheet": "Stations by Location",
+   "source_row": 116,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Khrami HPP",
+    "generating_units": "1x1.13",
+    "installed_capacity_mw": 1.13,
+    "available_capacity_mw": 1.13,
+    "design_generation_gwh": 6,
+    "year_commissioned": 2021,
+    "regulation_type": "Run-of-river",
+    "river": "Khrami",
+    "river_basin": "Mtkvari",
+    "region": "Kvemo Kartli",
+    "city_village": "Tsalka"
+   }
+  },
+  {
+   "record_id": "stations:r117",
+   "source_sheet": "Stations by Location",
+   "source_row": 117,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Khrami HPP-1",
+    "generating_units": "3x37,6",
+    "installed_capacity_mw": 112.8,
+    "available_capacity_mw": 105,
+    "design_generation_gwh": 217,
+    "year_commissioned": 1947,
+    "regulation_type": "Annual",
+    "river": "Khrami",
+    "river_basin": "Mtkvari",
+    "region": "Kvemo Kartli",
+    "city_village": "Tsalka"
+   }
+  },
+  {
+   "record_id": "stations:r118",
+   "source_sheet": "Stations by Location",
+   "source_row": 118,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Khrami HPP-2",
+    "generating_units": "2x55",
+    "installed_capacity_mw": 110,
+    "available_capacity_mw": 110,
+    "design_generation_gwh": 370,
+    "year_commissioned": 1963,
+    "regulation_type": "Annual (Cascade)",
+    "river": "Khrami",
+    "river_basin": "Mtkvari",
+    "region": "Kvemo Kartli",
+    "city_village": "Tsalka"
+   }
+  },
+  {
+   "record_id": "stations:r119",
+   "source_sheet": "Stations by Location",
+   "source_row": 119,
+   "section": "Hydro Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Jonouli HPP 1",
+    "generating_units": "1x1.85",
+    "installed_capacity_mw": 1.85,
+    "available_capacity_mw": 1.85,
+    "design_generation_gwh": 7,
+    "year_commissioned": 2018,
+    "regulation_type": "Run-of-river",
+    "river": "Jonouli",
+    "river_basin": "Tskhenistskali",
+    "region": "Lechkhumi",
+    "city_village": "Kulbaki"
+   }
+  },
+  {
+   "record_id": "stations:r120",
+   "source_sheet": "Stations by Location",
+   "source_row": 120,
+   "section": "Hydro Power Plants",
+   "record_type": "aggregate_total",
+   "values": {
+    "plant_name": "Total Hydro Power Plants",
+    "generating_units": null,
+    "installed_capacity_mw": 3548.925999999999,
+    "available_capacity_mw": 3341.0729999999994,
+    "design_generation_gwh": 12995.450099999998,
+    "year_commissioned": null,
+    "regulation_type": null,
+    "river": null,
+    "river_basin": null,
+    "region": null,
+    "city_village": null
+   }
+  },
+  {
+   "record_id": "stations:r122",
+   "source_sheet": "Stations by Location",
+   "source_row": 122,
+   "section": "Solar and Wind Power Plants",
+   "record_type": "section_header",
+   "values": {
+    "plant_name": "Solar and Wind Power Plants",
+    "generating_units": null,
+    "installed_capacity_mw": null,
+    "available_capacity_mw": null,
+    "design_generation_gwh": null,
+    "year_commissioned": null,
+    "regulation_type": null,
+    "river": null,
+    "river_basin": null,
+    "region": null,
+    "city_village": null
+   }
+  },
+  {
+   "record_id": "stations:r123",
+   "source_sheet": "Stations by Location",
+   "source_row": 123,
+   "section": "Solar and Wind Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Gamarjveba Solar PP",
+    "generating_units": null,
+    "installed_capacity_mw": 1.75,
+    "available_capacity_mw": 1.75,
+    "design_generation_gwh": null,
+    "year_commissioned": 2025,
+    "regulation_type": "Renewable (Solar / Wind)",
+    "river": null,
+    "river_basin": null,
+    "region": "Kakheti",
+    "city_village": "Gamarjveba"
+   }
+  },
+  {
+   "record_id": "stations:r124",
+   "source_sheet": "Stations by Location",
+   "source_row": 124,
+   "section": "Solar and Wind Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Jugaani Solar PP",
+    "generating_units": null,
+    "installed_capacity_mw": 1.75,
+    "available_capacity_mw": 1.75,
+    "design_generation_gwh": null,
+    "year_commissioned": 2025,
+    "regulation_type": "Renewable (Solar / Wind)",
+    "river": null,
+    "river_basin": null,
+    "region": "Kakheti",
+    "city_village": "Jugaani"
+   }
+  },
+  {
+   "record_id": "stations:r125",
+   "source_sheet": "Stations by Location",
+   "source_row": 125,
+   "section": "Solar and Wind Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Kaspi Solar PP",
+    "generating_units": null,
+    "installed_capacity_mw": 2,
+    "available_capacity_mw": 2,
+    "design_generation_gwh": null,
+    "year_commissioned": 2025,
+    "regulation_type": "Renewable (Solar / Wind)",
+    "river": null,
+    "river_basin": null,
+    "region": "Shida Kartli",
+    "city_village": "Kaspi"
+   }
+  },
+  {
+   "record_id": "stations:r126",
+   "source_sheet": "Stations by Location",
+   "source_row": 126,
+   "section": "Solar and Wind Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Khirsa Solar PP",
+    "generating_units": null,
+    "installed_capacity_mw": 1.75,
+    "available_capacity_mw": 1.75,
+    "design_generation_gwh": null,
+    "year_commissioned": 2025,
+    "regulation_type": "Renewable (Solar / Wind)",
+    "river": null,
+    "river_basin": null,
+    "region": "Kakheti",
+    "city_village": "Khirsa"
+   }
+  },
+  {
+   "record_id": "stations:r127",
+   "source_sheet": "Stations by Location",
+   "source_row": 127,
+   "section": "Solar and Wind Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Kedi Solar PP",
+    "generating_units": null,
+    "installed_capacity_mw": 1.75,
+    "available_capacity_mw": 1.75,
+    "design_generation_gwh": null,
+    "year_commissioned": 2025,
+    "regulation_type": "Renewable (Solar / Wind)",
+    "river": null,
+    "river_basin": null,
+    "region": "Kakheti",
+    "city_village": "Kedi"
+   }
+  },
+  {
+   "record_id": "stations:r128",
+   "source_sheet": "Stations by Location",
+   "source_row": 128,
+   "section": "Solar and Wind Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Kistauri Solar PP",
+    "generating_units": null,
+    "installed_capacity_mw": 1.75,
+    "available_capacity_mw": 1.75,
+    "design_generation_gwh": null,
+    "year_commissioned": 2025,
+    "regulation_type": "Renewable (Solar / Wind)",
+    "river": null,
+    "river_basin": null,
+    "region": "Kakheti",
+    "city_village": "Kistauri"
+   }
+  },
+  {
+   "record_id": "stations:r129",
+   "source_sheet": "Stations by Location",
+   "source_row": 129,
+   "section": "Solar and Wind Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Kartli Wind PP",
+    "generating_units": "6x3.45",
+    "installed_capacity_mw": 20.7,
+    "available_capacity_mw": 20.7,
+    "design_generation_gwh": null,
+    "year_commissioned": 2016,
+    "regulation_type": "Renewable (Solar / Wind)",
+    "river": null,
+    "river_basin": null,
+    "region": "Shida Kartli",
+    "city_village": "Gori"
+   }
+  },
+  {
+   "record_id": "stations:r130",
+   "source_sheet": "Stations by Location",
+   "source_row": 130,
+   "section": "Solar and Wind Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Zemo Wind PP",
+    "generating_units": "3×6.25",
+    "installed_capacity_mw": 18.75,
+    "available_capacity_mw": 18.75,
+    "design_generation_gwh": null,
+    "year_commissioned": 2026,
+    "regulation_type": "Renewable (Solar / Wind)",
+    "river": null,
+    "river_basin": null,
+    "region": "Shida Kartli",
+    "city_village": "Kaspi"
+   }
+  },
+  {
+   "record_id": "stations:r131",
+   "source_sheet": "Stations by Location",
+   "source_row": 131,
+   "section": "Solar and Wind Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Ruisi Wind PP",
+    "generating_units": "33×6.25",
+    "installed_capacity_mw": 206,
+    "available_capacity_mw": 206,
+    "design_generation_gwh": null,
+    "year_commissioned": 2026,
+    "regulation_type": "Renewable (Solar / Wind)",
+    "river": null,
+    "river_basin": null,
+    "region": "Shida Kartli",
+    "city_village": "Ruisi"
+   }
+  },
+  {
+   "record_id": "stations:r132",
+   "source_sheet": "Stations by Location",
+   "source_row": 132,
+   "section": "Solar and Wind Power Plants",
+   "record_type": "aggregate_total",
+   "values": {
+    "plant_name": "Total Solar and Wind Power Plants",
+    "generating_units": null,
+    "installed_capacity_mw": 256.2,
+    "available_capacity_mw": 256.2,
+    "design_generation_gwh": null,
+    "year_commissioned": null,
+    "regulation_type": null,
+    "river": null,
+    "river_basin": null,
+    "region": null,
+    "city_village": null
+   }
+  },
+  {
+   "record_id": "stations:r134",
+   "source_sheet": "Stations by Location",
+   "source_row": 134,
+   "section": "Thermal Power Plants",
+   "record_type": "section_header",
+   "values": {
+    "plant_name": "Thermal Power Plants",
+    "generating_units": null,
+    "installed_capacity_mw": null,
+    "available_capacity_mw": null,
+    "design_generation_gwh": null,
+    "year_commissioned": null,
+    "regulation_type": null,
+    "river": null,
+    "river_basin": null,
+    "region": null,
+    "city_village": null
+   }
+  },
+  {
+   "record_id": "stations:r135",
+   "source_sheet": "Stations by Location",
+   "source_row": 135,
+   "section": "Thermal Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Tbilsresi TPP (Unit IV)",
+    "generating_units": "1x142",
+    "installed_capacity_mw": 142,
+    "available_capacity_mw": 130,
+    "design_generation_gwh": null,
+    "year_commissioned": 1963,
+    "regulation_type": "Thermal",
+    "river": null,
+    "river_basin": null,
+    "region": "Kvemo Kartli",
+    "city_village": "Gardabani"
+   }
+  },
+  {
+   "record_id": "stations:r136",
+   "source_sheet": "Stations by Location",
+   "source_row": 136,
+   "section": "Thermal Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Tbilsresi TPP (Unit III)",
+    "generating_units": "1x130",
+    "installed_capacity_mw": 130,
+    "available_capacity_mw": 130,
+    "design_generation_gwh": null,
+    "year_commissioned": 1963,
+    "regulation_type": "Thermal",
+    "river": null,
+    "river_basin": null,
+    "region": "Kvemo Kartli",
+    "city_village": "Gardabani"
+   }
+  },
+  {
+   "record_id": "stations:r137",
+   "source_sheet": "Stations by Location",
+   "source_row": 137,
+   "section": "Thermal Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Mtkvari Energy TPP (Unit IX)",
+    "generating_units": "1x300",
+    "installed_capacity_mw": 300,
+    "available_capacity_mw": 250,
+    "design_generation_gwh": null,
+    "year_commissioned": 1991,
+    "regulation_type": "Thermal",
+    "river": null,
+    "river_basin": null,
+    "region": "Kvemo Kartli",
+    "city_village": "Gardabani"
+   }
+  },
+  {
+   "record_id": "stations:r138",
+   "source_sheet": "Stations by Location",
+   "source_row": 138,
+   "section": "Thermal Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "G-Power TPP (Gas Turbine)",
+    "generating_units": "2x55",
+    "installed_capacity_mw": 110,
+    "available_capacity_mw": 88,
+    "design_generation_gwh": null,
+    "year_commissioned": 2006,
+    "regulation_type": "Thermal",
+    "river": null,
+    "river_basin": null,
+    "region": "Kvemo Kartli",
+    "city_village": "Gardabani"
+   }
+  },
+  {
+   "record_id": "stations:r139",
+   "source_sheet": "Stations by Location",
+   "source_row": 139,
+   "section": "Thermal Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Tkibuli Coal TPP",
+    "generating_units": "2x6,6",
+    "installed_capacity_mw": 13.2,
+    "available_capacity_mw": 0,
+    "design_generation_gwh": null,
+    "year_commissioned": 2011,
+    "regulation_type": "Thermal",
+    "river": null,
+    "river_basin": null,
+    "region": "Imereti",
+    "city_village": "Tkibuli"
+   }
+  },
+  {
+   "record_id": "stations:r140",
+   "source_sheet": "Stations by Location",
+   "source_row": 140,
+   "section": "Thermal Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Gardabani TPP 1 (CCPP 1)",
+    "generating_units": "2x73.6+84",
+    "installed_capacity_mw": 231.2,
+    "available_capacity_mw": 255,
+    "design_generation_gwh": null,
+    "year_commissioned": 2015,
+    "regulation_type": "Thermal",
+    "river": null,
+    "river_basin": null,
+    "region": "Kvemo Kartli",
+    "city_village": "Gardabani"
+   }
+  },
+  {
+   "record_id": "stations:r141",
+   "source_sheet": "Stations by Location",
+   "source_row": 141,
+   "section": "Thermal Power Plants",
+   "record_type": "plant",
+   "values": {
+    "plant_name": "Gardabani TPP 2 (CCPP 2)",
+    "generating_units": "2x84+87",
+    "installed_capacity_mw": 255,
+    "available_capacity_mw": 265,
+    "design_generation_gwh": null,
+    "year_commissioned": 2020,
+    "regulation_type": "Thermal",
+    "river": null,
+    "river_basin": null,
+    "region": "Kvemo Kartli",
+    "city_village": "Gardabani"
+   }
+  },
+  {
+   "record_id": "stations:r142",
+   "source_sheet": "Stations by Location",
+   "source_row": 142,
+   "section": "Thermal Power Plants",
+   "record_type": "aggregate_total",
+   "values": {
+    "plant_name": "Total Thermal Power Plants",
+    "generating_units": null,
+    "installed_capacity_mw": 1181.4,
+    "available_capacity_mw": 1118,
+    "design_generation_gwh": null,
+    "year_commissioned": null,
+    "regulation_type": null,
+    "river": null,
+    "river_basin": null,
+    "region": null,
+    "city_village": null
+   }
+  }
+ ]
+}

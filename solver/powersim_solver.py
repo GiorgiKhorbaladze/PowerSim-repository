@@ -493,6 +493,11 @@ def slice_profiles(inp: dict) -> dict:
     return sliced, horizon_p
 
 
+def variable_cost_per_mwh(asset: dict) -> float:
+    """Total variable cost in $/MWh: fuel/energy MC (`_dispMC`) + VOM, once."""
+    return float(asset.get("_dispMC", 0) or 0) + float(asset.get("vom", 0) or 0)
+
+
 def build_asset_map(inp: dict) -> dict:
     """Return {asset_id: asset_dict} with derived fields."""
     # Top-level maintenance events → per-asset maintenance windows.
@@ -511,10 +516,15 @@ def build_asset_map(inp: dict) -> dict:
     amap = {}
     for a in inp.get("assets", []):
         a2 = dict(a)
-        # Effective MC
-        hr = float(a.get("heat_rate", 0))
-        fp = float(a.get("fuel_price", 0))
-        mc = float(a.get("mc", a.get("vom", 0)))  # fallback
+        # `_dispMC` is the fuel/energy marginal cost EXCLUDING variable O&M:
+        # heat_rate × fuel_price when both are positive, otherwise an
+        # explicit `mc`, otherwise 0.  Every objective and cost report adds
+        # `vom` exactly once on top (variable_cost_per_mwh).  It previously fell back to
+        # `vom`, so assets without a heat rate (imports, zero-heat-rate
+        # units) paid their VOM twice and appeared with an implied fuel cost.
+        hr = float(a.get("heat_rate", 0) or 0)
+        fp = float(a.get("fuel_price", 0) or 0)
+        mc = float(a.get("mc", 0) or 0)
         if hr > 0 and fp > 0:
             mc = hr * fp * 0.9478   # GJ/MWh × $/MMBtu → $/MWh
 
@@ -1000,7 +1010,7 @@ def solve_window(
             return fp * 0.9478 * dt * sum(
                 m.hrc_lam[g, k, t] * pts[k][0] * pts[k][1]
                 for k in hrc_idx[g])
-        return (assets[g]["_dispMC"] + assets[g].get("vom", 0)) * m.p[g, t] * dt
+        return variable_cost_per_mwh(assets[g]) * m.p[g, t] * dt
 
     # CO₂ price for this window (0 disables the term cleanly).
     inp_co2_price = float(solver_cfg.get("_co2_price_usd_per_t", 0) or 0)
@@ -2214,7 +2224,7 @@ def extract_window_solution(
             if unserv > 1e-3:
                 lam = float(solver_cfg.get("unserved_penalty", 3000))
             else:
-                mcs = [assets[g]["_dispMC"] for g in disp_ids if disp.get(g,0) > 0.5]
+                mcs = [variable_cost_per_mwh(assets[g]) for g in disp_ids if disp.get(g,0) > 0.5]
                 lam = max(mcs) if mcs else 0.0
         # If DC-OPF is on but MIP duals weren't available, populate
         # bus_lmp with the system λ (zero-congestion assumption).
@@ -2775,7 +2785,7 @@ def compute_marginal_prices(hourly: list, assets: dict, profiles: dict,
             m.p[g,t].setlb(pmin)
 
     UNSERVED_PEN = float(solver_cfg.get("unserved_penalty", 3000))
-    def obj(m): return sum(disp_assets[g]["_dispMC"] * m.p[g,t] for g in m.G for t in m.T) + \
+    def obj(m): return sum(variable_cost_per_mwh(disp_assets[g]) * m.p[g,t] for g in m.G for t in m.T) + \
                         UNSERVED_PEN * sum(m.unserv[t] for t in m.T)
     m.OBJ = pyo.Objective(rule=obj, sense=pyo.minimize)
 
@@ -2869,8 +2879,8 @@ def build_result_store(hourly: list, assets: dict, inp: dict, solve_time: float,
         starts    = sum(1 for i,h in enumerate(hourly)
                         if h["startup"].get(gid,0) > 0.5)
         # Per-period fuel cost. For assets with a piecewise heat_rate_curve,
-        # `_dispMC` collapses to `vom` (no scalar heat_rate) and would
-        # under-report fuel cost by orders of magnitude. Reconstruct the
+        # `_dispMC` has no scalar heat_rate (it is 0 unless `mc` is given) and
+        # would under-report fuel cost by orders of magnitude. Reconstruct the
         # curve-consistent cost by interpolating each period's dispatch
         # `p_t` along the vertex costs `hr_k × p_k × fp × 0.9478`.
         hrc = a.get("heat_rate_curve") if atype == "thermal" else None
@@ -2948,7 +2958,7 @@ def build_result_store(hourly: list, assets: dict, inp: dict, solve_time: float,
             "gross_cost":    round(gross, 0),
             "avg_cost_mwh":  round(gross / max(energy,1), 3),
             "gas_mm3":       round(gas_mm3, 4),
-            "SRMC":          round(a["_dispMC"], 2),
+            "SRMC":          round(variable_cost_per_mwh(a), 2),
             "heat_rate":     float(a.get("heat_rate", 0) or 0),       # bug fix r-A1
             "fuel_type":     a.get("fuel_type"),                       # bug fix r-A1
             "bus":           a.get("bus"),                              # for DC-OPF

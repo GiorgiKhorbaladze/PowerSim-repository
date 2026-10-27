@@ -36,6 +36,9 @@ jobs:
               if (Test-Path $errorLog) { Get-Content $errorLog }
               throw "Packaged PowerSim did not respond on localhost"
             }
+            if ($response.Content -notmatch '<title>PowerSim 1.0</title>') { throw "Packaged root URL is not the PowerSim 1.0 application" }
+            $reference = Invoke-RestMethod -Uri http://127.0.0.1:8765/api/reference
+            if (-not $reference.review_required -or $reference.record_counts.stations_by_location -ne 139) { throw "Packaged reference catalogue is missing" }
             $project = Get-Content "samples/application_compact_demo.json" -Raw
             $saved = Invoke-RestMethod -Uri http://127.0.0.1:8765/api/projects -Method Post -ContentType "application/json" -Body $project
             $run = Invoke-RestMethod -Uri "http://127.0.0.1:8765/api/projects/$($saved.project_id)/runs" -Method Post

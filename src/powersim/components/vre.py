@@ -215,11 +215,9 @@ class PassiveInjectionComponent:
         return base * maintenance_factor(self.asset, hour) * temperature_factor(self.asset, context.profiles, index)
 
     def marginal_cost(self) -> float:
-        # Preserve the legacy deterministic objective exactly, including the
-        # historical _dispMC + vom convention.
-        return float(
-            self.asset.get("_dispMC", self.asset.get("mc", self.asset.get("vom", 0))) or 0
-        ) + float(self.asset.get("vom", 0) or 0)
+        # Fuel/energy marginal cost (excluding VOM) plus VOM, counted once.
+        # Matches solver.powersim_solver.build_asset_map's `_varMC`.
+        return float(self.asset.get("_dispMC", self.asset.get("mc", 0)) or 0) + float(self.asset.get("vom", 0) or 0)
 
     def declare_parameters(self, context: BuildContext) -> None:
         context.require_capabilities(self.supported_capabilities, self.asset_id)

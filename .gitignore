@@ -41,3 +41,4 @@ powersim_store.sqlite
 batches/
 
 .runtime/
+powersim_workspace/
