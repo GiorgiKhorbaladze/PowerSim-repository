@@ -24,16 +24,20 @@ python -m pip install dist/powersim-1.0.0-py3-none-any.whl
 powersim serve --workspace ./powersim_workspace
 ```
 
-Open the local URL printed by the command.
+Open the local URL printed by the command. The root URL is the PowerSim 1.0 browser application, which uses the same-origin API under `/api`. The previous v4 static prototype in `html/` is archived and not served.
 
 ## Study workflow
 
-1. Load or create a typed project.
-2. Select a scenario and a workflow.
-3. Validate, save, create and launch a run.
-4. Monitor queued, solving, QA and publication state.
-5. Inspect results only when QA passes and the result is valid/publishable.
-6. Compare compatible saved runs.
+1. Load the Georgia demonstration or create a project from a typed project document.
+2. Edit assets, scenarios and planning inputs.
+3. Validate and save. Diagnostics show the path, severity and remediation.
+4. Create and launch a run, then follow its lifecycle and failure cause, if any.
+5. Inspect results only when QA passes and the result is valid and publishable.
+6. Compare compatible saved runs and export the project or a run bundle.
+
+## Reference data
+
+`data/reference/plant_parameters/` contains a normalized transcription of `Power Plant Parameters English.xlsx`. The **Reference data** page lets you browse it, see its quality report and stage station records into a project through an auditable field-level review. **The catalogue requires user review before it is used in a study.** Imported assets are disabled until reviewed. See [reference data](docs/REFERENCE_DATA.md).
 
 The sanitized, aggregated Georgia planning demonstration is at `samples/projects/georgia_2026_baseline.json`; it includes editable 2027-2030 demand scenarios. It is not private GSE operational data and is not an official dispatch case.
 

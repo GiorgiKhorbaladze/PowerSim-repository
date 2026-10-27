@@ -1,6 +1,8 @@
 {
+  "schema": "powersim.reference.manifest.v2",
   "source_file": "Power Plant Parameters English.xlsx",
   "sha256": "f8c8b90f61ccbfcda12ea7b4d353c96fa27aac3bc9e58a8bfb7ee56a845ff4ca",
+  "generator": "scripts/build_reference_catalogue.py",
   "sheet_count": 138,
   "sheets": [
     "HPP Summary",
@@ -144,9 +146,10 @@
   ],
   "record_counts": {
     "stations_by_location": 139,
+    "stations_by_location_plants": 134,
     "reservoirs": 83,
-    "hydropower_assets": 125,
-    "hpp_summary": 117,
+    "hydropower_assets": 122,
+    "hpp_summary": 118,
     "detail_sheets": 134
   },
   "important_note": "This is a reference-data import. Capacity, unit and operating values must be validated against the raw workbook and approved study inputs before they are used in a calculation."

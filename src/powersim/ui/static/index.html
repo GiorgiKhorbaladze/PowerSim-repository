@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PowerSim 1.0</title>
+  <meta name="description" content="PowerSim 1.0 - local electricity-system planning and optimization">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/static/app.css">
+  <script type="module" src="/static/app.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">PS</span>
+      <div>
+        <h1 class="brand-title" id="app-title">PowerSim 1.0</h1>
+        <p class="brand-sub">Electricity-system planning and optimization</p>
+      </div>
+    </div>
+    <dl class="status-strip" aria-label="Application status">
+      <div><dt>Project</dt><dd><span id="project-status" class="badge badge-neutral" role="status">No project open</span></dd></div>
+      <div><dt>Backend</dt><dd><span id="backend-status" class="badge badge-neutral" role="status">Connecting...</span></dd></div>
+      <div><dt>Workspace</dt><dd><span id="workspace-status" class="muted">-</span></dd></div>
+    </dl>
+  </header>
+  <div class="layout">
+    <nav class="sidenav" aria-label="Workflows">
+      <p class="nav-project" id="nav-project">No project open</p>
+      <ul>
+        <li><button type="button" data-view="overview">Overview</button></li>
+        <li><button type="button" data-view="project">Project</button></li>
+        <li><button type="button" data-view="assets">Assets</button></li>
+        <li><button type="button" data-view="scenarios">Scenarios</button></li>
+        <li><button type="button" data-view="validation">Validation</button></li>
+        <li><button type="button" data-view="runs">Runs</button></li>
+        <li><button type="button" data-view="results">Results</button></li>
+        <li><button type="button" data-view="compare">Compare</button></li>
+        <li><button type="button" data-view="reference">Reference data</button></li>
+        <li><button type="button" data-view="about">Capabilities &amp; limits</button></li>
+      </ul>
+    </nav>
+    <main id="main" tabindex="-1">
+      <div id="project-actions" class="project-actions" hidden>
+        <span id="dirty-indicator" class="muted" role="status"></span>
+        <div class="actions">
+          <button type="button" id="validate-project">Validate</button>
+          <button type="button" id="save-project" class="primary">Save project</button>
+          <a id="export-project" class="button" href="#" download>Export project JSON</a>
+        </div>
+      </div>
+      <div id="toast" class="toast" role="status" aria-live="polite"></div>
+      <section id="view-overview" class="view" aria-labelledby="h-overview"></section>
+      <section id="view-project" class="view" aria-labelledby="h-project" hidden></section>
+      <section id="view-assets" class="view" aria-labelledby="h-assets" hidden></section>
+      <section id="view-scenarios" class="view" aria-labelledby="h-scenarios" hidden></section>
+      <section id="view-validation" class="view" aria-labelledby="h-validation" hidden></section>
+      <section id="view-runs" class="view" aria-labelledby="h-runs" hidden></section>
+      <section id="view-results" class="view" aria-labelledby="h-results" hidden></section>
+      <section id="view-compare" class="view" aria-labelledby="h-compare" hidden></section>
+      <section id="view-reference" class="view" aria-labelledby="h-reference" hidden></section>
+      <section id="view-about" class="view" aria-labelledby="h-about" hidden></section>
+    </main>
+  </div>
+  <noscript><p class="error-panel">PowerSim requires JavaScript to run in the browser.</p></noscript>
+</body>
+</html>

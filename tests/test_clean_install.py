@@ -113,6 +113,16 @@ result = service.result(run['id']); assert result['qa']['status'] == 'pass' and 
                               stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     try:
         _wait(f"http://127.0.0.1:{port}/", server)
+        with urlopen(f"http://127.0.0.1:{port}/", timeout=5) as response:
+            root = response.read().decode("utf-8")
+        assert "<title>PowerSim 1.0</title>" in root and "PowerSim v4" not in root
+        with urlopen(f"http://127.0.0.1:{port}/static/app.js", timeout=5) as response:
+            assert response.status == 200
+        with urlopen(f"http://127.0.0.1:{port}/api/reference", timeout=5) as response:
+            reference = json.loads(response.read())
+        assert reference["record_counts"]["stations_by_location"] == 139 and reference["review_required"]
+        with urlopen(f"http://127.0.0.1:{port}/api/samples", timeout=5) as response:
+            assert all(sample["available"] for sample in json.loads(response.read()))
     finally:
         server.terminate()
         try:

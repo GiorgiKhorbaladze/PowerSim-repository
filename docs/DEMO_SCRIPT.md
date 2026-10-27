@@ -1,5 +1,7 @@
 # PowerSim v1.0 RC Demo Script
 
+> **Archived workflow note:** steps in this document that open `html/PowerSim_v4.html` describe the archived v4 static prototype. It is not the PowerSim 1.0 application. Use `powersim serve` and the browser application described in [the user guide](POWERSIM_1_0_USER_GUIDE.md).
+
 This is the suggested final demo flow for Giorgi. It is designed to show the
 complete PowerSim loop while avoiding live-demo risk from long optimization
 runs.

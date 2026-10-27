@@ -1,5 +1,7 @@
 # PowerSim v1.0 Release Candidate Checklist
 
+> **Archived workflow note:** steps in this document that open `html/PowerSim_v4.html` describe the archived v4 static prototype. It is not the PowerSim 1.0 application. Use `powersim serve` and the browser application described in [the user guide](POWERSIM_1_0_USER_GUIDE.md).
+
 This checklist tracks PowerSim v1.0 repository-side readiness after the BESS sizing / Georgia 2030 research module was removed from project scope.
 
 ## Current RC status

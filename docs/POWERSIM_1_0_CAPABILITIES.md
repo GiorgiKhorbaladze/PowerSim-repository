@@ -8,6 +8,11 @@
 - Deterministic N-1 security UC for validated generator/import/line contingencies that do not island the DC network.
 - Chronological probabilistic adequacy with seeded independent outages and chronological BESS state.
 - Same-origin local application, immutable run inputs, provenance, asynchronous local execution, persisted run history, scenario comparison, browser E2E, wheel/sdist installation and Windows local application packaging.
+- PowerSim 1.0 browser application at the root URL of `powersim serve`: project/asset/scenario editing, server-side validation with path/severity/remediation, validation-gated save and run creation, run lifecycle and failure causes, QA- and publication-gated results, run comparison and project/run export. See the [user guide](POWERSIM_1_0_USER_GUIDE.md).
+
+## Reference data
+
+- Browsing, search and a data-quality report for the plant-parameter reference catalogue, plus a field-level, auditable import of station records as disabled, review-required assets. See [reference data](REFERENCE_DATA.md). The catalogue requires user review before any value is used in a study.
 
 ## Screening
 

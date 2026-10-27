@@ -54,6 +54,10 @@ def resolved_to_workflow_input(resolved: ResolvedInputContract) -> dict[str, Any
     base["profiles"] = {p.id: list(p.values) for p in resolved.profiles}
     assets = []
     for asset in resolved.assets:
+        # A disabled asset stays in the project document but is not part of
+        # the study; the legacy solver has no notion of ``enabled``.
+        if not asset.enabled:
+            continue
         raw = _mutable_copy(asset.legacy_extensions)
         raw.update({"id": asset.id, "type": asset.kind, "pmin": asset.capacity_min_mw,
                     "pmax": asset.capacity_max_mw, "bus": asset.bus})

@@ -1,62 +1,61 @@
-"""Same-origin local PowerSim application server."""
+"""Same-origin local PowerSim application server.
+
+The browser application in ``powersim/ui/static`` is the only UI served.  The
+historical v4 static prototype under the repository's ``html/`` directory is
+an archived asset and is deliberately not mounted.
+"""
 from __future__ import annotations
 
 from pathlib import Path
-import sys
-import sysconfig
 
 from powersim.application import ApplicationService, build_fastapi_app
 from powersim.execution import RegisteredLocalWorkflowExecutor
 from powersim.platform import RunManager
 
+UI_ENTRYPOINT = "index.html"
+_SECURITY_HEADERS = {
+    "Content-Security-Policy": ("default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; "
+                                "connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'"),
+    "X-Content-Type-Options": "nosniff",
+    "Referrer-Policy": "no-referrer",
+    "Cache-Control": "no-cache",
+}
+
 
 def _default_static_dir() -> Path:
-    """Locate the UI both from a source checkout and an installed wheel."""
-    frozen_assets = Path(getattr(sys, "_MEIPASS", "")) / "html"
-    if frozen_assets.is_dir():
-        return frozen_assets
-    source_assets = Path(__file__).resolve().parents[2] / "html"
-    if source_assets.is_dir():
-        return source_assets
-    installed_assets = Path(sysconfig.get_path("data")) / "powersim" / "ui"
-    return installed_assets
+    """The packaged PowerSim 1.0 browser application."""
+    return Path(__file__).resolve().parent / "ui" / "static"
 
 
-def create_application(workspace: str | Path, static_dir: str | Path | None = None):
+def create_application(workspace: str | Path, static_dir: str | Path | None = None, *,
+                       reference_directory: str | Path | None = None):
     """Serve the UI and API together with the validated local executor."""
     from fastapi import FastAPI
-    from fastapi.responses import HTMLResponse
+    from fastapi.responses import FileResponse
     from fastapi.staticfiles import StaticFiles
 
     workspace = Path(workspace).resolve()
-    if static_dir is None:
-        static_dir = _default_static_dir()
-    static_dir = Path(static_dir).resolve()
-    entrypoint = static_dir / "PowerSim_v4.html"
+    static_dir = Path(static_dir or _default_static_dir()).resolve()
+    entrypoint = static_dir / UI_ENTRYPOINT
     if not entrypoint.is_file():
         raise RuntimeError(f"PowerSim UI asset is unavailable: {entrypoint}")
-    app = FastAPI(title="PowerSim", version="1.0")
-    service = ApplicationService(RunManager(workspace), RegisteredLocalWorkflowExecutor())
+    app = FastAPI(title="PowerSim", version="1.0", docs_url=None, redoc_url=None, openapi_url=None)
+    service = ApplicationService(RunManager(workspace), RegisteredLocalWorkflowExecutor(),
+                                 reference_directory=reference_directory)
+    app.state.service = service
 
-    @app.get("/api/ai/health", include_in_schema=False)
-    def optional_ai_health():
-        """Report the bundled UI's optional AI service as unavailable."""
-        return {"available": False, "reason": "optional AI backend is not configured"}
+    @app.middleware("http")
+    async def security_headers(request, call_next):
+        response = await call_next(request)
+        for header, value in _SECURITY_HEADERS.items():
+            response.headers.setdefault(header, value)
+        return response
 
     app.mount("/api", build_fastapi_app(service))
 
     @app.get("/", include_in_schema=False)
     def ui():
-        # The historical static UI predates same-origin serving and defaults
-        # its optional AI widget to localhost:8000.  Make its default current
-        # origin at serve time, then let the explicit unavailable health route
-        # keep the widget honest without producing a failed browser request.
-        html = entrypoint.read_text(encoding="utf-8")
-        html = html.replace("const DEFAULT_URL = 'http://localhost:8000';",
-                            "const DEFAULT_URL = window.location.origin;")
-        html = html.replace("try{ const r = await fetch(state.backendUrl + '/api/ai/health', {cache:'no-store'}); setStatus(r.ok, r.ok?'online':'offline'); }",
-                            "try{ const r = await fetch(state.backendUrl + '/api/ai/health', {cache:'no-store'}); const body = r.ok ? await r.json() : {}; const available = r.ok && body.available === true; setStatus(available, available?'online':'offline'); }")
-        return HTMLResponse(html)
+        return FileResponse(entrypoint, media_type="text/html")
 
-    app.mount("/", StaticFiles(directory=static_dir, html=False), name="ui-assets")
+    app.mount("/static", StaticFiles(directory=static_dir), name="ui-assets")
     return app

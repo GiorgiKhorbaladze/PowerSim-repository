@@ -139,7 +139,9 @@ class RunManager:
                            "scenario_id":manifest.get("scenario_id"), "workflow":workflow,
                            "created_at":manifest.get("created_at"),
                            "snapshot_fingerprint":run.snapshot_fingerprint,
-                           "result_validity":manifest.get("result_validity")})
+                           "result_validity":manifest.get("result_validity"),
+                           "qa_status":manifest.get("qa_status"),
+                           "publishable":manifest.get("publishable")})
         return sorted(listed, key=lambda row: (row.get("created_at") or "", row["id"]), reverse=True)
     def reconcile_interrupted_runs(self) -> list[str]:
         """Fail nonterminal runs left by an earlier process instead of faking recovery."""
@@ -168,7 +170,14 @@ class RunManager:
         if result.run_id!=run_id or result.snapshot_fingerprint!=run.snapshot_fingerprint: raise ValueError("result does not belong to this immutable run snapshot")
         if run.status not in {RunStatus.VALIDATING_RESULTS,RunStatus.REPORTING}: raise ValueError("result may only be stored during result validation/reporting")
         payload=result.model_dump(mode="json"); directory=self._run_dir(run_id); self._write(directory/"result.json",payload)
-        manifest=json.loads((directory/"manifest.json").read_text(encoding="utf-8")); manifest["result_sha256"]=_hash(payload); manifest["result_validity"]=result.validity.value; self._write(directory/"manifest.json",manifest)
+        manifest=json.loads((directory/"manifest.json").read_text(encoding="utf-8")); manifest["result_sha256"]=_hash(payload); manifest["result_validity"]=result.validity.value
+        manifest["qa_status"]=result.qa.status.value
+        publication=result.results.get("publication") if isinstance(result.results, dict) else None
+        gate_open=result.validity.value!="invalid" and result.qa.status.value in {"pass","warn"}
+        if isinstance(publication, dict):
+            gate_open=gate_open and publication.get("publishable") is True
+        manifest["publishable"]=gate_open
+        self._write(directory/"manifest.json",manifest)
     def verify_run(self, run_id: str) -> dict[str, Any]:
         """Verify persisted snapshot/result hashes without solving or trusting UI state."""
         directory=self._run_dir(run_id); manifest=json.loads((directory/"manifest.json").read_text(encoding="utf-8"))
