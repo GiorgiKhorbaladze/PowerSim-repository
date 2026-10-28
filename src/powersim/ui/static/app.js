@@ -508,6 +508,80 @@ function renderAssets(section) {
       h("td", {}, h("button", { type: "button", class: "link", id: `edit-asset-${index}`, "aria-label": `Edit asset ${asset.id}`, text: "Edit",
         onclick: () => { S.editingAsset = { index, draft: JSON.parse(JSON.stringify(asset)) }; render(); $("#asset-id")?.focus(); } }))))))));
   if (S.editingAsset) section.append(assetEditor());
+  section.append(workbookCard());
+}
+async function uploadWorkbook(file, apply) {
+  const params = new URLSearchParams({ apply: String(apply), file_name: file.name });
+  const reviewer = $("#workbook-reviewer")?.value.trim();
+  if (reviewer) params.set("imported_by", reviewer);
+  let response;
+  try {
+    response = await fetch(`/api/projects/${encodeURIComponent(S.project.id)}/parameter-workbook?${params}`, {
+      method: "POST", cache: "no-store", headers: { "Content-Type": "application/octet-stream" }, body: await file.arrayBuffer() });
+  } catch (error) { throw new ApiFailure(0, { code: "backend_unreachable", message: "The PowerSim backend is not reachable." }); }
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const detail = data && typeof data.detail === "object" && !Array.isArray(data.detail) ? data.detail : { code: `http_${response.status}`, message: response.statusText };
+    throw new ApiFailure(response.status, detail);
+  }
+  return data;
+}
+function workbookCard() {
+  const card = h("div", { class: "card", id: "workbook-card" }, h("h3", { text: "Bulk edit parameters with Excel" }),
+    h("p", { class: "help", text: "Download a workbook with every asset and profile, fill in approved values (fuel, heat rate, fuel price, VOM, capacities, availability/inflow profiles, review status), and upload it. Empty cells leave values unchanged. You see every change before it is applied." }));
+  const blocker = !S.savedJson ? "Save the project first." : (isDirty() ? "Save your changes before using the workbook: it is generated from the saved project." : null);
+  const out = h("div", { id: "workbook-result", "aria-live": "polite" });
+  const fileInput = h("input", { type: "file", id: "workbook-file", accept: ".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", disabled: Boolean(blocker) });
+  const reviewer = h("input", { id: "workbook-reviewer", placeholder: "Your name or initials (optional)" });
+  card.append(
+    h("div", { class: "actions" },
+      h("button", { type: "button", id: "download-workbook", disabled: Boolean(blocker), text: "Download Excel template",
+        onclick: () => download(`/projects/${encodeURIComponent(S.project.id)}/parameter-workbook`) }),
+      blocker ? h("span", { class: "field-error", text: blocker }) : null),
+    h("div", { class: "form-grid" }, h("label", { for: "workbook-file" }, "Filled workbook (.xlsx)", fileInput),
+      h("label", { for: "workbook-reviewer" }, "Imported by", reviewer)),
+    h("div", { class: "actions" }, h("button", { type: "button", id: "check-workbook", disabled: Boolean(blocker), text: "Check workbook",
+      onclick: async () => {
+        const file = fileInput.files[0];
+        if (!file) { clear(out).append(h("p", { class: "field-error", role: "alert", text: "Choose the filled .xlsx file first." })); return; }
+        clear(out).append(h("p", { class: "muted", text: "Checking..." }));
+        try { renderWorkbookReport(clear(out), await uploadWorkbook(file, false), file); }
+        catch (error) { clear(out).append(errorPanel(error, "The workbook could not be checked")); }
+      } })),
+    out);
+  return card;
+}
+function renderWorkbookReport(out, report, file) {
+  const ok = report.errors === 0;
+  out.append(h("div", { class: ok ? (report.applicable ? "info-panel" : "warn-panel") : "error-panel", role: "status" },
+    h("strong", { text: ok ? (report.applicable ? `${report.changes.length} change(s) and ${report.profiles.length} profile update(s) ready to apply.` : "The workbook contains no changes.") : `${report.errors} error(s) must be fixed in the workbook.` }),
+    h("p", { text: `${report.warnings} warning(s). File ${shortHash(report.file_sha256)}.` })));
+  if (report.issues.length) {
+    out.append(h("div", { class: "table-wrap" }, h("table", { id: "workbook-issues" },
+      h("thead", {}, h("tr", {}, ["Severity", "Cell", "Code", "Message"].map((t) => h("th", { text: t })))),
+      h("tbody", {}, report.issues.map((i) => h("tr", {}, h("td", {}, badge(i.severity, severityKind(i.severity))),
+        h("td", {}, h("code", { text: i.path || "-" })), h("td", {}, h("code", { text: i.code })), h("td", { text: i.message })))))));
+  }
+  if (report.changes.length) {
+    out.append(h("h4", { text: "Changes" }), h("div", { class: "table-wrap tall" }, h("table", { id: "workbook-changes" },
+      h("thead", {}, h("tr", {}, ["Asset", "Field", "Current", "New", "Row"].map((t) => h("th", { text: t })))),
+      h("tbody", {}, report.changes.map((c) => h("tr", {}, h("td", {}, h("code", { text: c.asset_id })), h("td", { text: c.field }),
+        h("td", { text: c.old ?? "-" }), h("td", { text: c.new ?? "-" }), h("td", { class: "num", text: c.row })))))));
+  }
+  if (report.profiles.length) {
+    out.append(h("h4", { text: "Profiles" }), h("ul", {}, report.profiles.map((p) => h("li", { text: `${p.id}: ${p.action} (${p.values} values)` }))));
+  }
+  if (report.applicable) {
+    out.append(h("div", { class: "actions" }, h("button", { type: "button", class: "primary", id: "apply-workbook", text: "Apply changes to project",
+      onclick: async () => {
+        try {
+          const result = await uploadWorkbook(file, true);
+          await openProject(result.project_id); await refreshProjects(); await refreshSystem();
+          toast(`Applied ${result.changes.length} change(s); project revision ${result.revision}${result.run_ready ? "" : " - not run-ready, see Validation"}.`, result.run_ready ? "ok" : "warn");
+          render();
+        } catch (error) { out.append(errorPanel(error, "The workbook was not applied")); }
+      } }), h("span", { class: "help", text: "Saves a new project revision and records the file hash and every change." })));
+  }
 }
 function assetEditor() {
   const { index, draft } = S.editingAsset;

@@ -11,6 +11,10 @@ from typing import Any, Protocol, get_args
 import zipfile
 from powersim.contracts import ProjectContract, ResultEnvelope, RunStatus
 from powersim.platform import RunManager
+try:  # resolved by FastAPI from module globals (postponed annotations)
+    from starlette.requests import Request
+except ImportError:  # the HTTP adapter is optional for the core service
+    Request = Any  # type: ignore[misc,assignment]
 
 UNSUPPORTED_CAPABILITIES = (
     "AC power flow", "voltage and reactive-power studies", "EMT studies", "transient stability",
@@ -364,6 +368,33 @@ class ApplicationService:
                               "description":WORKFLOW_DESCRIPTIONS.get(w,("",""))[1]} for w in workflows],
                 "unsupported":list(UNSUPPORTED_CAPABILITIES),"reference_catalogue":reference}
 
+    # -- bulk parameter workbook ---------------------------------------------
+    def parameter_workbook(self, project_id: str) -> bytes:
+        from powersim.parameter_workbook import build_template
+        try:
+            project=self.manager.load_project(project_id)
+        except FileNotFoundError:
+            raise ApiError(404, "project_not_found", f"project {project_id!r} has not been saved")
+        return build_template(project)
+    def parameter_workbook_upload(self, project_id: str, content: bytes, *, apply: bool=False,
+                                  file_name: str|None=None, imported_by: str|None=None) -> dict[str, Any]:
+        """Check (and optionally apply) an uploaded parameter workbook."""
+        from powersim.parameter_workbook import WorkbookRejected, apply_workbook, public_report, read_workbook
+        try:
+            project=self.manager.load_project(project_id)
+        except FileNotFoundError:
+            raise ApiError(404, "project_not_found", f"project {project_id!r} has not been saved")
+        if not content:
+            raise ApiError(422, "empty_upload", "no workbook was uploaded")
+        if not apply:
+            return {"applied":False, **public_report(read_workbook(project, content))}
+        try:
+            updated, report=apply_workbook(project, content, file_name=file_name, imported_by=imported_by)
+        except WorkbookRejected as exc:
+            raise ApiError(422, "workbook_rejected", str(exc), exc.issues)
+        saved=self.save_validated_project(updated.model_dump(mode="json"))
+        return {"applied":True, **report, **saved}
+
     # -- reference catalogue --------------------------------------------------
     def catalogue(self):
         if self._catalogue is None:
@@ -466,6 +497,19 @@ def build_fastapi_app(service: ApplicationService):
     @app.post('/projects/{project_id}/runs')
     def create_run(project_id:str,scenario_id:str|None=None):
         return _call(service.create_validated_run, project_id, scenario_id)
+    @app.get('/projects/{project_id}/parameter-workbook')
+    def parameter_workbook(project_id:str):
+        return _download(_call(service.parameter_workbook, project_id), f"{project_id}-parameters.xlsx",
+                         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    @app.post('/projects/{project_id}/parameter-workbook')
+    async def parameter_workbook_upload(project_id:str, request:Request, apply:bool=False,
+                                        file_name:str|None=None, imported_by:str|None=None):
+        from powersim.parameter_workbook import MAX_WORKBOOK_BYTES
+        content=await request.body()
+        if len(content) > MAX_WORKBOOK_BYTES:
+            raise HTTPException(status_code=413, detail={"code":"file_too_large","message":"the workbook is larger than 25 MB","issues":[]})
+        return _call(service.parameter_workbook_upload, project_id, content, apply=apply,
+                     file_name=file_name, imported_by=imported_by)
     @app.post('/projects/{project_id}/reference-import')
     def reference_import(project_id:str, body:dict[str,Any]): return _call(service.reference_import, project_id, body)
     @app.get('/runs')

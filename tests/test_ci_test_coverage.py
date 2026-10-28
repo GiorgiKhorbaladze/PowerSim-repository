@@ -24,7 +24,8 @@ def test_application_reference_and_ui_modules_are_selected_explicitly() -> None:
     workflow = (ROOT / ".github" / "workflows" / "python-checks.yml").read_text(encoding="utf-8")
     for module in ("test_application_api.py", "test_application_security.py", "test_run_manager.py",
                    "test_chronological_adequacy.py", "test_scoped_expansion.py", "test_server.py",
-                   "test_ui_application_connector.py", "test_reference_catalogue.py", "test_reference_import.py"):
+                   "test_ui_application_connector.py", "test_reference_catalogue.py", "test_reference_import.py",
+                   "test_parameter_workbook.py", "test_variable_cost_single_count.py"):
         assert f"tests/{module}" in workflow, module
         assert (ROOT / "tests" / module).is_file(), module
 

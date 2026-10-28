@@ -20,6 +20,7 @@ user journey:
 14. reference data: a conflicting station is staged, blocked, resolved with
     audited overrides, acknowledged and imported as a disabled asset
 15. enabling the unreviewed reference asset blocks runs with a visible reason;
+    the Excel parameter workbook supplies its costs and review, making it run-ready;
     a run that the backend rejects is shown as failed with its cause; runs
     persist across a page reload; no console errors or failed requests occur
 
@@ -327,6 +328,34 @@ def test_full_browser_journey(tmp_path: Path) -> None:
             expect(page.locator("#validation-issues")).to_contain_text("missing_cost_basis")
             if os.environ.get("POWERSIM_E2E_SCREENSHOTS"):
                 page.screenshot(path=str(Path(os.environ["POWERSIM_E2E_SCREENSHOTS"]) / "unreviewed_asset_blocks_run.png"), full_page=True)
+
+            # 15a'. complete and review it in bulk through the Excel parameter workbook
+            import openpyxl
+            _goto(page, "assets")
+            with page.expect_download() as template_download:
+                page.locator("#download-workbook").click()
+            assert template_download.value.suggested_filename == "georgia-2026-baseline-parameters.xlsx"
+            template = tmp_path / "template.xlsx"
+            template_download.value.save_as(template)
+            workbook = openpyxl.load_workbook(template)
+            sheet = workbook["Assets"]
+            header = [cell.value for cell in sheet[1]]
+            for row in sheet.iter_rows(min_row=3):
+                if row[0].value == "ref-gardabani-tpp-1-ccpp-1":
+                    for column, value in {"heat_rate_gj_per_mwh": 7.2, "fuel_price_usd_per_mmbtu": 6, "vom_per_mwh": 3,
+                                          "reviewed": "yes", "review_note": "E2E: checked against approved register"}.items():
+                        row[header.index(column)].value = value
+            filled = tmp_path / "filled-parameters.xlsx"
+            workbook.save(filled)
+            page.locator("#workbook-file").set_input_files(str(filled))
+            page.locator("#check-workbook").click()
+            expect(page.locator("#workbook-result")).to_contain_text("ready to apply")
+            expect(page.locator("#workbook-changes")).to_contain_text("heat_rate_gj_per_mwh")
+            page.locator("#apply-workbook").click()
+            expect(page.locator("#project-status")).to_have_text("Saved - valid, run-ready", timeout=60_000)
+            imported = page.locator("#assets-table tbody tr", has_text="ref-gardabani-tpp-1-ccpp-1")
+            expect(imported).to_contain_text("reviewed")
+            expect(imported).to_contain_text("enabled")
 
             # 15b. a run the backend rejects is visibly failed with its cause
             _goto(page, "overview")

@@ -41,6 +41,23 @@ The header always shows the **project status** (no project / draft with unsaved 
 
 The non-deterministic workflows need workflow-specific input blocks (stochastic scenarios, contingency list, `chronological_adequacy`, `expansion`) in the project document. The browser has no structured editor for them; if they are missing the backend rejects the run and the Runs/Results pages show the failure cause.
 
+## Bulk parameters with Excel
+
+On the **Assets** page, *Download Excel template* produces a workbook generated from the saved project:
+- **Assets** sheet: one row per asset, with kind, enabled, capacities, fuel type, heat rate, fuel price, VOM/import price, availability and inflow profile ids, reviewed and review note, and a read-only source column;
+- **Profiles** sheet: one column per profile, where the header is the profile id;
+- **Instructions** sheet.
+
+Fill it in with approved data and upload it with *Check workbook*.
+- An empty cell leaves the value unchanged; nothing is cleared implicitly.
+- Only existing assets can be edited.
+- Numbers must be finite and non-negative, and a comma decimal is accepted.
+- Kinds and TRUE/FALSE values are checked, and profile references must resolve.
+- Profiles need `time.periods` or 8,760 values.
+- Reference assets can be marked reviewed only with a review note.
+
+Every error names its cell, for example `Assets!J5`. The change list (asset, field, current, new) is shown before anything is saved. *Apply changes to project* saves a new revision. The project metadata records the file name, SHA-256, user and every change under `parameter_imports`, and reference assets record the workbook as the origin of each changed field.
+
 ## Reference data (plant-parameter catalogue)
 
 The **Reference data** page exposes the normalized catalogue built from `Power Plant Parameters English.xlsx` (see [reference data](REFERENCE_DATA.md)). **The catalogue is reference data and requires user review before it is used in a study.**

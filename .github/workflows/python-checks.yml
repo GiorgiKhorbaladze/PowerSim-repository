@@ -48,6 +48,8 @@ jobs:
               tests/test_ui_application_connector.py \
               tests/test_reference_catalogue.py \
               tests/test_reference_import.py \
+              tests/test_parameter_workbook.py \
+              tests/test_variable_cost_single_count.py \
               tests/test_chronological_adequacy.py \
               tests/test_scoped_expansion.py \
               tests/test_security_shared.py \

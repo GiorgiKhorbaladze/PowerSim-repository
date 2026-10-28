@@ -1,6 +1,10 @@
 # PowerSim 1.0 release notes
 
-## Unreleased - PowerSim 1.0 application completion
+## Unreleased - bulk parameter workbook
+
+- New: Excel parameter workbook on the Assets page (`GET`/`POST /api/projects/{id}/parameter-workbook`). Download a template, fill in approved costs, capacities, profiles and review status, check the field-level change list and apply it as an audited new project revision. See the user guide.
+
+## PowerSim 1.0 application completion (merged in #130)
 
 Not yet released or versioned. Merging is subject to CI and independent review.
 
