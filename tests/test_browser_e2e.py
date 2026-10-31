@@ -257,6 +257,23 @@ def test_full_browser_journey(tmp_path: Path) -> None:
                 assert {"manifest.json", "run.json", "resolved_input.json", "result.json", "README.txt"} <= names
                 envelope = json.loads(archive.read("result.json"))
                 assert envelope["qa"]["status"] == "pass" and envelope["validity"] == "valid"
+            # calibration against measured data (template -> fill -> compare)
+            import openpyxl
+            page.locator("#calibration-card summary").click()
+            with page.expect_download() as calibration_download:
+                page.locator("#download-calibration-template").click()
+            calibration_template = tmp_path / "calibration.xlsx"
+            calibration_download.value.save_as(calibration_template)
+            workbook = openpyxl.load_workbook(calibration_template)
+            monthly = workbook["Monthly"]
+            demand_column = [cell.value for cell in monthly[1]].index("demand") + 1
+            for row in range(2, 14):
+                monthly.cell(row, demand_column, 1_300_000)
+            workbook.save(calibration_template)
+            page.locator("#calibration-file").set_input_files(str(calibration_template))
+            page.locator("#run-calibration").click()
+            expect(page.locator("#calibration-table")).to_contain_text("demand")
+            expect(page.locator("#calibration-result")).to_contain_text("Compared 1 series")
             with page.expect_download() as project_download:
                 page.locator("#export-project").click()
             exported = json.loads(Path(project_download.value.path()).read_text(encoding="utf-8"))

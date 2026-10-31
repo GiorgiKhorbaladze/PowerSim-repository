@@ -1,5 +1,12 @@
 # PowerSim 1.0 release notes
 
+## Unreleased - Georgia model, calibration, Windows without admin
+
+- Windows: per-user installer (no administrator rights), separate portable `PowerSim.exe` artifact, and a `PowerSim.bat` launcher for source checkouts.
+- Solver: optional `monthly_pmax_mw`, `monthly_pmin_mw`, `pmin_profile` and `monthly_energy_mwh` (`max`/`exact`, full-horizon only), verified by the new QA check `operating_envelope`.
+- Georgia 2030 model rebuilt from the approved PLEXOS model, with hydrology/wind/solar scenarios and a benchmark against PLEXOS's hourly results (`docs/GEORGIA_PLEXOS_MODEL.md`).
+- Calibration: compare a publishable run with measured hourly/monthly data (bias, MAE, RMSE, correlation).
+
 ## Unreleased - bulk parameter workbook
 
 - New: Excel parameter workbook on the Assets page (`GET`/`POST /api/projects/{id}/parameter-workbook`). Download a template, fill in approved costs, capacities, profiles and review status, check the field-level change list and apply it as an audited new project revision. See the user guide.

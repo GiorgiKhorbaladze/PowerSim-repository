@@ -41,6 +41,19 @@ The header always shows the **project status** (no project / draft with unsaved 
 
 The non-deterministic workflows need workflow-specific input blocks (stochastic scenarios, contingency list, `chronological_adequacy`, `expansion`) in the project document. The browser has no structured editor for them; if they are missing the backend rejects the run and the Runs/Results pages show the failure cause.
 
+## Calibration against measured data
+
+For a publishable run, open **Results** → *Calibration against measured data* → *Download calibration template*.
+
+The workbook has an **Hourly** sheet (one row per study period) and a **Monthly** sheet (Jan–Dec). Columns are:
+- `demand`;
+- `kind:<kind>`, the sum of all assets of a kind (for example `kind:hydro_ror`, `kind:wind`);
+- individual asset ids.
+
+Enter **measured** energy in MWh in either sheet or both; leave columns without data empty. Upload the file with *Compare with measured data*. For every filled column PowerSim reports model and measured totals, bias % (positive = model above measured), MAE, RMSE and, for hourly data, the correlation, plus a month-by-month table.
+
+Each comparison is stored in the run folder (`calibration-<timestamp>.json`, including the file's SHA-256). Calibration describes the fit only: it never changes the model or its inputs.
+
 ## Bulk parameters with Excel
 
 On the **Assets** page, *Download Excel template* produces a workbook generated from the saved project:

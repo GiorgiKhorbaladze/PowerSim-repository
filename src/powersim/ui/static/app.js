@@ -514,9 +514,12 @@ async function uploadWorkbook(file, apply) {
   const params = new URLSearchParams({ apply: String(apply), file_name: file.name });
   const reviewer = $("#workbook-reviewer")?.value.trim();
   if (reviewer) params.set("imported_by", reviewer);
+  return postFile(`/projects/${encodeURIComponent(S.project.id)}/parameter-workbook?${params}`, file);
+}
+async function postFile(path, file) {
   let response;
   try {
-    response = await fetch(`/api/projects/${encodeURIComponent(S.project.id)}/parameter-workbook?${params}`, {
+    response = await fetch(`/api${path}`, {
       method: "POST", cache: "no-store", headers: { "Content-Type": "application/octet-stream" }, body: await file.arrayBuffer() });
   } catch (error) { throw new ApiFailure(0, { code: "backend_unreachable", message: "The PowerSim backend is not reachable." }); }
   const data = await response.json().catch(() => ({}));
@@ -874,6 +877,7 @@ function renderSummary(panel, summary) {
   if (summary.view) {
     if (pub.qualified) panel.append(h("div", { class: "warn-panel", text: "QA passed with warnings. Review the QA checks before using these results." }));
     panel.append(resultView(summary.view));
+    panel.append(calibrationCard(summary.run_id));
   }
   if (summary.qa) {
     panel.append(h("details", { class: "card", open: !summary.view },
@@ -896,6 +900,48 @@ function renderSummary(panel, summary) {
   panel.append(h("div", { class: "actions" }, h("button", { type: "button", id: "export-run", text: "Export run bundle (ZIP)",
     onclick: () => download(`/runs/${encodeURIComponent(summary.run_id)}/export`) }),
     h("span", { class: "help", text: summary.view ? "Includes the gated result envelope and CSV summaries." : "Includes the snapshot and diagnostics; numeric results are excluded because the run is not publishable." })));
+}
+function calibrationCard(runId) {
+  const out = h("div", { id: "calibration-result", "aria-live": "polite" });
+  const fileInput = h("input", { type: "file", id: "calibration-file", accept: ".xlsx" });
+  const card = h("details", { class: "card", id: "calibration-card" },
+    h("summary", { text: "Calibration against measured data" }),
+    h("p", { class: "help", text: "Download the template for this run, enter measured energy (MWh) per hour and/or per month for demand, asset kinds or individual assets, and upload it. PowerSim reports model vs actual totals, bias, MAE, RMSE and correlation. The comparison does not change the model." }),
+    h("div", { class: "actions" },
+      h("button", { type: "button", id: "download-calibration-template", text: "Download calibration template",
+        onclick: () => download(`/runs/${encodeURIComponent(runId)}/calibration-template`) })),
+    h("label", { for: "calibration-file" }, "Workbook with measured data (.xlsx)", fileInput),
+    h("div", { class: "actions" }, h("button", { type: "button", id: "run-calibration", text: "Compare with measured data",
+      onclick: async () => {
+        const file = fileInput.files[0];
+        if (!file) { clear(out).append(h("p", { class: "field-error", role: "alert", text: "Choose the filled workbook first." })); return; }
+        clear(out).append(h("p", { class: "muted", text: "Comparing..." }));
+        try { renderCalibration(clear(out), await postFile(`/runs/${encodeURIComponent(runId)}/calibration?file_name=${encodeURIComponent(file.name)}`, file)); }
+        catch (error) { clear(out).append(errorPanel(error, "The calibration could not be computed")); }
+      } })),
+    out);
+  return card;
+}
+function renderCalibration(out, report) {
+  out.append(h("div", { class: "info-panel", role: "status" }, h("strong", { text: `Compared ${report.compared_series.length} series` }),
+    h("p", { text: `File ${report.file_name || ""} (${shortHash(report.file_sha256)}), ${report.warnings} warning(s). Positive bias = model above measured.` })));
+  const rows = [];
+  for (const [resolution, block] of [["hourly", report.hourly], ["monthly", report.monthly]]) {
+    for (const [name, m] of Object.entries(block)) rows.push([resolution, name, m]);
+  }
+  out.append(h("div", { class: "table-wrap" }, h("table", { id: "calibration-table" },
+    h("thead", {}, h("tr", {}, ["Resolution", "Series", "Points", "Model (MWh)", "Measured (MWh)", "Bias (%)", "MAE (MWh)", "RMSE (MWh)", "Correlation"].map((t) => h("th", { text: t })))),
+    h("tbody", {}, rows.map(([resolution, name, m]) => h("tr", {}, h("td", { text: resolution }), h("td", {}, h("code", { text: name })),
+      h("td", { class: "num", text: m.points }), h("td", { class: "num", text: num(m.model_mwh, 0) }), h("td", { class: "num", text: num(m.actual_mwh, 0) }),
+      h("td", { class: "num", text: num(m.bias_pct, 2) }), h("td", { class: "num", text: num(m.mae_mwh, 1) }), h("td", { class: "num", text: num(m.rmse_mwh, 1) }),
+      h("td", { class: "num", text: m.correlation == null ? "-" : num(m.correlation, 3) })))))));
+  for (const [name, m] of Object.entries(report.monthly)) {
+    out.append(h("details", {}, h("summary", { text: `Monthly: ${name}` }), h("div", { class: "table-wrap" }, h("table", {},
+      h("thead", {}, h("tr", {}, ["Month", "Model (MWh)", "Measured (MWh)", "Bias (%)"].map((t) => h("th", { text: t })))),
+      h("tbody", {}, m.months.map((r) => h("tr", {}, h("td", { text: r.month }), h("td", { class: "num", text: num(r.model_mwh, 0) }),
+        h("td", { class: "num", text: num(r.actual_mwh, 0) }), h("td", { class: "num", text: num(r.bias_pct, 2) }))))))));
+  }
+  if (report.issues.length) out.append(issuesTable(report.issues.map((i) => ({ ...i, code: i.sheet || "workbook", path: i.row ? `${i.sheet}!${i.row}` : i.sheet }))));
 }
 function resultView(view) {
   const box = h("div", { id: "result-view" });

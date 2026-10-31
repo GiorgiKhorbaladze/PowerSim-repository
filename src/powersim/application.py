@@ -368,6 +368,40 @@ class ApplicationService:
                               "description":WORKFLOW_DESCRIPTIONS.get(w,("",""))[1]} for w in workflows],
                 "unsupported":list(UNSUPPORTED_CAPABILITIES),"reference_catalogue":reference}
 
+    # -- calibration against measured data ----------------------------------
+    def _publishable_envelope(self, run_id: str) -> dict[str, Any]:
+        path=self.manager._run_dir(run_id)/"result.json"
+        if not path.exists():
+            raise ApiError(409, "result_unavailable", f"run {run_id} has no persisted result")
+        envelope=json.loads(path.read_text(encoding="utf-8"))
+        state=publication_state(envelope)
+        if not state["publishable"]:
+            raise ApiError(409, "run_not_publishable",
+                           "calibration is only available for publishable results: "+", ".join(state["reasons"]))
+        return envelope
+    def calibration_template(self, run_id: str) -> bytes:
+        from powersim.calibration import CalibrationRejected, build_template
+        try:
+            return build_template(self._publishable_envelope(run_id))
+        except CalibrationRejected as exc:
+            raise ApiError(422, "calibration_unavailable", str(exc))
+    def calibrate(self, run_id: str, content: bytes, file_name: str|None=None) -> dict[str, Any]:
+        """Compare a run with uploaded measured data and persist the report."""
+        from powersim.calibration import CalibrationRejected, compare
+        envelope=self._publishable_envelope(run_id)
+        if not content:
+            raise ApiError(422, "empty_upload", "no workbook was uploaded")
+        try:
+            report=compare(envelope, content, file_name=file_name)
+        except CalibrationRejected as exc:
+            raise ApiError(422, "calibration_rejected", str(exc), exc.issues)
+        stamp=report["compared_at"].replace(":", "").replace("-", "").split(".")[0]
+        self.manager._write(self.manager._run_dir(run_id)/f"calibration-{stamp}.json", report)
+        return report
+    def calibration_reports(self, run_id: str) -> list[dict[str, Any]]:
+        directory=self.manager._run_dir(run_id)
+        return [json.loads(p.read_text(encoding="utf-8")) for p in sorted(directory.glob("calibration-*.json"))]
+
     # -- bulk parameter workbook ---------------------------------------------
     def parameter_workbook(self, project_id: str) -> bytes:
         from powersim.parameter_workbook import build_template
@@ -532,6 +566,19 @@ def build_fastapi_app(service: ApplicationService):
     @app.get('/runs/{run_id}/export')
     def export_run(run_id:str):
         return _download(_call(service.export_run, run_id), f"powersim-run-{run_id}.zip", "application/zip")
+    @app.get('/runs/{run_id}/calibration-template')
+    def calibration_template(run_id:str):
+        return _download(_call(service.calibration_template, run_id), f"powersim-calibration-{run_id[:8]}.xlsx",
+                         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    @app.post('/runs/{run_id}/calibration')
+    async def calibrate(run_id:str, request:Request, file_name:str|None=None):
+        from powersim.calibration import MAX_BYTES
+        content=await request.body()
+        if len(content) > MAX_BYTES:
+            raise HTTPException(status_code=413, detail={"code":"file_too_large","message":"the workbook is larger than 25 MB","issues":[]})
+        return _call(service.calibrate, run_id, content, file_name)
+    @app.get('/runs/{run_id}/calibration')
+    def calibration_reports(run_id:str): return _call(service.calibration_reports, run_id)
     @app.get('/runs/{run_id}/result')
     def result(run_id:str):
         try: return service.result(run_id)
