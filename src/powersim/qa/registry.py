@@ -4,6 +4,7 @@ from powersim.contracts import QAReport, QAStatus
 
 from .basic import BasicBoundsCheck, ElectricityBalanceCheck, FiniteValuesCheck, ObjectiveReconstructionCheck
 from .components import check_component_results
+from .envelope import OperatingEnvelopeCheck
 from .reserves import check_reserve_results
 from .network import check_network_results
 from .tolerance import DEFAULT_TOLERANCES, TolerancePolicy
@@ -13,6 +14,7 @@ DEFAULT_CHECKS = (
     ElectricityBalanceCheck(),
     BasicBoundsCheck(),
     ObjectiveReconstructionCheck(),
+    OperatingEnvelopeCheck(),
 )
 
 

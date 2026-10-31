@@ -389,6 +389,42 @@ _MONTH_END_HOURS = (744, 1416, 2160, 2880, 3624, 4344, 5088,
                     5832, 6552, 7296, 8016, 8760)
 
 
+def month_of_hour(global_h: float) -> int:
+    """Calendar month 1..12 of a study hour (non-leap year, folded % 8760)."""
+    h = int(global_h) % 8760
+    for index, end in enumerate(_MONTH_END_HOURS):
+        if h < end:
+            return index + 1
+    return 12
+
+
+def _monthly_values(raw, field: str, asset_id: str) -> list[float] | None:
+    """Normalise a 12-month series given as a list or a {month: value} map."""
+    if raw is None:
+        return None
+    if isinstance(raw, dict):
+        values = [None] * 12
+        for key, value in raw.items():
+            month = int(key)
+            if not 1 <= month <= 12:
+                raise ValueError(f"asset {asset_id}: {field} month {key!r} is not 1..12")
+            values[month - 1] = value
+    else:
+        values = list(raw)
+        if len(values) != 12:
+            raise ValueError(f"asset {asset_id}: {field} needs 12 monthly values, got {len(values)}")
+    out = []
+    for month, value in enumerate(values, start=1):
+        if value is None:
+            out.append(None)
+            continue
+        number = float(value)
+        if not math.isfinite(number) or number < 0:
+            raise ValueError(f"asset {asset_id}: {field}[{month}] must be a finite non-negative number")
+        out.append(number)
+    return out
+
+
 def normalize_hydro_inflow_profiles(inp: dict) -> dict:
     """Mutate ``inp`` so every hydro_reg ``inflow_profile`` is in Mm³/h.
 
@@ -559,6 +595,17 @@ def build_asset_map(inp: dict) -> dict:
         mw.extend(maint_by_asset.get(a2["id"], []))
         if mw:
             a2["maint_windows"] = mw
+        # Monthly operating envelope (PLEXOS-style time-varying Max Capacity /
+        # Min Stable Level) and monthly energy budget. Validated here so a
+        # malformed series fails the run instead of being silently ignored.
+        for field in ("monthly_pmax_mw", "monthly_pmin_mw", "monthly_energy_mwh"):
+            values = _monthly_values(a.get(field), field, a2["id"])
+            if values is not None:
+                a2["_" + field] = values
+        mode = a.get("monthly_energy_mode", "max")
+        if mode not in ("max", "exact"):
+            raise ValueError(f"asset {a2['id']}: monthly_energy_mode must be 'max' or 'exact'")
+        a2["_monthly_energy_mode"] = mode
         amap[a2["id"]] = a2
     return amap
 
@@ -601,8 +648,36 @@ def get_pmax_t(asset: dict, t_local: int, profiles: dict,
         base = float(asset.get("pmax", 0))
     # Maintenance derating applies uniformly to all asset types.
     global_h = int(offset_h + round(t_local * dt))
+    monthly_pmax = asset.get("_monthly_pmax_mw")
+    if monthly_pmax is not None and monthly_pmax[month_of_hour(global_h) - 1] is not None:
+        base = min(base, monthly_pmax[month_of_hour(global_h) - 1]) if base > 0 else monthly_pmax[month_of_hour(global_h) - 1]
     # v1.5 Thermal Stage 3 — optional ambient-temperature derating curve.
     return base * _maint_factor(asset, global_h) * _temp_factor(asset, profiles, t_local)
+
+
+def get_pmin_t(asset: dict, t_local: int, profiles: dict,
+               offset_h: int = 0, dt: float = 1.0) -> float:
+    """Forced minimum output at period t_local, from the optional
+    ``monthly_pmin_mw`` series and ``pmin_profile`` (MW per period).
+
+    It is capped by the period's available capacity so a derating or
+    maintenance window never creates an infeasible lower bound. Returns 0
+    when neither field is set (the legacy behaviour).
+    """
+    floor = 0.0
+    monthly_pmin = asset.get("_monthly_pmin_mw")
+    if monthly_pmin is not None:
+        value = monthly_pmin[month_of_hour(offset_h + round(t_local * dt)) - 1]
+        floor = max(floor, value or 0.0)
+    key = asset.get("pmin_profile")
+    if isinstance(key, str):
+        series = profiles.get(key)
+        if not isinstance(series, list) or t_local >= len(series):
+            raise ValueError(f"asset {asset.get('id')}: pmin_profile {key!r} is missing or too short")
+        floor = max(floor, float(series[t_local]))
+    if floor <= 0:
+        return 0.0
+    return min(floor, get_pmax_t(asset, t_local, profiles, offset_h, dt))
 
 
 def _temp_factor(asset: dict, profiles: dict, t_local: int) -> float:
@@ -1212,12 +1287,21 @@ def solve_window(
     shared_dr_ids = set(shared_asset_ids).intersection(dr_ids)
     shared_reservoir_ids = set(shared_asset_ids).intersection(hydro_reg)
 
+    _envelope_assets = [g for g in disp_ids
+                        if assets[g].get("_monthly_pmin_mw") is not None
+                        or assets[g].get("pmin_profile") is not None
+                        or assets[g].get("_monthly_energy_mwh") is not None]
+    if shared_asset_ids.intersection(_envelope_assets):
+        raise ValueError("monthly_pmin_mw / pmin_profile / monthly_energy_mwh are not supported by the "
+                         "shared component engine; use component_engine='legacy'")
+
     def gen_lb(m, g, t):
         if g in shared_asset_ids:
             return pyo.Constraint.Skip
+        floor = get_pmin_t(assets[g], t-1, profiles_w, offset_h, dt)
         if g in committable:
-            return m.p[g,t] >= float(assets[g].get("pmin",0)) * m.u[g,t]
-        return m.p[g,t] >= 0
+            return m.p[g,t] >= max(float(assets[g].get("pmin",0)), floor) * m.u[g,t]
+        return m.p[g,t] >= floor
     def gen_ub(m, g, t):
         if g in shared_asset_ids:
             return pyo.Constraint.Skip
@@ -1227,6 +1311,30 @@ def solve_window(
         return m.p[g,t] <= pmx
     m.GenLB = pyo.Constraint(m.G, m.T, rule=gen_lb)
     m.GenUB = pyo.Constraint(m.G, m.T, rule=gen_ub)
+
+    # Monthly energy budget (MWh), e.g. a regulating-hydro monthly energy
+    # allocation.  A calendar month is only fully visible in a full-horizon
+    # solve; a rolling window would have to guess how to split the month,
+    # so the constraint is refused there instead of approximated.
+    _energy_assets = [g for g in disp_ids if assets[g].get("_monthly_energy_mwh") is not None]
+    if _energy_assets:
+        if not solver_cfg.get("_full_horizon"):
+            raise ValueError("monthly_energy_mwh requires a full-horizon solve: set solver_settings."
+                             "rolling_window_h to at least the study horizon in hours")
+        _month_periods: dict[int, list[int]] = {}
+        for t in T:
+            _month_periods.setdefault(month_of_hour(offset_h + (t - 1) * dt), []).append(t)
+        _energy_index = [(g, mo) for g in _energy_assets for mo in sorted(_month_periods)
+                         if assets[g]["_monthly_energy_mwh"][mo - 1] is not None]
+        if _energy_index:
+            m.MonthlyEnergyIdx = pyo.Set(initialize=_energy_index, dimen=2)
+            def _monthly_energy_rule(m, g, mo):
+                energy = sum(m.p[g, t] * dt for t in _month_periods[mo])
+                budget = assets[g]["_monthly_energy_mwh"][mo - 1]
+                if assets[g]["_monthly_energy_mode"] == "exact":
+                    return energy == budget
+                return energy <= budget
+            m.MonthlyEnergy = pyo.Constraint(m.MonthlyEnergyIdx, rule=_monthly_energy_rule)
     if shared_session is not None:
         # The component implementation is the sole upper-bound owner for
         # migrated assets; all other assets remain on the legacy path.
@@ -2492,6 +2600,7 @@ def solve_all(inp: dict, assets: dict, profiles: dict, gas_limits: dict) -> tupl
     use_rolling = H_total_p > window_p
     iis_reports: list[dict] = []
     if not use_rolling:
+        solver_cfg = {**solver_cfg, "_full_horizon": True}
         print(f"⚙️  Full-horizon solve: {len(assets)} assets × {H_total_p} periods "
               f"({H_total_h}h @ {r_min}min)")
         hourly, fin_state, swall, obj_val = solve_window(

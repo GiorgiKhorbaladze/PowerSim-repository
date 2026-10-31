@@ -50,6 +50,8 @@ jobs:
               tests/test_reference_import.py \
               tests/test_parameter_workbook.py \
               tests/test_variable_cost_single_count.py \
+              tests/test_operating_envelope.py \
+              tests/test_georgia_plexos_model.py \
               tests/test_chronological_adequacy.py \
               tests/test_scoped_expansion.py \
               tests/test_security_shared.py \
@@ -68,6 +70,7 @@ jobs:
               solver/powersim_expansion.py \
               scripts/build_demo_project.py \
               scripts/build_reference_catalogue.py \
+              scripts/import_plexos_model.py \
               scripts/run_horizon.py \
               scripts/run_mc_sweep.py \
               scripts/powersim_report.py \
@@ -295,4 +298,4 @@ jobs:
       - name: Execute the sanitized 8760-hour application acceptance
         env:
           POWERSIM_ANNUAL_ACCEPTANCE: "1"
-        run: python -m pytest -q -s tests/test_annual_release_acceptance.py
+        run: python -m pytest -q -s tests/test_annual_release_acceptance.py tests/test_georgia_plexos_model.py

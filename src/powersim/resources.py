@@ -22,6 +22,13 @@ SAMPLE_PROJECTS: dict[str, dict[str, str]] = {
         "description": ("8,760-hour deterministic UC/ED demonstration with 2027-2030 demand scenarios. "
                         "Two aggregated dispatch resources; not official GSE operational data."),
     },
+    "georgia_2030_plexos": {
+        "path": "samples/projects/georgia_2030_plexos.json",
+        "name": "Georgia 2030 (PLEXOS model reconstruction)",
+        "description": ("8,760-hour model rebuilt from the approved PLEXOS model 'BESS Research 800-1400': 16 "
+                        "run-of-river zones, 5 wind and 9 solar regions, an energy-limited regulating HPP, fixed "
+                        "TPP/import, Ksani BESS; dry/flood hydrology, wind and solar scenarios. About 1 minute per run."),
+    },
     "application_compact_demo": {
         "path": "samples/application_compact_demo.json",
         "name": "Compact 4-hour demonstration",
