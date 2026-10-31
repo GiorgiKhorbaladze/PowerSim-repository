@@ -29,6 +29,13 @@ SAMPLE_PROJECTS: dict[str, dict[str, str]] = {
                         "run-of-river zones, 5 wind and 9 solar regions, an energy-limited regulating HPP, fixed "
                         "TPP/import, Ksani BESS; dry/flood hydrology, wind and solar scenarios. About 1 minute per run."),
     },
+    "georgia_2026_balance": {
+        "path": "samples/projects/georgia_2026_balance.json",
+        "name": "Georgia 2026 (unit-level, 2024-2025 balance hydrology)",
+        "description": ("8,760-hour model of 2026: GSE P50 load, 7 regulating HPPs with exact monthly energy, 21 "
+                        "seasonal/small HPP assets, wind, solar, 6 thermal plants and the 2025 net interconnector "
+                        "flow. Thermal costs are placeholders that require review. About 1 minute per run."),
+    },
     "application_compact_demo": {
         "path": "samples/application_compact_demo.json",
         "name": "Compact 4-hour demonstration",

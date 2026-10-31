@@ -9,3 +9,11 @@
 - The template deliberately excludes features outside the validated release scope.
 
 Use this project for reproducible software acceptance and planning-method demonstrations. Do not use it as an official operational dispatch case without controlled import and validation of authorised data.
+
+# Georgia 2026 unit-level model
+
+`georgia_2026_balance.json` is a 38-asset, 8,760-hour model of 2026 built by `scripts/build_georgia_2026_model.py`. It uses the GSE P50 2026 load, the 2026 capacity registry, mean 2024-2025 plant output from the user-supplied monthly balances, and the 2025 monthly net interconnector flow. Thermal efficiency, VOM and fuel prices are generic placeholders marked `review_required`. Not an official forecast. See `docs/GEORGIA_2026_MODEL.md`.
+
+# Georgia 2030 (PLEXOS reconstruction)
+
+`georgia_2030_plexos.json` - see `docs/GEORGIA_PLEXOS_MODEL.md`.

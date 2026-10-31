@@ -5,6 +5,7 @@
 - Windows: per-user installer (no administrator rights), separate portable `PowerSim.exe` artifact, and a `PowerSim.bat` launcher for source checkouts.
 - Solver: optional `monthly_pmax_mw`, `monthly_pmin_mw`, `pmin_profile` and `monthly_energy_mwh` (`max`/`exact`, full-horizon only), verified by the new QA check `operating_envelope`.
 - Georgia 2030 model rebuilt from the approved PLEXOS model, with hydrology/wind/solar scenarios and a benchmark against PLEXOS's hourly results (`docs/GEORGIA_PLEXOS_MODEL.md`).
+- Georgia 2026 unit-level model from the 2024–2025 monthly balances (mean hydrology, 2025 net flow, GSE P50 load), balance PDF parser and a model-vs-balance comparison script (`docs/GEORGIA_2026_MODEL.md`). Thermal costs in it are placeholders that require review.
 - Calibration: compare a publishable run with measured hourly/monthly data (bias, MAE, RMSE, correlation).
 - Charts (dispatch by technology, monthly energy balance), Excel and printable reports, sensitivity analysis through `scale` scenario overlays, and a scenario overview.
 - Georgian interface (English/ქართული toggle) and structured forms for stochastic, N-1, adequacy and expansion inputs; each workflow's solver validator now runs during *Validate*.

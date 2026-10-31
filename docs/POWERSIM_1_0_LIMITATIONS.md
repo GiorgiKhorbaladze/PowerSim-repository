@@ -11,6 +11,7 @@ PowerSim 1.0 is deliberately fail-closed outside its validated scope.
 - Chronological adequacy uses independent outages and a transparent chronological dispatch/storage model; it excludes network, UC, hydro chronology, correlated/common-mode outages and capacity accreditation claims.
 - Scoped expansion is screening, not an integer multi-year chronological investment optimization.
 - The Georgia example is sanitized and aggregated. It is not private GSE operational data and is not an official dispatch case.
+- The Georgia 2026 unit-level model (`docs/GEORGIA_2026_MODEL.md`) is single-node, uses mean 2024-2025 hydrology without a reservoir model, fixes net interconnector flow to 2025, and uses generic placeholder thermal efficiency, VOM and fuel prices with full availability. Its total thermal energy follows from the energy balance; the split between thermal plants is not a result.
 
 ## Application and reference data
 
