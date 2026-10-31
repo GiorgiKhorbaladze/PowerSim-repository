@@ -18,6 +18,11 @@ SolidCompression=yes
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 UninstallDisplayName={#AppName}
+; Per-user install by default: no administrator rights are needed. {autopf}
+; then resolves to %LOCALAPPDATA%\Programs. Administrators can still choose an
+; all-users install from the dialog or with /ALLUSERS.
+PrivilegesRequired=lowest
+PrivilegesRequiredOverridesAllowed=dialog commandline
 
 [Files]
 Source: "..\..\dist\PowerSim\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs

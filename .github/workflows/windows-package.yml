@@ -65,7 +65,7 @@ jobs:
           $workspace = Join-Path $env:RUNNER_TEMP "powersim-installed-workspace"
           $installer = Get-ChildItem "dist/installer/PowerSim-*-Windows-x64-Setup.exe" | Select-Object -First 1
           if ($null -eq $installer) { throw "Windows installer was not produced" }
-          $install = Start-Process -FilePath $installer.FullName -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /DIR=$installDir" -Wait -PassThru
+          $install = Start-Process -FilePath $installer.FullName -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CURRENTUSER /DIR=$installDir" -Wait -PassThru
           if ($install.ExitCode -ne 0 -or -not (Test-Path "$installDir/PowerSim.exe")) { throw "Silent Windows install failed" }
           function Invoke-InstalledSolve([int]$Port) {
             $process = Start-Process -FilePath "$installDir/PowerSim.exe" -ArgumentList "--no-browser --port $Port --workspace $workspace" -PassThru
@@ -100,10 +100,13 @@ jobs:
           if (-not (Test-Path $uninstaller)) { throw "Installer did not create an uninstaller" }
           $uninstall = Start-Process -FilePath $uninstaller -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART" -Wait -PassThru
           if ($uninstall.ExitCode -ne 0 -or (Test-Path "$installDir/PowerSim.exe")) { throw "Silent Windows uninstall failed" }
-      - name: Publish Windows artifacts
+      - name: Publish portable PowerSim (no installation, no admin rights)
         uses: actions/upload-artifact@v4
         with:
-          name: PowerSim-Windows-x64-dev
-          path: |
-            dist/PowerSim/**
-            dist/installer/*.exe
+          name: PowerSim-Windows-x64-portable
+          path: dist/PowerSim/**
+      - name: Publish per-user installer (no admin rights)
+        uses: actions/upload-artifact@v4
+        with:
+          name: PowerSim-Windows-x64-installer
+          path: dist/installer/*.exe

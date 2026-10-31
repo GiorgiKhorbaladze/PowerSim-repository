@@ -8,6 +8,12 @@ PowerSim is a local electricity-system planning, simulation and optimization app
 
 Download and install `PowerSim-1.0.0-Windows-x64-Setup.exe`. Launch **PowerSim** from the Start Menu. It starts a loopback-only local server and opens the browser UI.
 
+### Windows without administrator rights
+
+- **Portable:** download the `PowerSim-Windows-x64-portable` artifact from the latest successful *Windows package* workflow run on GitHub, unzip it anywhere (for example `Documents\PowerSim`) and double-click `PowerSim.exe`. Nothing is installed.
+- **Installer:** the `PowerSim-Windows-x64-installer` artifact installs for the current user only (`%LOCALAPPDATA%\Programs\PowerSim`) and does not ask for administrator rights.
+- **From source:** with a per-user Python 3.10-3.12 installed, download the repository ZIP, unzip it and double-click `PowerSim.bat`. The first run sets everything up; later runs start PowerSim and open the browser.
+
 ### Developer installation
 
 From a source checkout:
