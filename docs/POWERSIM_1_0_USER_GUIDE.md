@@ -30,6 +30,7 @@ The header always shows the **project status** (no project / draft with unsaved 
 
 - **Georgia 2026 baseline** (`samples/projects/georgia_2026_baseline.json`) - a sanitized, aggregated 8,760-hour deterministic UC/ED demonstration with editable Georgia 2027-2030 demand scenarios. It is not private GSE operational data and not an official dispatch case.
 - **Georgia 2026 (unit-level)** (`samples/projects/georgia_2026_balance.json`) - 38 assets built from the GSE P50 2026 load, the 2026 capacity registry and the 2024-2025 monthly balances; thermal costs are placeholders that require review. See `docs/GEORGIA_2026_MODEL.md`, which also shows how to compare a run with a monthly balance.
+- **Georgia 2027** (`samples/projects/georgia_2027_balance.json`) - the 2026 model with the 2027 load and the 206 MW Ruisi wind farm (assumptions in the same document).
 - **Compact 4-hour demonstration** - a two-resource case for a quick end-to-end check.
 
 ## Workflows

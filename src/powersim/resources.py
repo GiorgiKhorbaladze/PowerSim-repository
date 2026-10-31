@@ -36,6 +36,13 @@ SAMPLE_PROJECTS: dict[str, dict[str, str]] = {
                         "seasonal/small HPP assets, wind, solar, 6 thermal plants and the 2025 net interconnector "
                         "flow. Thermal costs are placeholders that require review. About 1 minute per run."),
     },
+    "georgia_2027_balance": {
+        "path": "samples/projects/georgia_2027_balance.json",
+        "name": "Georgia 2027 (2026 model + 2027 load + Ruisi wind 206 MW)",
+        "description": ("The Georgia 2026 unit-level model with the GSE P50 2027 load and the 206 MW Ruisi wind farm "
+                        "(assumed in operation all year, Kartli wind capacity factor). Thermal costs are placeholders "
+                        "that require review."),
+    },
     "application_compact_demo": {
         "path": "samples/application_compact_demo.json",
         "name": "Compact 4-hour demonstration",

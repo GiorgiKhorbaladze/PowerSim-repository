@@ -77,9 +77,29 @@ def test_committed_balances_reconcile(year):
         pytest.approx(total("მოხმარება (ჯამური დანაკარგებით)"), abs=0.1)
 
 
-def test_committed_sample_is_reproducible(project):
-    rebuilt = _script("build_georgia_2026_model").build_project()
-    assert json.loads(json.dumps(rebuilt, ensure_ascii=False)) == project
+@pytest.mark.parametrize("year", [2026, 2027])
+def test_committed_samples_are_reproducible(year):
+    committed = json.loads((ROOT / f"samples/projects/georgia_{year}_balance.json").read_text(encoding="utf-8"))
+    rebuilt = _script("build_georgia_2026_model").build_project(year)
+    assert json.loads(json.dumps(rebuilt, ensure_ascii=False)) == committed
+
+
+def test_2027_adds_ruisi_wind_and_the_2027_load(project):
+    from powersim.validation.readiness import diagnose_project
+    p2027 = json.loads((ROOT / "samples/projects/georgia_2027_balance.json").read_text(encoding="utf-8"))
+    assert diagnose_project(p2027)["run_ready"]
+    assets_2026 = {a["id"]: a for a in project["assets"]}
+    assets_2027 = {a["id"]: a for a in p2027["assets"]}
+    assert set(assets_2027) - set(assets_2026) == {"wind-ruisi"}
+    ruisi = assets_2027["wind-ruisi"]
+    assert ruisi["capacity_max_mw"] == 206.0 and ruisi["profile_references"] == ["cf-wind-kartli"]
+    assert {k: v for k, v in assets_2027.items() if k != "wind-ruisi"} == assets_2026
+    load = json.loads((ROOT / "data/gse_load_2026_2030.json").read_text(encoding="utf-8"))["load_mw_by_year"]
+    demand = lambda p: sum(next(x["values"] for x in p["profiles"] if x["id"] == "demand"))  # noqa: E731
+    assert demand(p2027) - demand(project) == pytest.approx(sum(load["2027"]) - sum(load["2026"]), abs=1.0)
+    assert p2027["time"]["start"].startswith("2027-01-01") and p2027["time"]["study_year"] == 2027
+    with pytest.raises(ValueError, match="supported study years"):
+        _script("build_georgia_2026_model").build_project(2031)
 
 
 def test_mapping_follows_the_documented_choices(project):
@@ -120,8 +140,10 @@ def test_mapping_follows_the_documented_choices(project):
 
 
 @pytest.mark.skipif(os.environ.get("POWERSIM_ANNUAL_ACCEPTANCE") != "1",
-                    reason="set POWERSIM_ANNUAL_ACCEPTANCE=1 for the 8760-hour 2026 solve")
-def test_full_year_2026_solve(tmp_path, project):
+                    reason="set POWERSIM_ANNUAL_ACCEPTANCE=1 for the 8760-hour 2026/2027 solves")
+@pytest.mark.parametrize("year", [2026, 2027])
+def test_full_year_solve(tmp_path, year):
+    project = json.loads((ROOT / f"samples/projects/georgia_{year}_balance.json").read_text(encoding="utf-8"))
     from powersim.application import ApplicationService
     from powersim.contracts import ProjectContract
     from powersim.execution import RegisteredLocalWorkflowExecutor
@@ -153,7 +175,7 @@ def test_full_year_2026_solve(tmp_path, project):
         if asset["kind"] == "thermal":
             assert max(row["dispatch_mw"] for row in rows) <= asset["capacity_max_mw"] + 1e-6
             thermal_total += sum(row["dispatch_mw"] for row in rows)
-    print("GEORGIA_2026=" + json.dumps({"thermal_gwh": round(thermal_total / 1000, 1),
+    print(f"GEORGIA_{year}=" + json.dumps({"thermal_gwh": round(thermal_total / 1000, 1),
                                         "objective_usd": summary["total_objective_cost_usd"],
                                         "served_gwh": round(summary["total_energy_mwh"] / 1000, 1)}))
 

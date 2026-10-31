@@ -1,8 +1,12 @@
-"""Build the Georgia 2026 unit-level dispatch model from committed inputs.
+"""Build the Georgia 2026/2027 unit-level dispatch models from committed inputs.
 
 Usage::
 
-    python scripts/build_georgia_2026_model.py --out samples/projects/georgia_2026_balance.json
+    python scripts/build_georgia_2026_model.py --year 2026 --out samples/projects/georgia_2026_balance.json
+    python scripts/build_georgia_2026_model.py --year 2027 --out samples/projects/georgia_2027_balance.json
+
+The 2027 model is the 2026 model with the GSE P50 2027 load and the plants
+listed in ``ADDITIONS[2027]`` (Ruisi wind, 206 MW).
 
 Inputs (all committed):
 
@@ -71,6 +75,13 @@ THERMAL = {
 # (samples/sample_input_gse_2026_168h.json). NOT a forecast; review required.
 FUEL_PRICE_USD_PER_MMBTU = {"gas": 5.5, "coal": 4.0}
 VOLL_USD_PER_MWH = 3000.0
+# Plants added after the 2026 registry, per study year (user-stated).
+ADDITIONS = {
+    2027: [{"id": "wind-ruisi", "name": "რუისის ქარის ელექტროსადგური", "capacity_mw": 206.0,
+            "note": "user-stated 2027 addition, 206 MW at Ruisi (Kareli, Shida Kartli). ASSUMPTIONS: in operation "
+                    "all year; uses the Kartli wind capacity factor (nearest measured wind farm, Gori)"}],
+}
+YEARS = (2026, 2027)
 
 
 def _sha(path: Path) -> str:
@@ -107,7 +118,9 @@ def mean_hydrology(balances: dict[int, dict[str, list[float]]], name: str) -> li
     return [sum(values) / len(years) for values in zip(*years)]
 
 
-def build_project() -> dict:
+def build_project(year: int = 2026) -> dict:
+    if year not in YEARS:
+        raise ValueError(f"supported study years: {YEARS}")
     load_path = ROOT / "data/gse_load_2026_2030.json"
     registry_path = ROOT / "samples/demo_asset_registry_2026.json"
     cost_path = ROOT / "data/cost_database_pypsa_eur.json"
@@ -135,7 +148,7 @@ def build_project() -> dict:
     profiles: list[dict] = []
 
     # --- load and net interconnector flow -------------------------------------------
-    load = json.loads(load_path.read_text(encoding="utf-8"))["load_mw_by_year"]["2026"]
+    load = json.loads(load_path.read_text(encoding="utf-8"))["load_mw_by_year"][str(year)]
     net_flow = balances[2025]["გადადინება (სალდო) მ/შ"]
     import_mw = [0.0] * HOURS
     demand = list(load)
@@ -147,8 +160,8 @@ def build_project() -> dict:
         else:
             demand[hour] = round(demand[hour] - mw, 6)
     profiles.append({"id": "demand", "unit": "MW", "values": demand, "provenance": provenance(
-        f"{_rel(load_path)} (GSE P50 2026) + 2025 monthly net export", _sha(load_path),
-        note="GSE P50 hourly load 2026 plus the 2025 net export of each net-export month, flat within the month")})
+        f"{_rel(load_path)} (GSE P50 {year}) + 2025 monthly net export", _sha(load_path),
+        note=f"GSE P50 hourly load {year} plus the 2025 net export of each net-export month, flat within the month")})
     profiles.append({"id": "net-import-mw", "unit": "MW", "values": import_mw, "provenance": provenance(
         _rel(actual_paths[2025]), _sha(actual_paths[2025]), balance_row="გადადინება (სალდო) მ/შ",
         note="2025 monthly net import, flat within the month; 0 in net-export months")})
@@ -231,6 +244,13 @@ def build_project() -> dict:
                    "provenance": provenance(_rel(registry_path), _sha(registry_path), registry_ids=solar_ids,
                                             note="six 2025 solar plants aggregated")})
 
+    for extra in ADDITIONS.get(year, []):
+        assets.append({"id": extra["id"], "kind": "wind", "capacity_min_mw": 0, "capacity_max_mw": extra["capacity_mw"],
+                       "profile_references": ["cf-wind-kartli"],
+                       "legacy_extensions": {"name": extra["name"], "committable": False, "vom": 0},
+                       "provenance": provenance("user statement (study-year addition)", f"additions-{year}",
+                                                note=extra["note"])})
+
     # --- thermal units -------------------------------------------------------------------
     for asset_id, (ids, technology, fuel, label) in THERMAL.items():
         efficiency = costs[technology]["efficiency"]["value"]
@@ -250,11 +270,11 @@ def build_project() -> dict:
                                 "illustrative fuel price from the GSE 2026 demo input; full availability, no outages")})
 
     return {
-        "id": "georgia-2026-balance",
+        "id": f"georgia-{year}-balance",
         "version": {"revision": 1},
         "workflow": "deterministic_uc",
         "metadata": {
-            "name": "Georgia 2026 (unit-level, 2024-2025 balance hydrology)",
+            "name": f"Georgia {year} (unit-level, 2024-2025 balance hydrology)",
             "classification": "planning study model; thermal costs are illustrative placeholders that require review",
             "mapping_document": "docs/GEORGIA_2026_MODEL.md",
             "inputs": [_rel(load_path), _rel(registry_path), *(_rel(p) for p in actual_paths.values()),
@@ -268,8 +288,8 @@ def build_project() -> dict:
             ],
         },
         "units": {"currency": "USD"},
-        "time": {"timezone": "Asia/Tbilisi", "study_year": 2026, "resolution_minutes": 60,
-                 "interval_duration_hours": 1, "start": "2026-01-01T00:00:00+04:00", "periods": HOURS,
+        "time": {"timezone": "Asia/Tbilisi", "study_year": year, "resolution_minutes": 60,
+                 "interval_duration_hours": 1, "start": f"{year}-01-01T00:00:00+04:00", "periods": HOURS,
                  "calendar_policy": "non_leap"},
         "assets": assets,
         "profiles": profiles,
@@ -282,11 +302,13 @@ def build_project() -> dict:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--out", type=Path, default=ROOT / "samples/projects/georgia_2026_balance.json")
+    parser.add_argument("--year", type=int, default=2026, choices=YEARS)
+    parser.add_argument("--out", type=Path)
     args = parser.parse_args()
-    project = build_project()
-    args.out.write_text(json.dumps(project, ensure_ascii=False, separators=(",", ":")) + "\n", encoding="utf-8")
-    print(f"{len(project['assets'])} assets, {len(project['profiles'])} profiles -> {args.out}")
+    out = args.out or ROOT / f"samples/projects/georgia_{args.year}_balance.json"
+    project = build_project(args.year)
+    out.write_text(json.dumps(project, ensure_ascii=False, separators=(",", ":")) + "\n", encoding="utf-8")
+    print(f"{len(project['assets'])} assets, {len(project['profiles'])} profiles -> {out}")
 
 
 if __name__ == "__main__":

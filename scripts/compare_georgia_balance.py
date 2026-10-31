@@ -61,7 +61,7 @@ def compare(project: dict, dispatch_mw: dict[str, list[float]], balance_rows: li
     imports = monthly.get("net-import", [0.0] * 12)
     demand = _monthly(next(p["values"] for p in project["profiles"] if p["id"] == "demand"))
     load = _monthly(json.loads((Path(__file__).resolve().parents[1] / "data/gse_load_2026_2030.json")
-                               .read_text(encoding="utf-8"))["load_mw_by_year"]["2026"])
+                               .read_text(encoding="utf-8"))["load_mw_by_year"][str(project["time"]["study_year"])])
     model[NET_FLOW] = [i - (d - l) for i, d, l in zip(imports, demand, load)]
     model[CONSUMPTION] = load
     if "ქარის სადგურები სულ" not in balance and "ქართლის ქარის ელ.სადგური" in balance:

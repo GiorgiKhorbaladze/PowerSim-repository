@@ -1,4 +1,4 @@
-# Georgia 2026 model (unit-level, 2024–2025 balance hydrology)
+# Georgia 2026 and 2027 models (unit-level, 2024–2025 balance hydrology)
 
 `samples/projects/georgia_2026_balance.json` is a single-node, 8,760-hour
 dispatch model of the Georgian power system for 2026. It is built by
@@ -92,10 +92,40 @@ Main points:
   214 GWh higher than 2025, and the fixed net flow stays at the 2025 level, so
   thermal plants cover the rest.
 - **December is the tightest month.** Thermal output is 647 GWh, and all
-  thermal units run at 100 % in 305 hours of the year. The model has no
+  thermal units run at full output in 286 hours of the year. The model has no
   outages, so a forced outage in those hours would need extra import or cause
   a shortage. Studying that risk needs outage data, which the repository does
   not have.
+
+## 2027 model
+
+`samples/projects/georgia_2027_balance.json` is built with
+`python scripts/build_georgia_2026_model.py --year 2027`. It is the 2026 model
+with two differences:
+
+- **Load:** the GSE P50 2027 hourly load (16,128 GWh, +507 GWh).
+- **Ruisi wind farm, 206 MW** (`wind-ruisi`; Ruisi is in Kareli municipality,
+  Shida Kartli). The user named this plant as a 2027 addition. Two
+  **assumptions** apply until project data is available:
+  - it operates all year;
+  - it uses the Kartli wind capacity factor (43 %, measured 2024–2025 at the
+    nearest operating wind farm near Gori), giving about 780 GWh/year.
+
+Every other input (hydrology, 2025 net flow, thermal placeholders) is the same
+as in 2026.
+
+| GWh | 2026 | 2027 |
+|---|---|---|
+| Load + net export | 16,081 | 16,588 |
+| Wind (2027: Ruisi 780) | 149 | 929 |
+| HPPs (2027: 74 GWh spilled in May–July) | 11,201 | 11,127 |
+| **Thermal** | **3,205** | **3,007** |
+| Hours with all thermal units at full output | 286 | 274 |
+
+Both runs pass QA, are publishable and have no unserved energy. Ruisi lowers
+thermal output by about 200 GWh while load grows by 507 GWh. Winter is still
+the bottleneck: December thermal output is 647 GWh in 2026 and 642 GWh in
+2027, because wind in December is low.
 
 ## Comparing with a 2026 balance (actual or plan)
 
