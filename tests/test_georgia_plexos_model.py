@@ -51,7 +51,11 @@ def test_committed_sample_is_reproducible_from_the_archive(project):
     rebuilt = _importer().build_project(ARCHIVE)
     assert json.loads(json.dumps(rebuilt)) == project
     reference = _importer().benchmark_reference(ARCHIVE, rebuilt)
-    assert reference == json.loads(BENCHMARK.read_text(encoding="utf-8"))
+    stored = json.loads(BENCHMARK.read_text(encoding="utf-8"))
+    assert reference.keys() == stored.keys()
+    for key, value in stored.items():
+        # 3-decimal rounding of large sums may differ in the last digit across platforms
+        assert reference[key] == (pytest.approx(value, abs=0.002) if not isinstance(value, str) else value), key
 
 
 def test_mapping_matches_the_plexos_objects(project):

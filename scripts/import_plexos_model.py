@@ -39,6 +39,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import zipfile
 import xml.etree.ElementTree as ET
 from collections import defaultdict
@@ -250,6 +251,9 @@ MONTH_END_HOURS = (744, 1416, 2160, 2880, 3624, 4344, 5088, 5832, 6552, 7296, 80
 def benchmark_reference(archive_path: Path, project: dict[str, Any]) -> dict[str, Any]:
     """Reference figures from the PLEXOS 'BEST' solution (hourly Interval files).
 
+    Sums use math.fsum (correctly rounded), so the file is identical on every
+    Python version (3.12 changed the float algorithm of the builtin sum).
+
     PLEXOS does not export unserved or dump energy here, so both are derived
     hour by hour from its own results: supply = generation + battery
     discharge - battery charge, compared with the same demand profile.
@@ -273,11 +277,11 @@ def benchmark_reference(archive_path: Path, project: dict[str, Any]) -> dict[str
             generation[ids[("Generator", oid)]] = interval(file_name)
     charge, discharge = interval("ST Battery(1).Charging.csv"), interval("ST Battery(1).Discharging.csv")
     demand = next(p["values"] for p in project["profiles"] if p["id"] == "demand")
-    supply = [sum(series[h] for series in generation.values()) + discharge[h] - charge[h] for h in range(HOURS)]
+    supply = [math.fsum(series[h] for series in generation.values()) + discharge[h] - charge[h] for h in range(HOURS)]
     month = [next(i for i, end in enumerate(MONTH_END_HOURS) if h < end) for h in range(HOURS)]
 
     def monthly(values: list[float]) -> list[float]:
-        return [round(sum(values[h] for h in range(HOURS) if month[h] == m), 3) for m in range(12)]
+        return [round(math.fsum(values[h] for h in range(HOURS) if month[h] == m), 3) for m in range(12)]
 
     shortfall = [max(0.0, demand[h] - supply[h]) for h in range(HOURS)]
     surplus = [max(0.0, supply[h] - demand[h]) for h in range(HOURS)]
@@ -286,14 +290,14 @@ def benchmark_reference(archive_path: Path, project: dict[str, Any]) -> dict[str
         "source_sha256": "sha256:" + hashlib.sha256(archive_path.read_bytes()).hexdigest(),
         "plexos_model": "BEST (ST Schedule, Regional)",
         "derivation": "hourly Interval results; unserved/dump derived as demand minus (generation + discharge - charge)",
-        "demand_mwh": round(sum(demand), 3),
-        "generation_mwh": {name: round(sum(values), 3) for name, values in sorted(generation.items())},
+        "demand_mwh": round(math.fsum(demand), 3),
+        "generation_mwh": {name: round(math.fsum(values), 3) for name, values in sorted(generation.items())},
         "regulating_hpp_monthly_mwh": monthly(generation["Regulating HPP"]),
-        "battery_charge_mwh": round(sum(charge), 3), "battery_discharge_mwh": round(sum(discharge), 3),
-        "implied_unserved_mwh": round(sum(shortfall), 3),
+        "battery_charge_mwh": round(math.fsum(charge), 3), "battery_discharge_mwh": round(math.fsum(discharge), 3),
+        "implied_unserved_mwh": round(math.fsum(shortfall), 3),
         "implied_unserved_monthly_mwh": monthly(shortfall),
         "implied_unserved_hours": sum(1 for value in shortfall if value > 0.01),
-        "implied_dump_mwh": round(sum(surplus), 3),
+        "implied_dump_mwh": round(math.fsum(surplus), 3),
     }
 
 
