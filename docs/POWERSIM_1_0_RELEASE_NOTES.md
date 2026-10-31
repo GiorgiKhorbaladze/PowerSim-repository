@@ -7,6 +7,7 @@
 - Georgia 2030 model rebuilt from the approved PLEXOS model, with hydrology/wind/solar scenarios and a benchmark against PLEXOS's hourly results (`docs/GEORGIA_PLEXOS_MODEL.md`).
 - Calibration: compare a publishable run with measured hourly/monthly data (bias, MAE, RMSE, correlation).
 - Charts (dispatch by technology, monthly energy balance), Excel and printable reports, sensitivity analysis through `scale` scenario overlays, and a scenario overview.
+- Georgian interface (English/ქართული toggle) and structured forms for stochastic, N-1, adequacy and expansion inputs; each workflow's solver validator now runs during *Validate*.
 
 ## Unreleased - bulk parameter workbook
 

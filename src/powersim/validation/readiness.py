@@ -39,6 +39,8 @@ REMEDIATION = {
     "scenario_resolution_failed": "Correct the scenario overlay so it resolves against the project.",
     "protected_scenario_overlay": "Scenario overlays cannot change project identity or version lineage.",
     "reference_asset_disabled": "The asset is part of the project but excluded from runs until enabled.",
+    "workflow_input_invalid": ("Correct the workflow inputs (Project page - Workflow inputs, or legacy_payload in the "
+                               "project document); the solver would reject the run."),
     "profile_length_mismatch": ("Give the profile exactly time.periods values, 8760 hourly values, or one full year "
                                 "at the study resolution."),
 }
@@ -106,6 +108,61 @@ def readiness_issues(value, prefix: str = "") -> list[dict[str, Any]]:
     return issues
 
 
+def workflow_input_issues(value, prefix: str = "") -> list[dict[str, Any]]:
+    """Run the selected workflow's own input validator before a run is created.
+
+    The validators are the solvers' entry checks, so a project that passes
+    here is not rejected for malformed workflow inputs at solve time.
+    """
+    workflow = getattr(value, "workflow", "deterministic_uc")
+    if workflow == "deterministic_uc":
+        return []
+    from powersim.execution import resolved_to_workflow_input
+    try:
+        inp = resolved_to_workflow_input(value)
+    except ValueError as exc:
+        return [_entry("workflow_input_invalid", "error", prefix + "profiles", str(exc))]
+    found: list[tuple[str, str]] = []
+    try:
+        if workflow == "chronological_adequacy":
+            from solver.powersim_adequacy_chronological import validate_chronological_adequacy_input
+            found = [(i["path"], i["message"]) for i in validate_chronological_adequacy_input(inp)]
+        elif workflow == "scoped_expansion":
+            from solver.powersim_expansion_scoped import validate_scoped_expansion_input
+            found = [(i["path"], i["message"]) for i in validate_scoped_expansion_input(inp)]
+        elif workflow == "stochastic_uc":
+            from solver.powersim_stochastic_shared import _scenario_input, _scenarios
+            for scenario in _scenarios(inp):
+                _scenario_input(inp, scenario)
+        elif workflow == "security_scuc":
+            # the same pre-build checks as build_security_model, in the same order
+            from solver.powersim_security_shared import _islanding, validate_contingencies
+            from solver.powersim_solver import build_asset_map, normalize_dc_network
+            if str((inp.get("solver_settings") or {}).get("component_engine", "shared")).lower() != "shared":
+                raise ValueError("validated security UC requires solver_settings.component_engine='shared'")
+            assets = build_asset_map(inp)
+            network = normalize_dc_network(inp, assets)
+            contingencies = validate_contingencies(inp, assets, network)
+            if any(c["kind"] == "line_outage" for c in contingencies) and not network.get("lines"):
+                raise ValueError("line_outage requires a validated DC network")
+            for contingency in contingencies:
+                if contingency["kind"] == "line_outage" and _islanding(network, contingency["target"]):
+                    raise ValueError(f"unsupported_islanding_contingency:{contingency['id']}")
+            if not inp.get("reserve_products"):
+                raise ValueError("validated corrective SCUC requires explicit reserve products")
+    except ValueError as exc:
+        message = str(exc)
+        if "component_engine" in message:
+            return [_entry("workflow_input_invalid", "error", prefix + "solver_settings.component_engine", message,
+                           {"workflow": workflow})]
+        if "reserve products" in message:
+            return [_entry("workflow_input_invalid", "error", prefix + "reserve_products", message, {"workflow": workflow})]
+        key = {"stochastic_uc": "stochastic_scenarios", "security_scuc": "contingencies"}.get(workflow, workflow)
+        found = [(key, message)]
+    return [_entry("workflow_input_invalid", "error", f"{prefix}legacy_payload.{path}", message,
+                   {"workflow": workflow}) for path, message in found]
+
+
 def diagnose_project(payload: Any) -> dict[str, Any]:
     """Return structured diagnostics for a raw project document.
 
@@ -122,6 +179,8 @@ def diagnose_project(payload: Any) -> dict[str, Any]:
     issues = [_from_issue(i) for i in validate_contract(project)]
     contract_valid = not any(i["severity"] == "error" for i in issues)
     issues += readiness_issues(project)
+    if contract_valid:
+        issues += workflow_input_issues(resolve_scenario(project))
     for scenario in project.scenarios:
         prefix = f"scenarios[{scenario.id}]."
         try:
@@ -152,4 +211,5 @@ def scenario_readiness(project: ProjectContract, scenario_id: str | None) -> lis
     if scenario_id:
         issues += [_from_issue(i, prefix) for i in validate_contract(resolved)]
     issues += readiness_issues(resolved, prefix)
+    issues += workflow_input_issues(resolved, prefix)
     return [i for i in issues if i["severity"] == "error"]

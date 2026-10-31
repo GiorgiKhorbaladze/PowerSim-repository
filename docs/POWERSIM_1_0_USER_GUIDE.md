@@ -39,7 +39,17 @@ The header always shows the **project status** (no project / draft with unsaved 
 - Chronological adequacy: LOLE, LOLP and EENS in the dedicated adequacy scope.
 - Capacity expansion screening: scoped investment screening only.
 
-The non-deterministic workflows need workflow-specific input blocks (stochastic scenarios, contingency list, `chronological_adequacy`, `expansion`) in the project document. The browser has no structured editor for them; if they are missing the backend rejects the run and the Runs/Results pages show the failure cause.
+The non-deterministic workflows need workflow-specific inputs. When one of them is selected, the **Project** page shows a *Workflow inputs* form:
+- **Stochastic UC:** scenarios with probabilities (they must sum to 1) and an optional demand profile per scenario; requires the shared component engine.
+- **N-1 security UC:** contingencies (unit, import or line outage), reserve products (direction, requirement, eligible units) and the shared component engine.
+- **Chronological adequacy:** Monte Carlo samples, random seed and the forced outage rate of each asset.
+- **Capacity-expansion screening:** planning years, discount rate, reserve margin and candidates (CAPEX, fixed O&M, maximum build, life, capacity credit, capacity factor).
+
+*Validate* runs each workflow's own solver validator, so missing or invalid inputs appear under Validation and block run creation instead of failing during the solve.
+
+## Language
+
+The header's **ქართული / English** button switches the interface between English and Georgian. The choice is remembered in the browser. Data values (asset ids, scenario names, codes) are never translated. Terminology follows `docs/LOCALIZATION_TERMINOLOGY.md`.
 
 ## Charts, reports and sensitivity
 

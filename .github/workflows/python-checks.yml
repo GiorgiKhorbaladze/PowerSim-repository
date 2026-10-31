@@ -54,6 +54,8 @@ jobs:
               tests/test_calibration.py \
               tests/test_reports.py \
               tests/test_sensitivity.py \
+              tests/test_workflow_inputs.py \
+              tests/test_ui_localization.py \
               tests/test_georgia_plexos_model.py \
               tests/test_chronological_adequacy.py \
               tests/test_scoped_expansion.py \

@@ -20,9 +20,11 @@ user journey:
 14. reference data: a conflicting station is staged, blocked, resolved with
     audited overrides, acknowledged and imported as a disabled asset
 15. enabling the unreviewed reference asset blocks runs with a visible reason;
+    missing stochastic inputs block the run at validation; the workflow form
+    completes them and the stochastic run succeeds; the Georgian UI toggles;
     the Excel parameter workbook supplies its costs and review, making it run-ready;
-    a run that the backend rejects is shown as failed with its cause; runs
-    persist across a page reload; no console errors or failed requests occur
+    runs persist across a page reload; no console errors or failed requests
+    occur (backend failure causes are covered by tests/test_application_api.py)
 
 Playwright is opt-in locally (``POWERSIM_BROWSER_E2E=1``); CI enables it.
 Set ``POWERSIM_CHROMIUM_EXECUTABLE`` to use a preinstalled Chromium.
@@ -380,7 +382,7 @@ def test_full_browser_journey(tmp_path: Path) -> None:
             expect(imported).to_contain_text("reviewed")
             expect(imported).to_contain_text("enabled")
 
-            # 15b. a run the backend rejects is visibly failed with its cause
+            # 15b. workflow-specific inputs: blocked at validation, completed with the form
             _goto(page, "overview")
             page.locator("#project-select").select_option("e2e-compact")
             page.locator("#open-project").click()
@@ -398,21 +400,41 @@ def test_full_browser_journey(tmp_path: Path) -> None:
             _goto(page, "project")
             page.locator("#project-workflow").select_option("stochastic_uc")
             page.locator("#save-project").click()
-            expect(page.locator("#project-status")).to_have_text("Saved - valid, run-ready")
+            expect(page.locator("#project-status")).to_have_text("Saved - not run-ready")
+            _goto(page, "validation")
+            expect(page.locator("#validation-issues")).to_contain_text("stochastic scenarios must be a non-empty list")
+            _goto(page, "runs")
+            expect(page.locator("#create-run")).to_be_disabled()
+            # complete the stochastic inputs with the workflow form and run it
+            _goto(page, "project")
+            inputs = page.locator("#workflow-inputs")
+            inputs.locator("#stochastic-shared-engine").check()
+            for index, (sid, probability) in enumerate((("low", "0.4"), ("high", "0.6"))):
+                inputs.locator("#add-stochastic-scenario").click()
+                inputs = page.locator("#workflow-inputs")
+                inputs.get_by_label(f"Scenario {index + 1} id").fill(sid)
+                inputs.get_by_label(f"Scenario {index + 1} probability").fill(probability)
+            page.locator("#save-project").click()
+            expect(page.locator("#project-status")).to_have_text("Saved - valid, run-ready", timeout=60_000)
             _goto(page, "runs")
             page.locator("#create-run").click()
-            failed = _wait_run(page, "failed", timeout=120_000)
-            failed.get_by_role("button", name="Results").click()
-            expect(page.locator("#result-status")).to_contain_text("failed")
-            expect(page.locator("#results-panel")).to_contain_text("stochastic scenarios must be a non-empty list")
-            expect(page.locator("#result-publication")).to_contain_text("No result")
+            stochastic = page.locator("#runs-table tbody tr", has_text="stochastic_uc").first
+            expect(stochastic).to_contain_text("completed", timeout=120_000)
+            stochastic.get_by_role("button", name="Results").click()
+            expect(page.locator("#result-qa")).to_contain_text("QA pass")
+            expect(page.locator("#result-view")).to_be_visible()
 
             # 15c. persistence across reload, and a clean console
             page.reload()
             page.locator("body[data-ready='true']").wait_for()
             _goto(page, "runs")
-            expect(page.locator("#runs-table tbody tr", has_text="completed")).to_have_count(3)
-            expect(page.locator("#runs-table tbody tr", has_text="failed")).to_have_count(1)
+            expect(page.locator("#runs-table tbody tr", has_text="completed")).to_have_count(4)
+            # Georgian interface
+            page.locator("#language-toggle").click()
+            expect(page.locator(".sidenav button[data-view='runs']")).to_have_text("გაშვებები")
+            expect(page.locator("#runs-table thead")).to_contain_text("სტატუსი")
+            page.locator("#language-toggle").click()
+            expect(page.locator(".sidenav button[data-view='runs']")).to_have_text("Runs")
             # Exactly the two deliberate rejections (steps 4 and 8) may log a
             # browser resource error; anything else is a defect.
             assert sorted(u.split("/api/")[-1] for u in rejected) == ["projects/save", "projects/save"], rejected

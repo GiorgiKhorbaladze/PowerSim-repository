@@ -5,6 +5,8 @@
 // publication gating and reference-data review all happen server-side.
 // Untrusted text is always inserted with textContent, never as HTML.
 
+import { getLanguage, setLanguage, translate } from "/static/i18n.js";
+
 const TERMINAL = new Set(["completed", "failed", "cancelled"]);
 const CANCELLABLE = new Set(["draft", "validating", "queued"]);
 const ASSET_KINDS = ["thermal", "import", "hydro_ror", "hydro_reg", "pumped_hydro", "solar", "wind", "bess", "dr"];
@@ -37,10 +39,11 @@ function h(tag, attrs = {}, ...children) {
   for (const [key, value] of Object.entries(attrs || {})) {
     if (value === null || value === undefined || value === false) continue;
     if (key === "class") node.className = value;
-    else if (key === "text") node.textContent = value;
+    else if (key === "text") node.textContent = translate(value);
     else if (key.startsWith("on") && typeof value === "function") node.addEventListener(key.slice(2), value);
     else if (key === "dataset") Object.assign(node.dataset, value);
     else if (value === true) node.setAttribute(key, "");
+    else if (key === "placeholder" || key === "aria-label" || key === "title") node.setAttribute(key, translate(String(value)));
     else node.setAttribute(key, String(value));
   }
   append(node, children);
@@ -49,7 +52,7 @@ function h(tag, attrs = {}, ...children) {
 function append(node, children) {
   for (const child of children.flat(Infinity)) {
     if (child === null || child === undefined || child === false) continue;
-    node.append(child instanceof Node ? child : document.createTextNode(String(child)));
+    node.append(child instanceof Node ? child : document.createTextNode(translate(String(child))));
   }
   return node;
 }
@@ -149,12 +152,12 @@ function updateStatus() {
     else if (validation) { text = validation.run_ready ? "Saved - valid, run-ready" : "Saved - not run-ready"; kind = validation.run_ready ? "ok" : "warn"; }
     else { text = "Saved - not validated"; kind = "info"; }
   }
-  status.textContent = text;
+  status.textContent = translate(text);
   status.className = `badge badge-${kind}`;
-  $("#nav-project").textContent = S.project ? `Project: ${S.project.metadata?.name || S.project.id}` : "No project open";
+  $("#nav-project").textContent = S.project ? `${translate("Project")}: ${S.project.metadata?.name || S.project.id}` : translate("No project open");
   const actions = $("#project-actions");
   actions.hidden = !S.project || ["overview", "about", "reference"].includes(S.view);
-  $("#dirty-indicator").textContent = S.project ? (isDirty() ? "Unsaved changes" : "All changes saved") : "";
+  $("#dirty-indicator").textContent = S.project ? translate(isDirty() ? "Unsaved changes" : "All changes saved") : "";
   const exportLink = $("#export-project");
   if (S.project && !isDirty()) {
     exportLink.href = `/api/projects/${encodeURIComponent(S.project.id)}/export`;
@@ -165,7 +168,8 @@ function updateStatus() {
   }
   if (S.system) {
     const ws = S.system.workspace;
-    $("#workspace-status").textContent = `${ws.name} - ${ws.projects} project(s), ${ws.runs} run(s)`;
+    $("#workspace-status").textContent = getLanguage() === "ka" ? `${ws.name} - ${ws.projects} პროექტი, ${ws.runs} გაშვება`
+      : `${ws.name} - ${ws.projects} project(s), ${ws.runs} run(s)`;
   }
 }
 
@@ -175,11 +179,11 @@ async function refreshSystem() {
     const highs = S.system.solvers.highs;
     const ready = S.system.executor.configured && highs;
     const backend = $("#backend-status");
-    backend.textContent = ready ? `Backend ready - HiGHS ${highs}` : (highs ? "No executor configured" : "Solver unavailable (HiGHS missing)");
+    backend.textContent = ready ? `${translate("Backend ready")} - HiGHS ${highs}` : translate(highs ? "No executor configured" : "Solver unavailable (HiGHS missing)");
     backend.className = `badge badge-${ready ? "ok" : "err"}`;
   } catch (error) {
     const backend = $("#backend-status");
-    backend.textContent = "Backend unreachable"; backend.className = "badge badge-err";
+    backend.textContent = translate("Backend unreachable"); backend.className = "badge badge-err";
   }
   updateStatus();
 }
@@ -394,7 +398,7 @@ function renderProject(section) {
   const nameInput = h("input", { id: "project-name", value: p.metadata?.name || "",
     oninput: () => { p.metadata = { ...(p.metadata || {}), name: nameInput.value }; markChanged(); } });
   const workflowSelect = h("select", { id: "project-workflow",
-    onchange: () => { p.workflow = workflowSelect.value; workflowHelp.textContent = describeWorkflow(p.workflow); markChanged(); } },
+    onchange: () => { p.workflow = workflowSelect.value; markChanged(); render(); } },
     (S.system?.workflows || [{ id: p.workflow, label: p.workflow }]).map((w) => h("option", { value: w.id, selected: w.id === p.workflow, text: w.label })));
   const workflowHelp = h("span", { class: "help", text: describeWorkflow(p.workflow) });
   const currency = h("input", { id: "project-currency", value: p.units?.currency || "",
@@ -434,6 +438,7 @@ function renderProject(section) {
     h("div", { class: "form-grid" },
       solverField("solver-time-limit", "time_limit_s", "Time limit per solve (s)", "Positive number of seconds.", (v) => (v > 0 && Number.isFinite(v) ? null : "Enter a positive number.")),
       solverField("solver-mip-gap", "mip_gap", "Relative MIP gap", "Between 0 and 1, for example 0.005.", (v) => (v >= 0 && v < 1 ? null : "Enter a value from 0 up to 1.")))));
+  if (p.workflow !== "deterministic_uc") section.append(workflowInputsCard(p));
   const meta = { ...(p.metadata || {}) };
   const imports = meta.reference_imports || [];
   delete meta.reference_imports; delete meta.name;
@@ -473,6 +478,117 @@ function renderProject(section) {
       } })), docError);
   if (S.documentOpen) docArea.value = JSON.stringify(S.project, null, 2);
   section.append(details);
+}
+// Returns the workflow block and an attach() that stores it in the project on
+// the first real edit, so merely viewing the form never creates unsaved changes.
+function blockFor(p, key, fallback) {
+  const existing = (p.legacy_payload || {})[key];
+  const data = existing !== undefined ? existing : fallback;
+  const attach = () => { if ((p.legacy_payload || {})[key] !== data) p.legacy_payload = { ...(p.legacy_payload || {}), [key]: data }; };
+  return [data, attach];
+}
+function numberCell(value, onValue, attrs = {}) {
+  const input = h("input", { type: "number", step: "any", value: value ?? "", ...attrs });
+  input.addEventListener("input", () => { onValue(input.value === "" ? null : Number(input.value)); markChanged(); });
+  return input;
+}
+function textCell(value, onValue, attrs = {}) {
+  const input = h("input", { value: value ?? "", ...attrs });
+  input.addEventListener("input", () => { onValue(input.value.trim()); markChanged(); });
+  return input;
+}
+function selectCell(value, options, onValue, attrs = {}) {
+  const select = h("select", attrs, options.map(([v, label]) => h("option", { value: v, selected: v === value, text: label })));
+  select.addEventListener("change", () => { onValue(select.value); markChanged(); });
+  return select;
+}
+function rowsTable(id, header, rows) {
+  return h("div", { class: "table-wrap" }, h("table", { id }, h("thead", {}, h("tr", {}, header.map((t) => h("th", { text: t })))), h("tbody", {}, rows)));
+}
+function workflowInputsCard(p) {
+  const card = h("div", { class: "card", id: "workflow-inputs" }, h("h3", { text: "Workflow inputs" }),
+    h("p", { class: "help", text: "Inputs specific to the selected workflow. They are checked by the solver's own validator when you choose Validate; errors appear under Validation before any run is created." }));
+  const rerender = () => render();
+  if (p.workflow === "stochastic_uc") {
+    const [scenarios, attach] = blockFor(p, "stochastic_scenarios", []);
+    const profiles = (p.profiles || []).map((pr) => [pr.id, pr.id]);
+    const engine = h("input", { type: "checkbox", id: "stochastic-shared-engine", checked: (p.solver_settings || {}).component_engine === "shared" });
+    engine.addEventListener("change", () => { p.solver_settings = { ...(p.solver_settings || {}), component_engine: engine.checked ? "shared" : "legacy" }; markChanged(); });
+    const total = scenarios.reduce((sum, sc) => sum + (Number(sc.probability) || 0), 0);
+    card.append(h("label", { class: "inline", for: "stochastic-shared-engine" }, engine, "Use the shared component engine (required by stochastic UC)"),
+      rowsTable("stochastic-table", ["Scenario id", "Probability", "Demand profile", ""], scenarios.map((sc, i) => {
+        const current = Object.keys(sc.profile_overrides || {}).length ? sc.demand_profile_source || "" : "";
+        return h("tr", {}, h("td", {}, textCell(sc.id, (v) => { attach(); sc.id = v; }, { "aria-label": `Scenario ${i + 1} id` })),
+          h("td", {}, numberCell(sc.probability, (v) => { attach(); sc.probability = v; }, { min: 0, max: 1, "aria-label": `Scenario ${i + 1} probability` })),
+          h("td", {}, selectCell(current, [["", "(base demand)"], ...profiles], (v) => { attach();
+            const source = (p.profiles || []).find((pr) => pr.id === v);
+            sc.demand_profile_source = v || undefined;
+            sc.profile_overrides = source ? { demand: [...source.values] } : {};
+          }, { "aria-label": `Scenario ${i + 1} demand profile` })),
+          h("td", {}, h("button", { type: "button", class: "link", text: "Delete", onclick: () => { attach(); scenarios.splice(i, 1); rerender(); } })));
+      })),
+      h("p", { id: "stochastic-probability-sum", class: Math.abs(total - 1) < 1e-9 ? "help" : "field-error", text: `Probabilities sum to ${num(total, 4)} (must be 1).` }),
+      h("button", { type: "button", id: "add-stochastic-scenario", text: "Add scenario", onclick: () => { attach();
+        scenarios.push({ id: `s${scenarios.length + 1}`, probability: 0, profile_overrides: {} }); rerender(); } }));
+  } else if (p.workflow === "security_scuc") {
+    const [contingencies, attach] = blockFor(p, "contingencies", []);
+    const kinds = [["unit_outage", "Unit outage"], ["import_outage", "Import outage"], ["line_outage", "Line outage"]];
+    const elementsFor = (kind) => kind === "line_outage" ? (p.network?.branches || []).map((b) => [b.id, b.id])
+      : (p.assets || []).filter((a) => (kind === "import_outage" ? a.kind === "import" : ["thermal", "hydro_reg", "hydro_ror", "wind", "solar"].includes(a.kind))).map((a) => [a.id, a.id]);
+    card.append(rowsTable("contingency-table", ["Contingency id", "Type", "Element", ""], contingencies.map((c, i) => h("tr", {},
+      h("td", {}, textCell(c.id, (v) => { attach(); c.id = v; }, { "aria-label": `Contingency ${i + 1} id` })),
+      h("td", {}, selectCell(c.kind, kinds, (v) => { attach(); c.kind = v; c.elements = []; rerender(); }, { "aria-label": `Contingency ${i + 1} type` })),
+      h("td", {}, selectCell((c.elements || [])[0] || "", [["", "(choose)"], ...elementsFor(c.kind)], (v) => { attach(); c.elements = v ? [v] : []; }, { "aria-label": `Contingency ${i + 1} element` })),
+      h("td", {}, h("button", { type: "button", class: "link", text: "Delete", onclick: () => { attach(); contingencies.splice(i, 1); rerender(); } }))))),
+      h("button", { type: "button", id: "add-contingency", text: "Add contingency", onclick: () => { attach();
+        contingencies.push({ id: `c${contingencies.length + 1}`, kind: "unit_outage", elements: [] }); rerender(); } }));
+    const engine = h("input", { type: "checkbox", id: "security-shared-engine", checked: (p.solver_settings || {}).component_engine !== "legacy" });
+    engine.addEventListener("change", () => { p.solver_settings = { ...(p.solver_settings || {}), component_engine: engine.checked ? "shared" : "legacy" }; markChanged(); });
+    const products = p.reserve_products || [];
+    const units = (p.assets || []).filter((a) => a.enabled !== false).map((a) => a.id);
+    card.append(h("label", { class: "inline", for: "security-shared-engine" }, engine, "Use the shared component engine (required by N-1 security UC)"),
+      h("h4", { text: "Reserve products (required for corrective redispatch)" }),
+      rowsTable("reserve-table", ["Product id", "Direction", "Requirement (MW)", "Eligible units", ""], products.map((rp, i) => {
+        const eligible = h("select", { multiple: true, size: Math.min(4, Math.max(2, units.length)), "aria-label": `Reserve ${i + 1} eligible units` },
+          units.map((u) => h("option", { value: u, selected: (rp.eligible_units || []).includes(u), text: u })));
+        eligible.addEventListener("change", () => { rp.eligible_units = Array.from(eligible.selectedOptions).map((o) => o.value); p.reserve_products = [...products]; markChanged(); });
+        return h("tr", {}, h("td", {}, textCell(rp.id, (v) => { rp.id = v; p.reserve_products = [...products]; }, { "aria-label": `Reserve ${i + 1} id` })),
+          h("td", {}, selectCell(rp.direction || "up", [["up", "up"], ["down", "down"]], (v) => { rp.direction = v; p.reserve_products = [...products]; }, { "aria-label": `Reserve ${i + 1} direction` })),
+          h("td", {}, numberCell(rp.requirement, (v) => { rp.requirement = v; p.reserve_products = [...products]; }, { min: 0, "aria-label": `Reserve ${i + 1} requirement` })),
+          h("td", {}, eligible),
+          h("td", {}, h("button", { type: "button", class: "link", text: "Delete", onclick: () => { products.splice(i, 1); p.reserve_products = [...products]; rerender(); } })));
+      })),
+      h("button", { type: "button", id: "add-reserve-product", text: "Add reserve product", onclick: () => {
+        p.reserve_products = [...products, { id: `r${products.length + 1}`, direction: "up", requirement: 0, eligible_units: [] }]; rerender(); } }));
+  } else if (p.workflow === "chronological_adequacy") {
+    const [config, attach] = blockFor(p, "chronological_adequacy", { samples: 100, seed: 1 });
+    card.append(h("div", { class: "form-grid" },
+      h("label", {}, "Monte Carlo samples", numberCell(config.samples, (v) => { attach(); config.samples = v; }, { id: "adequacy-samples", min: 1, step: 1 })),
+      h("label", {}, "Random seed", numberCell(config.seed, (v) => { attach(); config.seed = v; }, { id: "adequacy-seed", step: 1 }))),
+      h("h4", { text: "Forced outage rates" }),
+      rowsTable("for-table", ["Asset", "Kind", "Forced outage rate (0-1)"], (p.assets || []).filter((a) => a.enabled !== false).map((a) => h("tr", {},
+        h("td", {}, h("code", { text: a.id })), h("td", { text: a.kind }),
+        h("td", {}, numberCell((a.legacy_extensions || {}).for_rate, (v) => {
+          const ext = { ...(a.legacy_extensions || {}) }; if (v === null) delete ext.for_rate; else ext.for_rate = v; a.legacy_extensions = ext;
+        }, { min: 0, max: 1, "aria-label": `Forced outage rate of ${a.id}` }))))));
+  } else if (p.workflow === "scoped_expansion") {
+    const [ex, attach] = blockFor(p, "expansion", { mode: "scoped_screening", years: 1, discount_rate: 0.08, reserve_margin: 0.15, candidates: [] });
+    if (!Array.isArray(ex.candidates)) ex.candidates = [];
+    const fields = [["capex_per_mw", "CAPEX (/MW)"], ["opex_per_mw_yr", "Fixed O&M (/MW-yr)"], ["max_build_mw", "Max build (MW)"],
+      ["life_yrs", "Life (years)"], ["capacity_credit", "Capacity credit (0-1)"], ["capacity_factor", "Capacity factor (0-1)"]];
+    card.append(h("div", { class: "form-grid" },
+      h("label", {}, "Planning years", numberCell(ex.years, (v) => { attach(); ex.years = v; }, { id: "expansion-years", min: 1, step: 1 })),
+      h("label", {}, "Discount rate", numberCell(ex.discount_rate, (v) => { attach(); ex.discount_rate = v; }, { id: "expansion-discount", min: 0 })),
+      h("label", {}, "Reserve margin", numberCell(ex.reserve_margin, (v) => { attach(); ex.reserve_margin = v; }, { id: "expansion-margin", min: 0 }))),
+      h("p", { class: "warn-panel", text: "Screening only: a continuous LP for candidate sizing, not an investment decision model." }),
+      rowsTable("candidate-table", ["Candidate id", ...fields.map((f) => f[1]), ""], ex.candidates.map((c, i) => h("tr", {},
+        h("td", {}, textCell(c.id, (v) => { attach(); c.id = v; }, { "aria-label": `Candidate ${i + 1} id` })),
+        fields.map(([key, label]) => h("td", {}, numberCell(c[key], (v) => { attach(); if (v === null) delete c[key]; else c[key] = v; }, { min: 0, "aria-label": `Candidate ${i + 1} ${label}` }))),
+        h("td", {}, h("button", { type: "button", class: "link", text: "Delete", onclick: () => { attach(); ex.candidates.splice(i, 1); rerender(); } }))))),
+      h("button", { type: "button", id: "add-candidate", text: "Add candidate", onclick: () => { attach();
+        ex.candidates.push({ id: `cand-${ex.candidates.length + 1}`, capex_per_mw: 1000000, opex_per_mw_yr: 20000, max_build_mw: 100, life_yrs: 25, capacity_credit: 0.15, capacity_factor: 0.4 }); rerender(); } }));
+  }
+  return card;
 }
 function describeWorkflow(id) { return S.system?.workflows.find((w) => w.id === id)?.description || ""; }
 
@@ -877,7 +993,7 @@ function renderResults(section) {
   if (!S.resultsRunId || !S.runs.some((r) => r.id === S.resultsRunId)) S.resultsRunId = (finished[0] || S.runs[0]).id;
   const select = h("select", { id: "results-run", onchange: () => { S.resultsRunId = select.value; render(); } },
     S.runs.map((run) => h("option", { value: run.id, selected: run.id === S.resultsRunId,
-      text: `${(run.created_at || "").replace("T", " ").slice(0, 16)} - ${run.scenario_id || "Base case"} - ${run.status}` })));
+      text: `${(run.created_at || "").replace("T", " ").slice(0, 16)} - ${run.scenario_id || translate("Base case")} - ${translate(run.status)}` })));
   section.append(h("div", { class: "actions" }, h("label", { for: "results-run" }, "Run", select)));
   const panel = h("div", { id: "results-panel", "aria-live": "polite" }, h("p", { class: "muted", text: "Loading result..." }));
   section.append(panel);
@@ -895,10 +1011,10 @@ function renderSummary(panel, summary) {
   panel.append(h("div", { class: "tiles" },
     h("div", { class: "tile" }, h("div", { class: "label", text: "Run status" }), h("div", { id: "result-status" }, badge(summary.status, statusKind(summary.status)))),
     h("div", { class: "tile" }, h("div", { class: "label", text: "QA" }), h("div", { id: "result-qa" },
-      summary.qa ? badge(`QA ${summary.qa.status}`, summary.qa.status === "pass" ? "ok" : summary.qa.status === "warn" ? "warn" : "err") : badge("QA not available", "neutral"))),
+      summary.qa ? badge(`QA ${translate(summary.qa.status)}`, summary.qa.status === "pass" ? "ok" : summary.qa.status === "warn" ? "warn" : "err") : badge("QA not available", "neutral"))),
     h("div", { class: "tile" }, h("div", { class: "label", text: "Publication" }), h("div", { id: "result-publication" },
       pub ? badge(pub.publishable ? (pub.qualified ? "Publishable (with warnings)" : "Publishable") : "Not publishable", pub.publishable ? (pub.qualified ? "warn" : "ok") : "err") : badge("No result", "neutral"))),
-    h("div", { class: "tile" }, h("div", { class: "label", text: "Workflow / scenario" }), h("div", { text: `${summary.workflow || "-"} / ${summary.scenario_id || "Base case"}` }))));
+    h("div", { class: "tile" }, h("div", { class: "label", text: "Workflow / scenario" }), h("div", { text: `${summary.workflow || "-"} / ${summary.scenario_id || translate("Base case")}` }))));
   if (!TERMINAL.has(summary.status)) {
     panel.append(h("div", { class: "info-panel", role: "status", text: `The run is ${summary.status}. Results appear here when it completes.` }));
     return;
@@ -990,7 +1106,7 @@ function resultView(view) {
   if (view.kind === "dispatch") {
     const s = view.system_summary;
     box.append(h("div", { class: "tiles", id: "result-kpis" }, KPI_FIELDS.filter(([key]) => typeof s[key] === "number").map(([key, label, unit]) =>
-      h("div", { class: "tile" }, h("div", { class: "label", text: `${label} (${unit})` }), h("div", { class: "value", text: num(s[key], 1) })))));
+      h("div", { class: "tile" }, h("div", { class: "label", text: `${translate(label)} (${unit})` }), h("div", { class: "value", text: num(s[key], 1) })))));
     if (view.technology?.kinds?.length) box.append(technologyCharts(view.technology));
     if (view.series?.points?.length) box.append(seriesChart(view.series));
     box.append(h("h3", { text: "By resource" }), h("div", { class: "table-wrap" }, h("table", { id: "by-unit-table" },
@@ -1077,7 +1193,7 @@ function technologyCharts(tech) {
       h("td", { class: "num", text: num(m.unserved_mwh, 0) }), h("td", { class: "num", text: num(m.curtailed_mwh, 0) }), h("td", { class: "num", text: num(m.demand_mwh, 0) })))))));
   const extra = [h("span", {}, h("span", { class: "sw k-unserved" }), "Unserved"), h("span", {}, h("span", { class: "sw-demand" }), "Demand")];
   return h("div", { id: "technology-charts" },
-    h("figure", { class: "card" }, h("figcaption", {}, h("strong", { text: `Dispatch by technology (${tech.series.resolution === "daily_mean" ? "daily mean MW" : "MW"})` }), chartLegend(kinds, extra)), svg),
+    h("figure", { class: "card" }, h("figcaption", {}, h("strong", { text: `${translate("Dispatch by technology")} (${translate(tech.series.resolution === "daily_mean" ? "daily mean MW" : "MW")})` }), chartLegend(kinds, extra)), svg),
     h("figure", { class: "card" }, h("figcaption", {}, h("strong", { text: "Monthly energy balance" }), chartLegend(kinds, extra)), msvg, table));
 }
 function seriesChart(series) {
@@ -1106,7 +1222,7 @@ function seriesChart(series) {
     text(width - pad.r + 6, pad.t + 8, num(maxPrice, 0)), text(width - pad.r + 6, height - pad.b, "0"),
     text(pad.l, height - 6, series.resolution === "daily_mean" ? "Day 1" : "Period 1"), text(width - pad.r, height - 6, `${points.length}`, "end"),
     line("s1", (p) => p.load_mw, yL), line("s2", (p) => p.price_usd_mwh, yP));
-  return h("figure", { class: "card" }, h("figcaption", {}, h("strong", { text: `System load and price (${label})` }),
+  return h("figure", { class: "card" }, h("figcaption", {}, h("strong", { text: `${translate("System load and price")} (${translate(label)})` }),
     h("div", { class: "legend" }, h("span", {}, h("span", { class: "sw1" }), "Load, MW (left axis)"), h("span", {}, h("span", { class: "sw2" }), "Price, USD/MWh (right axis)"))), svg);
 }
 
@@ -1419,8 +1535,23 @@ function renderAbout(section) {
 }
 
 // ---------------------------------------------------------------- startup
+function applyStaticTranslations() {
+  for (const el of document.querySelectorAll(".sidenav button, .status-strip dt, #validate-project, #save-project, #export-project, .brand-sub, .skip-link")) {
+    if (!el.dataset.en) el.dataset.en = el.textContent;
+    el.textContent = translate(el.dataset.en);
+  }
+  const toggle = $("#language-toggle");
+  toggle.textContent = getLanguage() === "ka" ? "English" : "ქართული";
+  toggle.setAttribute("aria-label", getLanguage() === "ka" ? "Switch the interface to English" : "ინტერფეისის ქართულ ენაზე გადართვა");
+  document.documentElement.lang = getLanguage();
+}
 async function start() {
   for (const button of document.querySelectorAll(".sidenav button")) button.addEventListener("click", () => show(button.dataset.view));
+  $("#language-toggle").addEventListener("click", async () => {
+    setLanguage(getLanguage() === "ka" ? "en" : "ka");
+    applyStaticTranslations(); await refreshSystem(); render();
+  });
+  applyStaticTranslations();
   $("#validate-project").addEventListener("click", async () => { await validateProject(); show("validation"); });
   $("#save-project").addEventListener("click", () => saveProject());
   $("#export-project").addEventListener("click", (event) => { if (event.currentTarget.getAttribute("aria-disabled") === "true") { event.preventDefault(); toast("Save the project before exporting it.", "warn"); } });
