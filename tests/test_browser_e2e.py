@@ -246,6 +246,12 @@ def test_full_browser_journey(tmp_path: Path) -> None:
             expect(page.locator("#result-publication")).to_contain_text("Publishable")
             expect(page.locator("#result-kpis")).to_contain_text("Energy served")
             expect(page.locator("#by-unit-table")).to_contain_text("Georgia thermal aggregate")
+            expect(page.locator("#technology-charts")).to_contain_text("Monthly energy balance")
+            expect(page.locator("#technology-table")).to_contain_text("TPP / import")
+            with page.expect_download() as excel_download:
+                page.locator("#excel-report").click()
+            assert excel_download.value.suggested_filename.endswith(".xlsx")
+            expect(page.locator("#html-report")).to_have_attribute("href", re.compile(r"/api/runs/.+/report\.html$"))
             if os.environ.get("POWERSIM_E2E_SCREENSHOTS"):
                 page.screenshot(path=str(Path(os.environ["POWERSIM_E2E_SCREENSHOTS"]) / "georgia_results.png"), full_page=True)
             with page.expect_download() as download_info:
@@ -379,6 +385,17 @@ def test_full_browser_journey(tmp_path: Path) -> None:
             page.locator("#project-select").select_option("e2e-compact")
             page.locator("#open-project").click()
             page.locator("#h-project").wait_for()
+            # sensitivity analysis: demand x1.5 on the compact project, compared in the overview
+            _goto(page, "runs")
+            page.locator("#sensitivity-target").select_option(label="Profile demand (all values)")
+            page.locator("#sensitivity-factors").fill("1.5")
+            page.locator("#run-sensitivity").click()
+            _wait_run(page, "sens-demand-150")
+            expect(page.locator("#runs-table tbody tr", has_text="sens-demand-150")).to_contain_text("completed", timeout=120_000)
+            _goto(page, "compare")
+            expect(page.locator("#overview-table")).to_contain_text("sens-demand-150")
+            expect(page.locator("#scenario-overview")).to_contain_text("Sensitivity: demand")
+            _goto(page, "project")
             page.locator("#project-workflow").select_option("stochastic_uc")
             page.locator("#save-project").click()
             expect(page.locator("#project-status")).to_have_text("Saved - valid, run-ready")
@@ -394,7 +411,7 @@ def test_full_browser_journey(tmp_path: Path) -> None:
             page.reload()
             page.locator("body[data-ready='true']").wait_for()
             _goto(page, "runs")
-            expect(page.locator("#runs-table tbody tr", has_text="completed")).to_have_count(2)
+            expect(page.locator("#runs-table tbody tr", has_text="completed")).to_have_count(3)
             expect(page.locator("#runs-table tbody tr", has_text="failed")).to_have_count(1)
             # Exactly the two deliberate rejections (steps 4 and 8) may log a
             # browser resource error; anything else is a defect.

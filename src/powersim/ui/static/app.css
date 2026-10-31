@@ -161,3 +161,22 @@ dl.kv dd { margin: 0; overflow-wrap: anywhere; }
   .sidenav button { width: auto; }
   main { padding: 1rem; }
 }
+
+/* technology colours (shared by charts and legends) */
+.chart .area, .chart .bar { stroke: none; }
+.k-hydro_ror { fill: #2b6cb0; background: #2b6cb0; }
+.k-hydro_reg { fill: #1a4f8a; background: #1a4f8a; }
+.k-wind { fill: #2a9d8f; background: #2a9d8f; }
+.k-solar { fill: #e9b949; background: #e9b949; }
+.k-thermal { fill: #8d6e63; background: #8d6e63; }
+.k-import { fill: #9e9e9e; background: #9e9e9e; }
+.k-bess { fill: #7b4fa1; background: #7b4fa1; }
+.k-pumped_hydro { fill: #4a6fa5; background: #4a6fa5; }
+.k-dr { fill: #6d8f3a; background: #6d8f3a; }
+.k-unserved { fill: #c62828; background: #c62828; }
+.k-other { fill: #b0bec5; background: #b0bec5; }
+.legend .sw { display: inline-block; width: .8rem; height: .8rem; border-radius: 2px; vertical-align: middle; margin-right: .3rem; }
+.chart .load-line { fill: none; stroke: var(--text); stroke-width: 1.2; }
+.chart .demand-mark { stroke: var(--text); stroke-width: 2; }
+.legend { flex-wrap: wrap; }
+.legend .sw-demand { display: inline-block; width: .9rem; height: .2rem; background: var(--text); vertical-align: middle; margin-right: .3rem; }

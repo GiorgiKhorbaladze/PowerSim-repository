@@ -6,6 +6,7 @@
 - Solver: optional `monthly_pmax_mw`, `monthly_pmin_mw`, `pmin_profile` and `monthly_energy_mwh` (`max`/`exact`, full-horizon only), verified by the new QA check `operating_envelope`.
 - Georgia 2030 model rebuilt from the approved PLEXOS model, with hydrology/wind/solar scenarios and a benchmark against PLEXOS's hourly results (`docs/GEORGIA_PLEXOS_MODEL.md`).
 - Calibration: compare a publishable run with measured hourly/monthly data (bias, MAE, RMSE, correlation).
+- Charts (dispatch by technology, monthly energy balance), Excel and printable reports, sensitivity analysis through `scale` scenario overlays, and a scenario overview.
 
 ## Unreleased - bulk parameter workbook
 

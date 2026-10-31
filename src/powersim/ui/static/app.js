@@ -799,6 +799,7 @@ function renderRuns(section) {
       h("div", { class: "actions" }, button,
         h("span", { id: "create-run-reason", class: blocker ? "field-error" : "help", text: blocker || "Ready to run." })),
       errorBox));
+    section.append(sensitivityCard(blocker));
   } else {
     section.append(h("p", { class: "info-panel", text: "Showing all runs in the workspace. Open a project to create runs." }));
   }
@@ -828,6 +829,44 @@ function renderRuns(section) {
         e.message || "", e.details && e.details.error ? h("div", { class: "error-panel", role: "alert", text: `Cause: ${e.details.error}` }) : null))));
     }).catch((error) => detail.append(errorPanel(error)));
   }
+}
+
+function sensitivityCard(blocker) {
+  const p = S.project;
+  const options = [
+    ...(p.profiles || []).map((pr) => ({ value: JSON.stringify({ type: "profile", id: pr.id }), label: `Profile ${pr.id} (all values)` })),
+  ];
+  for (const a of p.assets || []) {
+    const ext = a.legacy_extensions || {};
+    if (a.capacity_max_mw != null) options.push({ value: JSON.stringify({ type: "asset", id: a.id, field: "capacity_max_mw" }), label: `${a.id}: capacity` });
+    for (const field of ["vom", "fuel_price", "heat_rate", "monthly_energy_mwh"]) {
+      if (ext[field] != null) options.push({ value: JSON.stringify({ type: "asset", id: a.id, field }), label: `${a.id}: ${field}` });
+    }
+  }
+  const target = h("select", { id: "sensitivity-target" }, options.map((o) => h("option", { value: o.value, text: o.label })));
+  const base = h("select", { id: "sensitivity-base" }, h("option", { value: "", text: "Base case" }),
+    (p.scenarios || []).filter((sc) => !sc.id.startsWith("sens-")).map((sc) => h("option", { value: sc.id, text: sc.name || sc.id })));
+  const factors = h("input", { id: "sensitivity-factors", value: "0.9, 1.1", "aria-describedby": "sensitivity-help" });
+  const out = h("div", { id: "sensitivity-result", "aria-live": "polite" });
+  const button = h("button", { type: "button", id: "run-sensitivity", disabled: Boolean(blocker), text: "Create and run sensitivity",
+    onclick: async () => {
+      const values = factors.value.split(/[,;\s]+/).filter(Boolean).map(Number);
+      if (!values.length || values.some((v) => !Number.isFinite(v) || v < 0 || v > 10)) {
+        clear(out).append(h("p", { class: "field-error", role: "alert", text: "Enter 1-9 factors between 0 and 10, for example 0.9, 1.1." })); return;
+      }
+      button.disabled = true; clear(out).append(h("p", { class: "muted", text: "Creating scenarios and queuing runs..." }));
+      try {
+        const result = await api(`/projects/${encodeURIComponent(p.id)}/sensitivity`, { method: "POST",
+          body: { target: JSON.parse(target.value), factors: values, base_scenario: base.value || null } });
+        await openProject(result.project_id); await refreshSystem();
+        toast(`Queued ${result.runs.length} sensitivity run(s). Results appear in Compare - Scenario overview.`, "ok"); render();
+      } catch (error) { button.disabled = false; clear(out).append(errorPanel(error, "The sensitivity could not be created")); }
+    } });
+  return h("div", { class: "card", id: "sensitivity-card" }, h("h3", { text: "Sensitivity analysis" }),
+    h("p", { id: "sensitivity-help", class: "help", text: "Creates one scenario per factor that multiplies the chosen input (for example demand x0.9 and x1.1), saves the project and launches the runs. Compare them under Compare - Scenario overview." }),
+    h("div", { class: "form-grid" }, h("label", { for: "sensitivity-target" }, "Input to vary", target),
+      h("label", { for: "sensitivity-base" }, "Starting from", base), h("label", { for: "sensitivity-factors" }, "Factors", factors)),
+    h("div", { class: "actions" }, button, blocker ? h("span", { class: "field-error", text: blocker }) : null), out);
 }
 
 // ----- results
@@ -897,6 +936,9 @@ function renderSummary(panel, summary) {
          ["Validity", summary.validity], ["Snapshot fingerprint", summary.snapshot_fingerprint],
          ["Persisted hashes verified", summary.verification?.valid ? "yes" : "no"]].map(([k, v]) => [h("dt", { text: k }), h("dd", { text: String(v ?? "-") })]))));
   }
+  if (summary.view) panel.append(h("div", { class: "actions" },
+    h("button", { type: "button", id: "excel-report", text: "Excel report", onclick: () => download(`/runs/${encodeURIComponent(summary.run_id)}/report.xlsx`) }),
+    h("a", { class: "button", id: "html-report", href: `/api/runs/${encodeURIComponent(summary.run_id)}/report.html`, target: "_blank", rel: "noopener", text: "Printable report (PDF via print)" })));
   panel.append(h("div", { class: "actions" }, h("button", { type: "button", id: "export-run", text: "Export run bundle (ZIP)",
     onclick: () => download(`/runs/${encodeURIComponent(summary.run_id)}/export`) }),
     h("span", { class: "help", text: summary.view ? "Includes the gated result envelope and CSV summaries." : "Includes the snapshot and diagnostics; numeric results are excluded because the run is not publishable." })));
@@ -949,6 +991,7 @@ function resultView(view) {
     const s = view.system_summary;
     box.append(h("div", { class: "tiles", id: "result-kpis" }, KPI_FIELDS.filter(([key]) => typeof s[key] === "number").map(([key, label, unit]) =>
       h("div", { class: "tile" }, h("div", { class: "label", text: `${label} (${unit})` }), h("div", { class: "value", text: num(s[key], 1) })))));
+    if (view.technology?.kinds?.length) box.append(technologyCharts(view.technology));
     if (view.series?.points?.length) box.append(seriesChart(view.series));
     box.append(h("h3", { text: "By resource" }), h("div", { class: "table-wrap" }, h("table", { id: "by-unit-table" },
       h("thead", {}, h("tr", {}, ["Resource", "Type", "Energy (MWh)", "Capacity factor (%)", "Gross cost", "Avg cost (/MWh)", "Starts"].map((t) => h("th", { text: t })))),
@@ -970,6 +1013,72 @@ function resultView(view) {
       : h("p", { class: "muted", text: "This workflow reported no scalar metrics." }));
   }
   return box;
+}
+const KIND_LABELS = { hydro_ror: "Hydro", hydro_reg: "Reservoir hydro", wind: "Wind", solar: "Solar", thermal: "Thermal",
+  import: "TPP / import", bess: "Battery (net)", pumped_hydro: "Pumped hydro", dr: "Demand response", unserved: "Unserved" };
+const kindLabel = (kind) => KIND_LABELS[kind] || kind;
+function svgEl(tag, attrs = {}, text) {
+  const el = document.createElementNS("http://www.w3.org/2000/svg", tag);
+  for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, String(v));
+  if (text !== undefined) el.textContent = text;
+  return el;
+}
+function chartLegend(kinds, extra = []) {
+  return h("div", { class: "legend" }, [...kinds.map((k) => h("span", {}, h("span", { class: `sw k-${k}` }), kindLabel(k))), ...extra]);
+}
+function technologyCharts(tech) {
+  const kinds = tech.kinds;
+  const points = tech.series.points;
+  const width = 900, height = 260, pad = { l: 60, r: 16, t: 12, b: 26 };
+  const stackTop = points.map((p) => kinds.reduce((sum, k) => sum + Math.max(0, p[k] || 0), 0) + (p.unserved_mw || 0));
+  const maxY = Math.max(1, ...stackTop, ...points.map((p) => p.load_mw || 0));
+  const x = (i) => pad.l + (i / Math.max(1, points.length - 1)) * (width - pad.l - pad.r);
+  const y = (v) => height - pad.b - (v / maxY) * (height - pad.t - pad.b);
+  const svg = svgEl("svg", { viewBox: `0 0 ${width} ${height}`, class: "chart", role: "img",
+    "aria-label": `Dispatch by technology (${tech.series.resolution === "daily_mean" ? "daily mean" : "hourly"}), peak ${num(maxY, 0)} MW. Monthly values are in the table below.` });
+  svg.append(svgEl("line", { x1: pad.l, y1: height - pad.b, x2: width - pad.r, y2: height - pad.b, class: "axis" }),
+    svgEl("line", { x1: pad.l, y1: pad.t, x2: pad.l, y2: height - pad.b, class: "axis" }),
+    svgEl("text", { x: pad.l - 6, y: pad.t + 8, "text-anchor": "end" }, num(maxY, 0)),
+    svgEl("text", { x: pad.l - 6, y: height - pad.b, "text-anchor": "end" }, "0"));
+  const base = points.map(() => 0);
+  for (const kind of [...kinds, "unserved"]) {
+    const top = points.map((p, i) => base[i] + Math.max(0, kind === "unserved" ? (p.unserved_mw || 0) : (p[kind] || 0)));
+    if (top.every((v, i) => v === base[i])) continue;
+    const upper = top.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`);
+    const lower = base.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).reverse();
+    svg.append(svgEl("polygon", { points: [...upper, ...lower].join(" "), class: `area k-${kind}` }));
+    top.forEach((v, i) => { base[i] = v; });
+  }
+  svg.append(svgEl("polyline", { points: points.map((p, i) => `${x(i).toFixed(1)},${y(p.load_mw || 0).toFixed(1)}`).join(" "), class: "load-line" }));
+  const monthly = tech.monthly;
+  const mw = 900, mh = 240, mp = { l: 60, r: 16, t: 12, b: 28 };
+  const monthTop = monthly.map((m) => kinds.reduce((s2, k) => s2 + Math.max(0, m[k] || 0), 0) + (m.unserved_mwh || 0));
+  const maxM = Math.max(1, ...monthTop, ...monthly.map((m) => m.demand_mwh || 0));
+  const band = (mw - mp.l - mp.r) / Math.max(1, monthly.length);
+  const my = (v) => mh - mp.b - (v / maxM) * (mh - mp.t - mp.b);
+  const msvg = svgEl("svg", { viewBox: `0 0 ${mw} ${mh}`, class: "chart", role: "img",
+    "aria-label": `Monthly energy balance in GWh; maximum ${num(maxM / 1000, 0)} GWh. Values are in the table below.` });
+  msvg.append(svgEl("line", { x1: mp.l, y1: mh - mp.b, x2: mw - mp.r, y2: mh - mp.b, class: "axis" }),
+    svgEl("text", { x: mp.l - 6, y: mp.t + 8, "text-anchor": "end" }, `${num(maxM / 1000, 0)} GWh`));
+  monthly.forEach((m, i) => {
+    let acc = 0;
+    for (const kind of [...kinds, "unserved"]) {
+      const v = Math.max(0, kind === "unserved" ? (m.unserved_mwh || 0) : (m[kind] || 0));
+      if (v <= 0) continue;
+      msvg.append(svgEl("rect", { x: mp.l + i * band + band * 0.15, width: band * 0.7, y: my(acc + v), height: Math.max(0, my(acc) - my(acc + v)), class: `bar k-${kind}` }));
+      acc += v;
+    }
+    msvg.append(svgEl("line", { x1: mp.l + i * band + band * 0.08, x2: mp.l + (i + 1) * band - band * 0.08, y1: my(m.demand_mwh), y2: my(m.demand_mwh), class: "demand-mark" }),
+      svgEl("text", { x: mp.l + (i + 0.5) * band, y: mh - 8, "text-anchor": "middle" }, m.label));
+  });
+  const table = h("details", {}, h("summary", { text: "Monthly energy balance table (MWh)" }), h("div", { class: "table-wrap" }, h("table", { id: "technology-table" },
+    h("thead", {}, h("tr", {}, ["Month", ...kinds.map(kindLabel), "Unserved", "Curtailed", "Demand"].map((t) => h("th", { text: t })))),
+    h("tbody", {}, monthly.map((m) => h("tr", {}, h("td", { text: m.label }), kinds.map((k) => h("td", { class: "num", text: num(m[k], 0) })),
+      h("td", { class: "num", text: num(m.unserved_mwh, 0) }), h("td", { class: "num", text: num(m.curtailed_mwh, 0) }), h("td", { class: "num", text: num(m.demand_mwh, 0) })))))));
+  const extra = [h("span", {}, h("span", { class: "sw k-unserved" }), "Unserved"), h("span", {}, h("span", { class: "sw-demand" }), "Demand")];
+  return h("div", { id: "technology-charts" },
+    h("figure", { class: "card" }, h("figcaption", {}, h("strong", { text: `Dispatch by technology (${tech.series.resolution === "daily_mean" ? "daily mean MW" : "MW"})` }), chartLegend(kinds, extra)), svg),
+    h("figure", { class: "card" }, h("figcaption", {}, h("strong", { text: "Monthly energy balance" }), chartLegend(kinds, extra)), msvg, table));
 }
 function seriesChart(series) {
   const ns = "http://www.w3.org/2000/svg";
@@ -1002,8 +1111,40 @@ function seriesChart(series) {
 }
 
 // ----- compare
+function scenarioOverview(section) {
+  if (!S.project || !S.savedJson) return;
+  const box = h("div", { class: "card", id: "scenario-overview" }, h("h3", { text: "Scenario overview" }), h("p", { class: "muted", text: "Loading..." }));
+  section.append(box);
+  api(`/projects/${encodeURIComponent(S.project.id)}/overview`).then((rows) => {
+    clear(box).append(h("h3", { text: "Scenario overview" }));
+    const done = rows.filter((r) => r.metrics);
+    if (!done.length) { box.append(h("p", { class: "empty", text: "No completed publishable runs yet." })); return; }
+    const cols = [["total_energy_mwh", "Served (GWh)", 1e3], ["total_unserved_mwh", "Unserved (GWh)", 1e3], ["total_curtailed_mwh", "Curtailed (GWh)", 1e3],
+      ["total_objective_cost_usd", "Objective (M USD)", 1e6], ["avg_lambda_usd_mwh", "Avg price (USD/MWh)", 1], ["peak_load_mw", "Peak (MW)", 1]];
+    const latest = new Map();
+    for (const r of done) if (!latest.has(r.scenario_id || "")) latest.set(r.scenario_id || "", r);
+    box.append(h("p", { class: "help", text: "Latest completed run per scenario." }), h("div", { class: "table-wrap" }, h("table", { id: "overview-table" },
+      h("thead", {}, h("tr", {}, ["Scenario", ...cols.map((c) => c[1]), "Run"].map((t) => h("th", { text: t })))),
+      h("tbody", {}, [...latest.values()].map((r) => h("tr", {}, h("td", { text: r.scenario_id || "Base case" }),
+        cols.map(([k, , d]) => h("td", { class: "num", text: num(r.metrics[k] == null ? null : r.metrics[k] / d, 1) })),
+        h("td", {}, h("code", { text: r.run_id.slice(0, 8) }))))))));
+    const groups = (S.project.metadata || {}).sensitivity_groups || {};
+    for (const [name, group] of Object.entries(groups)) {
+      const rowsFor = group.scenarios.map((sid, i) => ({ factor: group.factors[i], run: latest.get(sid) })).filter((x) => x.run);
+      if (!rowsFor.length) continue;
+      const baseRun = latest.get(group.base_scenario || "");
+      box.append(h("h4", { text: `Sensitivity: ${name}` }), h("div", { class: "table-wrap" }, h("table", { class: "sensitivity-table" },
+        h("thead", {}, h("tr", {}, ["Factor", ...cols.slice(1, 5).map((c) => c[1])].map((t) => h("th", { text: t })))),
+        h("tbody", {}, [...(baseRun ? [{ factor: 1, run: baseRun }] : []), ...rowsFor].sort((a, b) => a.factor - b.factor).map((x) => h("tr", {},
+          h("td", { class: "num", text: `x${x.factor}` }), cols.slice(1, 5).map(([k, , d]) => h("td", { class: "num", text: num(x.run.metrics[k] == null ? null : x.run.metrics[k] / d, 2) }))))))));
+    }
+  }).catch((error) => clear(box).append(errorPanel(error, "The overview could not be loaded")));
+}
 function renderCompare(section) {
-  section.append(h("h2", { id: "h-compare", text: "Compare runs" }),
+  section.append(h("h2", { id: "h-compare", text: "Compare runs" }));
+  scenarioOverview(section);
+  section.append(
+    h("h3", { text: "Compare two runs" }),
     h("p", { class: "muted", text: "Only completed runs with persisted results can be compared. Metrics are shown only when both runs are publishable and use the same workflow." }));
   const completed = S.runs.filter((run) => run.status === "completed");
   if (completed.length < 2) { section.append(h("p", { class: "empty", text: "At least two completed runs are needed for a comparison." })); return; }

@@ -111,6 +111,68 @@ def _deep_overlay(base: Any, overlay: Any) -> Any:
     return copy.deepcopy(overlay)
 
 
+_SCALABLE_ASSET_FIELDS = {"capacity_max_mw", "capacity_min_mw"}
+_SCALABLE_EXTENSION_FIELDS = {"vom", "fuel_price", "heat_rate", "monthly_energy_mwh", "monthly_pmax_mw",
+                              "monthly_pmin_mw", "startup_cost", "no_load_cost"}
+
+
+def _scale_issue(scenario_id: str, message: str, **context: Any) -> ScenarioOverlayError:
+    return ScenarioOverlayError(ValidationIssue(
+        code="invalid_scenario_scale", severity=IssueSeverity.ERROR, path="scenarios.overlay.scale",
+        message=message, context={"scenario_id": scenario_id, **context}))
+
+
+def _factor(scenario_id: str, value: Any, where: str) -> float:
+    import math
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value < 0:
+        raise _scale_issue(scenario_id, f"{where}: scale factor must be a finite number >= 0", value=value)
+    return float(value)
+
+
+def _apply_scale(raw: dict[str, Any], scale: Any, scenario_id: str) -> dict[str, Any]:
+    """Multiply selected profiles and asset parameters (sensitivity scenarios).
+
+    ``{"profiles": {"demand": 1.1}, "assets": {"tpp-import": {"capacity_max_mw": 0.8, "vom": 1.5}}}``.
+    Applied after the overlay merge.  Unknown ids or fields are errors, never ignored.
+    """
+    if not isinstance(scale, dict) or set(scale) - {"profiles", "assets"}:
+        raise _scale_issue(scenario_id, "scale may only contain 'profiles' and 'assets' mappings")
+    profiles = {p["id"]: p for p in raw.get("profiles") or []}
+    for profile_id, value in (scale.get("profiles") or {}).items():
+        factor = _factor(scenario_id, value, f"profile {profile_id}")
+        if profile_id not in profiles:
+            raise _scale_issue(scenario_id, f"unknown profile {profile_id!r}", profile_id=profile_id)
+        profiles[profile_id]["values"] = [v * factor for v in profiles[profile_id]["values"]]
+    assets = {a["id"]: a for a in raw.get("assets") or []}
+    for asset_id, fields in (scale.get("assets") or {}).items():
+        if asset_id not in assets or not isinstance(fields, dict):
+            raise _scale_issue(scenario_id, f"unknown asset {asset_id!r}", asset_id=asset_id)
+        asset = assets[asset_id]
+        for field, value in fields.items():
+            factor = _factor(scenario_id, value, f"asset {asset_id}.{field}")
+            if field in _SCALABLE_ASSET_FIELDS:
+                if asset.get(field) is not None:
+                    asset[field] = asset[field] * factor
+                ext = asset.get("legacy_extensions") or {}
+                legacy = {"capacity_max_mw": "pmax", "capacity_min_mw": "pmin"}[field]
+                if ext.get(legacy) is not None:
+                    asset["legacy_extensions"] = {**ext, legacy: ext[legacy] * factor}
+            elif field in _SCALABLE_EXTENSION_FIELDS:
+                ext = dict(asset.get("legacy_extensions") or {})
+                current = ext.get(field)
+                if current is None:
+                    raise _scale_issue(scenario_id, f"asset {asset_id} has no {field} to scale", asset_id=asset_id)
+                ext[field] = ([None if v is None else v * factor for v in current] if isinstance(current, list)
+                              else current * factor)
+                asset["legacy_extensions"] = ext
+            else:
+                raise _scale_issue(scenario_id, f"field {field!r} cannot be scaled", field=field)
+    metadata = dict(raw.get("metadata") or {})
+    metadata["scenario_scale"] = copy.deepcopy(scale)
+    raw["metadata"] = metadata
+    return raw
+
+
 def resolve_scenario(project: ProjectContract, scenario_id: str | None = None):
     from .input import ResolvedInputContract
     raw = project.model_dump(mode="json", exclude={"scenarios"})
@@ -125,7 +187,10 @@ def resolve_scenario(project: ProjectContract, scenario_id: str | None = None):
                 path="scenarios.overlay", message="scenario overlay cannot modify project identity or version lineage",
                 context={"fields": protected, "scenario_id": scenario_id},
             ))
-        raw = _deep_overlay(raw, matches[0].overlay)
+        overlay = {key: value for key, value in matches[0].overlay.items() if key != "scale"}
+        raw = _deep_overlay(raw, overlay)
+        if "scale" in matches[0].overlay:
+            raw = _apply_scale(raw, copy.deepcopy(dict(matches[0].overlay["scale"])), scenario_id)
     raw["project_id"] = raw.pop("id")
     raw["scenario_id"] = scenario_id
     raw.pop("version", None)

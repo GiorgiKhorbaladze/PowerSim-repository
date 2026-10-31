@@ -41,6 +41,15 @@ The header always shows the **project status** (no project / draft with unsaved 
 
 The non-deterministic workflows need workflow-specific input blocks (stochastic scenarios, contingency list, `chronological_adequacy`, `expansion`) in the project document. The browser has no structured editor for them; if they are missing the backend rejects the run and the Runs/Results pages show the failure cause.
 
+## Charts, reports and sensitivity
+
+- **Results** shows two charts for dispatch studies: dispatch by technology (hourly, or daily mean for long horizons) and the monthly energy balance (stacked by technology, with unserved energy in red and a demand marker). The monthly values are also available as a table.
+- **Excel report** downloads a workbook with Summary (run, provenance, key results, limits), Monthly balance, By resource, Hourly system, Hourly by resource and QA checks.
+- **Printable report** opens a static page; print it to save it as PDF.
+- Reports are only available for publishable runs.
+- **Sensitivity analysis** (Runs page): choose an input (a profile such as demand, or an asset's capacity, VOM, fuel price, heat rate or monthly energy), a starting scenario and factors (for example `0.9, 1.1`). PowerSim saves one scenario per factor and launches the runs. Each scenario uses a compact overlay `{"scale": {"profiles": {"demand": 1.1}}}` or `{"scale": {"assets": {"<id>": {"vom": 1.2}}}}`, which you can also write by hand. Unknown ids or fields and negative factors are validation errors.
+- **Compare → Scenario overview** lists the latest completed run of every scenario with served/unserved energy, curtailment, objective, average price and peak, plus one table per sensitivity group.
+
 ## Calibration against measured data
 
 For a publishable run, open **Results** → *Calibration against measured data* → *Download calibration template*.

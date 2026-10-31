@@ -52,6 +52,8 @@ jobs:
               tests/test_variable_cost_single_count.py \
               tests/test_operating_envelope.py \
               tests/test_calibration.py \
+              tests/test_reports.py \
+              tests/test_sensitivity.py \
               tests/test_georgia_plexos_model.py \
               tests/test_chronological_adequacy.py \
               tests/test_scoped_expansion.py \
