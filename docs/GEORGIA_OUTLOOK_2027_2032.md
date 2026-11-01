@@ -33,8 +33,9 @@ Every case starts from the 2026 unit-level model (`docs/GEORGIA_2026_MODEL.md`).
 
 Sensitivities for each year and scenario, run with that year's capacity plan:
 
-- dry year (2025 hydrology);
-- wet year (2024 hydrology);
+- 2025 hydrology alone (less hydro energy over the year);
+- 2024 hydrology alone (less regulating-hydro energy in winter: 995 against
+  1,213 GWh in January, February, November and December);
 - load +5 %;
 - load −5 %.
 

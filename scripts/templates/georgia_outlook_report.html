@@ -134,6 +134,11 @@ footer { padding-top: 26px; font-size: 12.5px; color: var(--muted); display: gri
       <div class="toolbar"><div class="seg" data-target="lole"></div></div>
       <div class="chart" id="lole"></div>
       <div class="tablewrap" id="loleTable"></div>
+      <div id="stressBlock">
+        <h3>სტრეს-ტესტი: 2024 წლის ზამთრის ჰიდროლოგია და, სცენარ B-ში, მშვიდი ქარი და დაბალი მზე</h3>
+        <p class="note">ძირითადი გაანგარიშება ჰიდროლოგიას 2024/2025-დან შემთხვევით იღებს, ხოლო ქარსა და მზეს — ერთი ამინდის წლიდან. 2025 წელს ჰესებმა წლიურად ნაკლები გამოიმუშავეს, მაგრამ 2024-ში მარეგულირებელ ჰესებს ზამთარში ნაკლები ენერგია ჰქონდათ (995 და 1,213 GWh იან/თებ/ნოე/დეკ-ში), ამიტომ სიმძლავრის ბალანსისთვის უფრო მძიმე 2024 წელია. აქ ორივე სცენარი 2024 წლის ჰიდროლოგიით გადის, B კი PLEXOS-ის „calm“ ქარისა და „low“ მზის პროფილებით. ცხრილი აჩვენებს, რამდენი მყარი სიმძლავრე იქნებოდა საჭირო ასეთ წელს.</p>
+        <div class="tablewrap" id="stressTable"></div>
+      </div>
       <p class="note">მონტე-კარლო, 200 ნიმუში წელიწადში: თბოსადგურების ავარიული გაჩერებები (ორმდგომარეობიანი მარკოვის მოდელი), ჰიდროლოგია 2024 ან 2025 (50/50), მარეგულირებელი ჰესების თვიური ენერგიის ლიმიტი, ბატარეის დღიური ციკლი. ექსპორტი შეწყვეტადად ითვლება, იმპორტი — 2025 წლის თვიური სალდოს დონეზე.</p>
     </div>
   </section>
@@ -151,7 +156,7 @@ footer { padding-top: 26px; font-size: 12.5px; color: var(--muted); display: gri
     <div class="label"><span class="eyebrow">თბოსადგურები</span><h2>თბური გამომუშავება და მგრძნობელობა</h2></div>
     <div class="content">
       <div class="chart" id="thermal"></div>
-      <p class="note">სვეტი — საბაზო შემთხვევა (საშუალო ჰიდროლოგია, P50 მოთხოვნა). ხაზი — დიაპაზონი მშრალ/წყალუხვ წელსა და მოთხოვნის ±5%-ს შორის.</p>
+      <p class="note">სვეტი — საბაზო შემთხვევა (საშუალო ჰიდროლოგია, P50 მოთხოვნა). ხაზი — დიაპაზონი 2024 და 2025 წლების ჰიდროლოგიასა და მოთხოვნის ±5%-ს შორის.</p>
       <div class="tablewrap" id="sensTable"></div>
     </div>
   </section>
@@ -405,6 +410,12 @@ function render() {
   ROWS.forEach(r => r.options.forEach(o => costRows.push([`${r.scenario} · ${r.year}`, o.ccgt3 ? "CCGT-3 + RICE" : "მხოლოდ RICE", fmt(o.rice_mw), fmt(o.total_musd, 1), fmt(o.lole, 2),
     (o.ccgt3 === r.ccgt3 && o.rice_mw === r.rice_mw) ? `<span class="pill good">არჩეული</span>` : ""])));
   table(document.getElementById("costTable"), ["სცენარი · წელი", "ვარიანტი", "RICE ჯამი, MW", "წლიური ხარჯი, მლნ $", "LOLE, სთ", ""], costRows);
+})();
+(function () {
+  const st = S.stress || [];
+  if (!st.length) { document.getElementById("stressBlock").hidden = true; return; }
+  table(document.getElementById("stressTable"), ["სცენარი · წელი", "ამინდი", "LOLE ახალი სიმძლავრის გარეშე, სთ", "EENS, MWh", "საჭირო RICE, MW", "LOLE RICE-ით, სთ"],
+    st.map(x => [`${x.scenario} · ${x.year}`, x.weather.includes("calm") ? "ჰიდროლოგია 2024, მშვიდი ქარი, დაბალი მზე" : "ჰიდროლოგია 2024", fmt(x.lole_no_build, 1), fmt(x.eens_no_build_mwh), x.rice_needed_mw === null ? "ვერ აშენდება" : fmt(x.rice_needed_mw), fmt(x.lole_with_rice, 2)]));
 })();
 (function () {
   const P = S.pathways || [];

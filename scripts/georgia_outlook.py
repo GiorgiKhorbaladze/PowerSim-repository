@@ -52,6 +52,7 @@ RETIRED_FROM_2027 = ["tpp-tbilsresi"]  # Tbilsresi III + IV (thermal_002 + therm
 NOT_OPERATING = ["tpp-tkibuli"]  # no output in the 2024 and 2025 balances
 EARLIEST_YEAR = {"rice": 2028, "ccgt3": 2029}  # build lead times from 2026
 LOLE_TARGET_H = 3.0
+STRESS_HYDROLOGY = "2024"  # lowest winter regulating-hydro energy of the two balance years
 DISCOUNT_RATE = 0.08
 CANDIDATES = {
     # PyPSA technology-data 2030 CCGT (data/cost_database_pypsa_eur.json); EUR used as USD
@@ -77,7 +78,8 @@ ASSUMPTIONS = [
     "Ruisi wind 206 MW from 2027 with the Kartli capacity factor (43 %).",
     "Scenario A: no other new plants. Scenario B: linear build-out to the PLEXOS 2030 wind (1,909 MW) and solar "
     "(1,496 MW) fleet and its additional run-of-river energy (~2,013 GWh) by 2030, constant after 2030.",
-    "Hydrology: mean of 2024 and 2025 (base); 2025 = dry, 2024 = wet sensitivities.",
+    "Hydrology: mean of 2024 and 2025 (base); 2024 and 2025 alone as sensitivities. 2025 has less hydro energy in the year, "
+    "2024 less regulating-hydro energy in winter (995 vs 1,213 GWh in Jan/Feb/Nov/Dec), so 2024 is the adequacy stress year.",
     "Leap years 2028 and 2032 are modelled with 8,760 hours (29 February omitted, as in the GSE projections).",
     "Thermal efficiency/VOM: PyPSA generic; gas 5.5 USD/MMBtu, coal 4.0 USD/MMBtu (illustrative, review required).",
     "Candidates: CCGT-3 250 MW (PyPSA 2030 CCGT costs) and RICE in 20 MW blocks (assumed 850 USD/kW, 46 %); "
@@ -137,7 +139,10 @@ def _plexos() -> dict:
 
 
 def build_case(year: int, scenario: str = "A", hydrology: str = "mean", demand_factor: float = 1.0,
-               rice_mw: float = 0.0, ccgt3: bool = False, retire_tbilsresi: bool = True) -> dict:
+               rice_mw: float = 0.0, ccgt3: bool = False, retire_tbilsresi: bool = True,
+               vre: str = "average") -> dict:
+    """``vre='calm-low'`` swaps the scenario-B PLEXOS wind/solar profiles for PLEXOS's own calm-wind
+    and low-solar profiles (the PLEXOS 'stress' weather)."""
     if year not in YEARS or scenario not in SCENARIOS:
         raise ValueError(f"year must be in {YEARS} and scenario in {SCENARIOS}")
     years = {"mean": (2024, 2025), "2024": (2024,), "2025": (2025,)}[hydrology]
@@ -171,10 +176,12 @@ def build_case(year: int, scenario: str = "A", hydrology: str = "mean", demand_f
             scale = factor * max(0.0, total - existing[kind]) / total
             for asset in fleet:
                 ref = asset["profile_references"][0]
+                if vre == "calm-low":
+                    ref = ref.replace("-average", "-calm" if kind == "wind" else "-low")
                 if ref not in profiles:
                     profiles[ref] = copy.deepcopy(pprof[ref])
                     profiles[ref]["values"] = [min(1.0, max(0.0, v)) for v in profiles[ref]["values"]]
-                assets.append({**copy.deepcopy(asset), "id": f"new-{asset['id']}",
+                assets.append({**copy.deepcopy(asset), "id": f"new-{asset['id']}", "profile_references": [ref],
                                "capacity_max_mw": round(asset["capacity_max_mw"] * scale, 4),
                                "provenance": {**asset["provenance"], "details": {
                                    **asset["provenance"]["details"],
@@ -539,13 +546,56 @@ def plan_pathway(scenario: str, ccgt_from: int | None, samples: int = 200, log=p
     return {"scenario": scenario, "ccgt_from": ccgt_from, "years": years, "npv_usd": npv}
 
 
+def stress_adequacy(samples: int = 200, log=print) -> dict:
+    """Hardest winter hydrology (2024: regulating HPPs had 995 GWh in Jan/Feb/Nov/Dec against
+    1,213 GWh in 2025) for both scenarios, plus PLEXOS calm-wind / low-solar weather in B:
+    LOLE without new capacity and the RICE needed for LOLE <= target (adequacy only)."""
+    block = CANDIDATES["rice"]["block_mw"]
+    out = {}
+    for scenario in SCENARIOS:
+        vre = "calm-low" if scenario == "B" else "average"
+        rice = 0.0
+        for year in YEARS:
+            base = build_case(year, scenario, STRESS_HYDROLOGY, vre=vre)
+            none = adequacy([base], samples)
+            if year >= EARLIEST_YEAR["rice"]:
+                def lole(mw):
+                    q = copy.deepcopy(base)
+                    if mw > 0:
+                        q["assets"].append(_thermal_asset(CANDIDATES["rice"], mw))
+                    return adequacy([q], samples)
+                result = lole(rice)
+                while result["LOLE_h"] > LOLE_TARGET_H:
+                    rice += max(block, block * math.ceil(result["max_unserved_mw_p90"] / block / 4))
+                    result = lole(rice)
+                floor = rice
+                while rice - block >= 0 and rice - block >= floor - 10 * block:
+                    trial = lole(rice - block)
+                    if trial["LOLE_h"] > LOLE_TARGET_H:
+                        break
+                    rice, result = rice - block, trial
+            else:
+                result = none
+            out[f"{scenario}-{year}"] = {"weather": f"hydrology {STRESS_HYDROLOGY}" + (", calm wind, low solar" if vre != "average" else ""),
+                                         "lole_no_build": none["LOLE_h"], "eens_no_build_mwh": none["EENS_mwh"],
+                                         "rice_needed_mw": rice if year >= EARLIEST_YEAR["rice"] else None,
+                                         "lole_with_rice": result["LOLE_h"]}
+            log(f"  stress {scenario}{year}: no-build LOLE {none['LOLE_h']:.1f}, RICE {rice:.0f} MW")
+    return out
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--out", type=Path, default=ROOT / "data/outlook/georgia_outlook_2027_2032.json")
     parser.add_argument("--samples", type=int, default=200)
+    parser.add_argument("--stress-out", type=Path, help="write the dry/calm stress adequacy to this file and stop")
     parser.add_argument("--pathways-only", action="store_true",
                         help="add the CCGT-3 pathway comparison to an existing results file")
     args = parser.parse_args()
+    if args.stress_out:
+        result = stress_adequacy(args.samples, lambda m: print(m, flush=True))
+        args.stress_out.write_text(json.dumps(result, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+        return
     if args.pathways_only:
         started = time.monotonic()
         output = json.loads(args.out.read_text(encoding="utf-8"))

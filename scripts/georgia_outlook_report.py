@@ -23,7 +23,7 @@ GROUPS = [  # (key, Georgian label) in stacking order
     ("wind", "ქარი"),
     ("thermal_new", "ახალი: RICE / CCGT-3"),
 ]
-SENS_LABELS = {"dry_2025": "მშრალი წელი (2025)", "wet_2024": "წყალუხვი წელი (2024)",
+SENS_LABELS = {"dry_2025": "ჰიდროლოგია 2025", "wet_2024": "ჰიდროლოგია 2024",
                "demand_+5": "მოთხოვნა +5%", "demand_-5": "მოთხოვნა −5%"}
 SCEN_LABELS = {"A": "A — მხოლოდ ცნობილი პროექტები", "B": "B — PLEXOS-ის განვითარება"}
 
@@ -98,7 +98,9 @@ def summarise(data: dict) -> dict:
                             "cost_musd": round(y["annual_cost_usd"] / 1e6, 1), "lole": round(y["LOLE_h"], 2)}
                            for y in p["years"]]} for p in data.get("pathways", [])]
     return {"rows": rows, "assumptions": data["assumptions"], "target": data["lole_target_h"],
-            "candidates": data["candidates"], "bess": data["bess"], "pathways": pathways}
+            "candidates": data["candidates"], "bess": data["bess"], "pathways": pathways,
+            "stress": [{"scenario": k.split("-")[0], "year": int(k.split("-")[1]), **v}
+                       for k, v in data.get("stress", {}).items()]}
 
 
 def first_year(rows, scenario, predicate):
@@ -134,6 +136,19 @@ def findings(summary: dict) -> list[str]:
                 second = paths[1]
                 text += f"; {name(second)} {second['npv_musd'] - best['npv_musd']:,.0f} მლნ $-ით ძვირია"
             out.append(text + ".")
+    b2030 = next((r for r in rows if r["scenario"] == "B" and r["year"] == 2030), None)
+    if b2030 and b2030["curtailed_gwh"] > 100:
+        out.append(f"სცენარი B-ში PLEXOS-ის 2030 წლის ქარი, მზე და ჰესები GSE-ის მოთხოვნაზე ბევრად მეტს გამოიმუშავებს: "
+                   f"2030 წელს {b2030['curtailed_gwh']:,.0f} GWh ზედმეტი ენერგია იჭრება (ექსპორტი ფიქსირებულია). "
+                   "ეს პოტენციური ექსპორტია და ქსელისა და ექსპორტის შესაძლებლობას მოითხოვს.")
+    stress = {(x["scenario"], x["year"]): x for x in summary.get("stress", [])}
+    for scen, label in (("B", "2024 წლის ზამთრის ჰიდროლოგიით, მშვიდი ქარითა და დაბალი მზით (PLEXOS-ის პროფილები)"),
+                        ("A", "2024 წლის ზამთრის ჰიდროლოგიით")):
+        worst = [x for (sc, _), x in stress.items() if sc == scen and x.get("rice_needed_mw") is not None]
+        if worst:
+            top = max(worst, key=lambda x: x["rice_needed_mw"])
+            out.append(f"სტრეს-ტესტი, სცენარი {scen}, {label}: LOLE-ს ნორმისთვის {top['year']} წელს "
+                       f"{top['rice_needed_mw']:,.0f} MW RICE (ან ექვივალენტური მყარი სიმძლავრე/იმპორტი) იქნებოდა საჭირო.")
     a2027 = next((r for r in rows if r["scenario"] == "A" and r["year"] == 2027), None)
     if a2027:
         out.append(f"თბილსრესის III და IV ბლოკების გასვლა 2027 წელს LOLE-ს {a2027['lole_keep_tbilsresi']:.1f} სთ-დან "
@@ -208,6 +223,12 @@ def write_xlsx(summary: dict, path: Path) -> None:
         for y in p["years"]:
             paths.append([p["scenario"], "მხოლოდ RICE" if p["ccgt_from"] is None else f"CCGT-3 {p['ccgt_from']}-დან",
                           y["year"], y["rice_mw"], "კი" if y["ccgt3"] else "არა", y["cost_musd"], y["lole"], p["npv_musd"]])
+    stress_rows = [[x["scenario"], x["year"], x["weather"], round(x["lole_no_build"], 1), round(x["eens_no_build_mwh"]),
+                    x["rice_needed_mw"] if x["rice_needed_mw"] is not None else "—", round(x["lole_with_rice"], 2)]
+                   for x in summary.get("stress", [])]
+    if stress_rows:
+        sheet("სტრეს-ტესტი", ["სცენარი", "წელი", "ამინდი/ჰიდროლოგია", "LOLE გარეშე, სთ", "EENS გარეშე, MWh",
+                              "საჭირო RICE, MW", "LOLE RICE-ით, სთ"], stress_rows)
     if paths:
         sheet("გზები (NPV)", ["სცენარი", "გზა", "წელი", "RICE, MW", "CCGT-3", "წლიური ხარჯი, მლნ $", "LOLE, სთ",
                               "NPV 2027–2032, მლნ $"], paths)
