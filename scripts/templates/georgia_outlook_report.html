@@ -73,7 +73,7 @@ th, td { padding: 8px 10px; text-align: right; border-bottom: 1px solid var(--li
 th:first-child, td:first-child { text-align: left; }
 th { font: 600 12px/1.35 var(--body); color: var(--muted); background: color-mix(in srgb, var(--surface) 85%, var(--line)); position: sticky; top: 0; white-space: normal; }
 td { font-family: var(--mono); font-variant-numeric: tabular-nums; }
-td.txt { font-family: var(--body); }
+td.txt { font-family: var(--body); text-align: left; }
 tr:last-child td { border-bottom: 0; }
 .pill { display: inline-block; font: 500 11.5px/1 var(--body); padding: 4px 8px; border-radius: 999px; border: 1px solid currentColor; }
 .pill.good { color: var(--good); } .pill.warn { color: var(--warn); } .pill.crit { color: var(--crit); }
@@ -258,11 +258,11 @@ function barChart(el, { cats, series, stacked = false, unit = "", target = null,
           const [lo, hi] = whiskers[si][i], wx = x + inner / 2;
           svg += `<line x1="${wx}" x2="${wx}" y1="${y(lo)}" y2="${y(hi)}" stroke="var(--fg)" stroke-width="1.5"/><line x1="${wx - 5}" x2="${wx + 5}" y1="${y(lo)}" y2="${y(lo)}" stroke="var(--fg)" stroke-width="1.5"/><line x1="${wx - 5}" x2="${wx + 5}" y1="${y(hi)}" y2="${y(hi)}" stroke="var(--fg)" stroke-width="1.5"/>`;
         }
-        if (valueLabels) svg += `<text class="val" x="${x + inner / 2}" y="${y(v) - 5}" text-anchor="middle">${fmt(v, digits)}</text>`;
+        if (valueLabels) { const top = (whiskers && whiskers[si] && whiskers[si][i]) ? Math.min(y(v), y(whiskers[si][i][1])) : y(v); svg += `<text class="val" x="${x + inner / 2}" y="${top - 5}" text-anchor="middle">${fmt(v, digits)}</text>`; }
       });
     }
   });
-  if (target !== null) svg += `<line class="target" x1="${L}" x2="${W - R}" y1="${y(target)}" y2="${y(target)}"/><text class="target-label" x="${W - R}" y="${y(target) - 6}" text-anchor="end">${esc(targetLabel)}</text>`;
+  if (target !== null) svg += `<line class="target" x1="${L}" x2="${W - R}" y1="${y(target)}" y2="${y(target)}"/><text class="target-label" x="${L + 6}" y="${y(target) - 6}" text-anchor="start">${esc(targetLabel)}</text>`;
   svg += `</svg>`;
   const legend = series.length > 1 ? `<div class="legend">${series.map(s => `<span><i style="background:var(${s.color})"></i>${esc(s.label)}</span>`).join("")}</div>` : "";
   el.innerHTML = legend + svg;
