@@ -158,7 +158,57 @@ Gas is priced at 5.5 USD/MMBtu in all years (illustrative).
   retirements, scenario B reaching the PLEXOS 2030 fleet, 2031 load growth);
 - checks the reserve requirement and the annuity formula.
 
-## Results
+## Results (run of 1 November 2026, 200 Monte Carlo samples)
+
+Every dispatch run passed QA and is publishable.
+
+| | 2027 | 2028 | 2029 | 2030 | 2031 | 2032 |
+|---|---|---|---|---|---|---|
+| A: LOLE, Tbilsresi III–IV kept, no new capacity (h) | 0.2 | 2.5 | 17.8 | 58.8 | 121.6 | 215.0 |
+| A: LOLE, III–IV retired, no new capacity (h) | 44.2 | 99.7 | 204.5 | 323.1 | 466.9 | 646.4 |
+| A: RICE in the plan (MW, cumulative) | not buildable | 240 | 340 | 440 | 520 | 640 |
+| A: LOLE with the plan (h) | 44.2 | 1.9 | 2.0 | 1.8 | 3.0 | 1.9 |
+| A: thermal generation (GWh) | 3,007 | 3,480 | 4,138 | 4,791 | 5,458 | 6,150 |
+| B: LOLE, III–IV retired, no new capacity (h) | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 |
+| B: curtailed surplus (GWh) | 172 | 689 | 1,368 | 2,794 | 2,014 | 2,044 |
+
+**Scenario A**
+
+- RICE is needed from 2028. It grows to 640 MW by 2032.
+- Year by year, CCGT-3 is never chosen.
+- Whole-pathway NPV 2027–2032 (8 %):
+  - RICE only: 1,022 M USD;
+  - CCGT-3 from 2031: 1,034 M USD;
+  - CCGT-3 from 2029: 1,040 M USD.
+- In 2032 the CCGT-3 pathway is already cheaper per year (305.9 against
+  309.0 M USD). CCGT-3 therefore becomes the better choice after the study
+  horizon, so starting it around 2030–2031 is a reasonable alternative.
+
+**2027**
+
+- Retiring Tbilsresi III–IV raises LOLE from 0.2 h to 44 h.
+- No new capacity can be built in time.
+- 2027 therefore depends on extra imports or on postponing the retirement.
+
+**Scenario B**
+
+- The PLEXOS 2030 fleet over-supplies GSE demand (2.8 TWh curtailed in 2030).
+- It needs no new firm capacity, even with 2024 winter hydrology and PLEXOS
+  calm-wind / low-solar weather.
+- The surplus is potential export. It needs export and grid capacity that
+  this single-node model does not represent.
+
+**Stress test (scenario A, 2024 winter hydrology)**
+
+- RICE needed: 240 MW (2028) rising to 660 MW (2032).
+- This is close to the main plan.
+
+**Reserve**
+
+- The requirement is 357 MW in A and up to 742 MW in B (2030). Minimum
+  headroom (about 900–1,100 MW) covers it in every hour.
+- The capacity need is driven by winter energy and LOLE, not by reserve.
+
 
 The results, the HTML report and the Excel workbook are produced by:
 

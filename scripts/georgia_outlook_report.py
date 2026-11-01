@@ -121,13 +121,16 @@ def findings(summary: dict) -> list[str]:
         parts.append(f"RICE საჭიროა {rice_year} წლიდან" if rice_year else "RICE 2032 წლამდე არ არის საჭირო")
         if rice_year:
             parts.append(f"2032 წლისთვის სულ {last['rice_mw']:.0f} MW")
-        parts.append(f"CCGT-3 — {ccgt_year} წლიდან" if ccgt_year else "CCGT-3 2032 წლამდე ეკონომიკურად არ ჩანს")
+        parts.append(f"CCGT-3 — {ccgt_year} წლიდან" if ccgt_year else "წლიდან-წლამდე შედარებით CCGT-3 2032 წლამდე არ აირჩევა")
         out.append(f"{parts[0]} " + "; ".join(parts[1:]) + ".")
     for scen in ("A", "B"):
         paths = sorted((p for p in summary.get("pathways", []) if p["scenario"] == scen), key=lambda p: p["npv_musd"])
         if len(paths) > 1:
             best, rice_only = paths[0], next((p for p in paths if p["ccgt_from"] is None), None)
-            name = lambda p: "მხოლოდ RICE" if p["ccgt_from"] is None else f"CCGT-3 {p['ccgt_from']}-დან + RICE"  # noqa: E731
+            def name(p):
+                if p["ccgt_from"] is not None:
+                    return f"CCGT-3 {p['ccgt_from']}-დან" + (" + RICE" if any(y["rice_mw"] > 0 for y in p["years"]) else "")
+                return "მხოლოდ RICE" if any(y["rice_mw"] > 0 for y in p["years"]) else "ახალი თბური სიმძლავრის გარეშე"
             text = (f"სცენარი {scen}, 2027–2032 წლების დისკონტირებული ხარჯით (NPV) ყველაზე იაფია: {name(best)} "
                     f"({best['npv_musd']:,.0f} მლნ $)")
             if rice_only and best is not rice_only:
@@ -135,6 +138,13 @@ def findings(summary: dict) -> list[str]:
             elif rice_only:
                 second = paths[1]
                 text += f"; {name(second)} {second['npv_musd'] - best['npv_musd']:,.0f} მლნ $-ით ძვირია"
+            last = lambda p: p["years"][-1]["cost_musd"]  # noqa: E731
+            cheaper_later = [p for p in paths if p["ccgt_from"] is not None and rice_only and last(p) < last(rice_only)]
+            if best is rice_only and cheaper_later:
+                p = min(cheaper_later, key=last)
+                text += (f". თუმცა {p['years'][-1]['year']} წლისთვის {name(p)} წლიურად უკვე იაფია "
+                         f"({last(p):,.1f} და {last(rice_only):,.1f} მლნ $), ამიტომ 2032-ის შემდეგ CCGT-3 მომგებიანი ხდება "
+                         f"და მისი 2030–2031 წლებში დაწყება გონივრული ალტერნატივაა")
             out.append(text + ".")
     b2030 = next((r for r in rows if r["scenario"] == "B" and r["year"] == 2030), None)
     if b2030 and b2030["curtailed_gwh"] > 100:
@@ -145,7 +155,10 @@ def findings(summary: dict) -> list[str]:
     for scen, label in (("B", "2024 წლის ზამთრის ჰიდროლოგიით, მშვიდი ქარითა და დაბალი მზით (PLEXOS-ის პროფილები)"),
                         ("A", "2024 წლის ზამთრის ჰიდროლოგიით")):
         worst = [x for (sc, _), x in stress.items() if sc == scen and x.get("rice_needed_mw") is not None]
-        if worst:
+        if worst and max(x["rice_needed_mw"] for x in worst) == 0:
+            out.append(f"სტრეს-ტესტი, სცენარი {scen}, {label}: ახალი სიმძლავრე არ სჭირდება; LOLE ყველა წელს "
+                       f"≤ {max(x['lole_no_build'] for x in worst):.1f} სთ.")
+        elif worst:
             top = max(worst, key=lambda x: x["rice_needed_mw"])
             out.append(f"სტრეს-ტესტი, სცენარი {scen}, {label}: LOLE-ს ნორმისთვის {top['year']} წელს "
                        f"{top['rice_needed_mw']:,.0f} MW RICE (ან ექვივალენტური მყარი სიმძლავრე/იმპორტი) იქნებოდა საჭირო.")
