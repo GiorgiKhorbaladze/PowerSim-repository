@@ -58,6 +58,8 @@ jobs:
               tests/test_ui_localization.py \
               tests/test_georgia_plexos_model.py \
               tests/test_georgia_2026_model.py \
+              tests/test_georgia_outlook.py \
+              tests/test_georgia_outlook_report.py \
               tests/test_chronological_adequacy.py \
               tests/test_scoped_expansion.py \
               tests/test_security_shared.py \
@@ -80,6 +82,8 @@ jobs:
               scripts/parse_georgia_balance.py \
               scripts/build_georgia_2026_model.py \
               scripts/compare_georgia_balance.py \
+              scripts/georgia_outlook.py \
+              scripts/georgia_outlook_report.py \
               scripts/run_horizon.py \
               scripts/run_mc_sweep.py \
               scripts/powersim_report.py \

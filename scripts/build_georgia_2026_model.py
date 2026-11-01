@@ -110,17 +110,29 @@ def _csv_profile(path: Path) -> list[float]:
     return values
 
 
-def mean_hydrology(balances: dict[int, dict[str, list[float]]], name: str) -> list[float]:
-    """Mean monthly GWh over the years in which the plant produced at all."""
-    years = [series[name] for series in balances.values() if name in series and sum(series[name]) > 0]
-    if not years:
+def mean_hydrology(balances: dict[int, dict[str, list[float]]], name: str,
+                   years: tuple[int, ...] | None = None) -> list[float]:
+    """Mean monthly GWh over the years in which the plant produced at all.
+
+    ``years`` restricts the mean to those balance years (a single-year
+    hydrology); a plant without generation in them (commissioned later)
+    falls back to every year with data.
+    """
+    def produced(selection):
+        return [balances[y][name] for y in selection if name in balances[y] and sum(balances[y][name]) > 0]
+    series = produced(years or tuple(balances)) or produced(tuple(balances))
+    if not series:
         raise ValueError(f"no generation data for {name}")
-    return [sum(values) / len(years) for values in zip(*years)]
+    return [sum(values) / len(series) for values in zip(*series)]
 
 
-def build_project(year: int = 2026) -> dict:
+def build_project(year: int = 2026, hydrology_years: tuple[int, ...] = (2024, 2025)) -> dict:
+    """``hydrology_years`` selects the balance years averaged for hydro output
+    (default: mean of 2024 and 2025)."""
     if year not in YEARS:
         raise ValueError(f"supported study years: {YEARS}")
+    if not hydrology_years or any(y not in (2024, 2025) for y in hydrology_years):
+        raise ValueError("hydrology_years must be a non-empty subset of (2024, 2025)")
     load_path = ROOT / "data/gse_load_2026_2030.json"
     registry_path = ROOT / "samples/demo_asset_registry_2026.json"
     cost_path = ROOT / "data/cost_database_pypsa_eur.json"
@@ -175,7 +187,7 @@ def build_project(year: int = 2026) -> dict:
 
     # --- regulating HPPs: exact monthly energy -----------------------------------------
     for name, ids in REGULATING.items():
-        energy = mean_hydrology(balances, name)
+        energy = mean_hydrology(balances, name, hydrology_years)
         cap = capacity(ids)
         for month, gwh in enumerate(energy):
             if gwh * 1000 > cap * MONTH_HOURS[month] + 1e-6:
@@ -201,11 +213,11 @@ def build_project(year: int = 2026) -> dict:
                        "provenance": hydro_prov(label, ids, note)})
 
     for name, ids in SEASONAL.items():
-        flat_monthly(f"ror-{ids[0].replace('_', '-')}", name, mean_hydrology(balances, name), capacity(ids), ids,
+        flat_monthly(f"ror-{ids[0].replace('_', '-')}", name, mean_hydrology(balances, name, hydrology_years), capacity(ids), ids,
                      "mean monthly energy of the years with generation, flat within the month, spill allowed")
-    small = mean_hydrology(balances, "მცირე ჰესები")
+    small = mean_hydrology(balances, "მცირე ჰესები", hydrology_years)
     for name in FOLD_INTO_SMALL:
-        small = [a + b for a, b in zip(small, mean_hydrology(balances, name))]
+        small = [a + b for a, b in zip(small, mean_hydrology(balances, name, hydrology_years))]
     small_ids = [i for i, a in registry.items() if a["source_category"] == "Hydro - Small"]
     flat_monthly("ror-small-hpp", "მცირე ჰესები (aggregate)", small, capacity(small_ids), small_ids,
                  "small-HPP row (mean 2024-2025) plus plants missing from the registry: " + ", ".join(FOLD_INTO_SMALL))
