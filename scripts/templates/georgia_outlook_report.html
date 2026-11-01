@@ -119,6 +119,15 @@ footer { padding-top: 26px; font-size: 12.5px; color: var(--muted); display: gri
     </div>
   </section>
 
+  <section class="block" id="pathSection">
+    <div class="label"><span class="eyebrow">CCGT-3</span><h2>როდის სჭირდება CCGT-3</h2></div>
+    <div class="content">
+      <p>წლიდან-წლამდე არჩევანი უკვე აშენებულ RICE-ს ინარჩუნებს, ამიტომ CCGT-3 მთლიან გზებადაც შევადარეთ: „მხოლოდ RICE“, „CCGT-3 2029-დან“ და „CCGT-3 2031-დან“. თითოეულ გზაში RICE ყოველწლიურად იმდენია, რამდენიც LOLE-ს ნორმასა და რეზერვს სჭირდება. შედარება 2027–2032 წლების წლიური ხარჯების დისკონტირებულ ჯამზეა (NPV, 8%).</p>
+      <div class="tablewrap" id="pathTable"></div>
+      <p class="note">ჰორიზონტი 2032 წელს მთავრდება: CCGT-3-ის უპირატესობა (იაფი ენერგია) 2032-ის შემდეგ გრძელდება, ხოლო მისი ანუიტეტი აქ მხოლოდ 2032-მდეა ჩათვლილი, ამიტომ გრძელვადიანი შედარება შეიძლება CCGT-3-ის სასარგებლოდ შეიცვალოს.</p>
+    </div>
+  </section>
+
   <section class="block">
     <div class="label"><span class="eyebrow">საიმედოობა</span><h2>LOLE: დეფიციტის საათები წელიწადში</h2></div>
     <div class="content">
@@ -396,6 +405,20 @@ function render() {
   ROWS.forEach(r => r.options.forEach(o => costRows.push([`${r.scenario} · ${r.year}`, o.ccgt3 ? "CCGT-3 + RICE" : "მხოლოდ RICE", fmt(o.rice_mw), fmt(o.total_musd, 1), fmt(o.lole, 2),
     (o.ccgt3 === r.ccgt3 && o.rice_mw === r.rice_mw) ? `<span class="pill good">არჩეული</span>` : ""])));
   table(document.getElementById("costTable"), ["სცენარი · წელი", "ვარიანტი", "RICE ჯამი, MW", "წლიური ხარჯი, მლნ $", "LOLE, სთ", ""], costRows);
+})();
+(function () {
+  const P = S.pathways || [];
+  if (!P.length) { document.getElementById("pathSection").hidden = true; return; }
+  const name = p => p.ccgt_from === null ? "მხოლოდ RICE" : `CCGT-3 ${p.ccgt_from}-დან + RICE`;
+  const rows = [];
+  ["A", "B"].forEach(s => {
+    const ps = P.filter(p => p.scenario === s);
+    if (!ps.length) return;
+    const best = Math.min(...ps.map(p => p.npv_musd));
+    ps.forEach(p => rows.push([`${s} · ${name(p)}`].concat(YEARS.map(y => { const v = p.years.find(x => x.year === y); return v ? `${fmt(v.rice_mw)}${v.ccgt3 ? " + 250" : ""}` : "—"; }),
+      [fmt(p.npv_musd), p.npv_musd === best ? `<span class="pill good">ყველაზე იაფი</span>` : `+${fmt(p.npv_musd - best)}`])));
+  });
+  table(document.getElementById("pathTable"), ["სცენარი · გზა"].concat(YEARS.map(y => `${y}, MW`), ["NPV, მლნ $", ""]), rows);
 })();
 render();
 </script>

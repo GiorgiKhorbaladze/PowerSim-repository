@@ -42,7 +42,20 @@ def _results() -> dict:
                                                                                    "adequacy": {"LOLE_h": 4.0}}}
         data["no_expansion"][key] = {"LOLE_h": 120.0, "EENS_mwh": 50000.0}
         data["no_retirement"][key] = {"LOLE_h": 40.0, "EENS_mwh": 9000.0}
+    data["pathways"] = [
+        {"scenario": "A", "ccgt_from": None, "npv_usd": 1.0e9,
+         "years": [{"year": 2030, "rice_mw": 440.0, "ccgt3": False, "annual_cost_usd": 2.3e8, "LOLE_h": 1.8}]},
+        {"scenario": "A", "ccgt_from": 2029, "npv_usd": 0.95e9,
+         "years": [{"year": 2030, "rice_mw": 200.0, "ccgt3": True, "annual_cost_usd": 2.2e8, "LOLE_h": 0.5}]}]
     return data
+
+
+def test_pathways_pick_the_lowest_npv():
+    report = _module()
+    summary = report.summarise(_results())
+    assert [p["npv_musd"] for p in summary["pathways"]] == [1000.0, 950.0]
+    text = " ".join(report.findings(summary))
+    assert "ყველაზე იაფია: CCGT-3 2029-დან + RICE (950 მლნ $)" in text and "50 მლნ $-ით ნაკლები" in text
 
 
 def test_summary_groups_energy_and_reads_every_metric():

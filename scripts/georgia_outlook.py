@@ -511,11 +511,52 @@ def plan_expansion(scenario: str, samples: int = 200, log=print) -> list[dict]:
     return plan
 
 
+def plan_pathway(scenario: str, ccgt_from: int | None, samples: int = 200, log=print) -> dict:
+    """A fixed technology pathway: CCGT-3 from ``ccgt_from`` (None = never), RICE sized each year
+    for LOLE and reserve. Returns the yearly builds and the NPV of annual costs (discounted to 2027).
+
+    The year-by-year least-cost plan locks in earlier RICE before CCGT-3 is compared; comparing
+    whole pathways removes that path dependence.
+    """
+    block = CANDIDATES["rice"]["block_mw"]
+    rice, years, npv = 0.0, [], 0.0
+    for year in YEARS:
+        with_ccgt = ccgt_from is not None and year >= max(ccgt_from, EARLIEST_YEAR["ccgt3"])
+        if year >= EARLIEST_YEAR["rice"]:
+            rice, adq = _rice_for_target(year, scenario, with_ccgt, rice, samples, lambda *_: None)
+        else:
+            adq = adequacy([build_case(year, scenario, h, rice_mw=rice, ccgt3=with_ccgt) for h in ("2024", "2025")],
+                           samples)
+        dispatch = solve(build_case(year, scenario, rice_mw=rice, ccgt3=with_ccgt))
+        if year >= EARLIEST_YEAR["rice"] and dispatch["reserve"]["max_short_mw"] > 0:
+            rice += block * math.ceil(dispatch["reserve"]["max_short_mw"] / block)
+            dispatch = solve(build_case(year, scenario, rice_mw=rice, ccgt3=with_ccgt))
+        cost = annualised_cost(rice, with_ccgt) + dispatch["objective_usd"]
+        npv += cost / (1 + DISCOUNT_RATE) ** (year - YEARS[0])
+        years.append({"year": year, "rice_mw": rice, "ccgt3": with_ccgt, "annual_cost_usd": cost,
+                      "LOLE_h": adq["LOLE_h"], "thermal_objective_usd": dispatch["objective_usd"]})
+        log(f"  pathway {scenario} ccgt_from={ccgt_from} {year}: rice={rice:.0f} cost={cost / 1e6:.1f} M")
+    return {"scenario": scenario, "ccgt_from": ccgt_from, "years": years, "npv_usd": npv}
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--out", type=Path, default=ROOT / "data/outlook/georgia_outlook_2027_2032.json")
     parser.add_argument("--samples", type=int, default=200)
+    parser.add_argument("--pathways-only", action="store_true",
+                        help="add the CCGT-3 pathway comparison to an existing results file")
     args = parser.parse_args()
+    if args.pathways_only:
+        started = time.monotonic()
+        output = json.loads(args.out.read_text(encoding="utf-8"))
+        output["pathways"] = []
+        for scenario in SCENARIOS:
+            for ccgt_from in (None, 2029, 2031):
+                output["pathways"].append(plan_pathway(scenario, ccgt_from, args.samples,
+                                                       lambda m: print(f"[{time.monotonic() - started:7.0f}s] {m}",
+                                                                       flush=True)))
+                args.out.write_text(json.dumps(output, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+        return
     started = time.monotonic()
     log = lambda msg: print(f"[{time.monotonic() - started:7.0f}s] {msg}", flush=True)  # noqa: E731
     output = {"schema": "powersim.georgia_outlook.v1", "assumptions": ASSUMPTIONS, "lole_target_h": LOLE_TARGET_H,

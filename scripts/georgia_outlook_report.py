@@ -93,8 +93,12 @@ def summarise(data: dict) -> dict:
                                           "qa": s["qa"], "publishable": s["publishable"]}
                                   for label, s in sens.items()},
             })
+    pathways = [{"scenario": p["scenario"], "ccgt_from": p["ccgt_from"], "npv_musd": round(p["npv_usd"] / 1e6, 1),
+                 "years": [{"year": y["year"], "rice_mw": y["rice_mw"], "ccgt3": y["ccgt3"],
+                            "cost_musd": round(y["annual_cost_usd"] / 1e6, 1), "lole": round(y["LOLE_h"], 2)}
+                           for y in p["years"]]} for p in data.get("pathways", [])]
     return {"rows": rows, "assumptions": data["assumptions"], "target": data["lole_target_h"],
-            "candidates": data["candidates"], "bess": data["bess"]}
+            "candidates": data["candidates"], "bess": data["bess"], "pathways": pathways}
 
 
 def first_year(rows, scenario, predicate):
@@ -117,6 +121,19 @@ def findings(summary: dict) -> list[str]:
             parts.append(f"2032 წლისთვის სულ {last['rice_mw']:.0f} MW")
         parts.append(f"CCGT-3 — {ccgt_year} წლიდან" if ccgt_year else "CCGT-3 2032 წლამდე ეკონომიკურად არ ჩანს")
         out.append(f"{parts[0]} " + "; ".join(parts[1:]) + ".")
+    for scen in ("A", "B"):
+        paths = sorted((p for p in summary.get("pathways", []) if p["scenario"] == scen), key=lambda p: p["npv_musd"])
+        if len(paths) > 1:
+            best, rice_only = paths[0], next((p for p in paths if p["ccgt_from"] is None), None)
+            name = lambda p: "მხოლოდ RICE" if p["ccgt_from"] is None else f"CCGT-3 {p['ccgt_from']}-დან + RICE"  # noqa: E731
+            text = (f"სცენარი {scen}, 2027–2032 წლების დისკონტირებული ხარჯით (NPV) ყველაზე იაფია: {name(best)} "
+                    f"({best['npv_musd']:,.0f} მლნ $)")
+            if rice_only and best is not rice_only:
+                text += f"; მხოლოდ RICE-თან შედარებით {rice_only['npv_musd'] - best['npv_musd']:,.0f} მლნ $-ით ნაკლები"
+            elif rice_only:
+                second = paths[1]
+                text += f"; {name(second)} {second['npv_musd'] - best['npv_musd']:,.0f} მლნ $-ით ძვირია"
+            out.append(text + ".")
     a2027 = next((r for r in rows if r["scenario"] == "A" and r["year"] == 2027), None)
     if a2027:
         out.append(f"თბილსრესის III და IV ბლოკების გასვლა 2027 წელს LOLE-ს {a2027['lole_keep_tbilsresi']:.1f} სთ-დან "
@@ -186,6 +203,14 @@ def write_xlsx(summary: dict, path: Path) -> None:
                          o["total_musd"], o["lole"], "კი" if o["meets"] else "არა"])
     sheet("ვარიანტები", ["სცენარი", "წელი", "ვარიანტი", "RICE, MW", "წლიური ხარჯი, მლნ $", "LOLE, სთ",
                          "ნორმა"], opts)
+    paths = []
+    for p in summary.get("pathways", []):
+        for y in p["years"]:
+            paths.append([p["scenario"], "მხოლოდ RICE" if p["ccgt_from"] is None else f"CCGT-3 {p['ccgt_from']}-დან",
+                          y["year"], y["rice_mw"], "კი" if y["ccgt3"] else "არა", y["cost_musd"], y["lole"], p["npv_musd"]])
+    if paths:
+        sheet("გზები (NPV)", ["სცენარი", "გზა", "წელი", "RICE, MW", "CCGT-3", "წლიური ხარჯი, მლნ $", "LOLE, სთ",
+                              "NPV 2027–2032, მლნ $"], paths)
     sheet("დაშვებები", ["#", "დაშვება"], [[i + 1, a] for i, a in enumerate(summary["assumptions"])], [5, 140])
     book.close()
 
