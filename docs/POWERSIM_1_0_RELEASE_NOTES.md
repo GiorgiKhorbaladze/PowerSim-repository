@@ -1,6 +1,20 @@
 # PowerSim 1.0 release notes
 
-## Unreleased - PowerSim 1.0 application completion
+## Unreleased - Georgia model, calibration, Windows without admin
+
+- Windows: per-user installer (no administrator rights), separate portable `PowerSim.exe` artifact, and a `PowerSim.bat` launcher for source checkouts.
+- Solver: optional `monthly_pmax_mw`, `monthly_pmin_mw`, `pmin_profile` and `monthly_energy_mwh` (`max`/`exact`, full-horizon only), verified by the new QA check `operating_envelope`.
+- Georgia 2030 model rebuilt from the approved PLEXOS model, with hydrology/wind/solar scenarios and a benchmark against PLEXOS's hourly results (`docs/GEORGIA_PLEXOS_MODEL.md`).
+- Georgia 2026 unit-level model from the 2024–2025 monthly balances (mean hydrology, 2025 net flow, GSE P50 load), balance PDF parser and a model-vs-balance comparison script (`docs/GEORGIA_2026_MODEL.md`). Thermal costs in it are placeholders that require review. A 2027 variant adds the GSE P50 2027 load and the 206 MW Ruisi wind farm.
+- Calibration: compare a publishable run with measured hourly/monthly data (bias, MAE, RMSE, correlation).
+- Charts (dispatch by technology, monthly energy balance), Excel and printable reports, sensitivity analysis through `scale` scenario overlays, and a scenario overview.
+- Georgian interface (English/ქართული toggle) and structured forms for stochastic, N-1, adequacy and expansion inputs; each workflow's solver validator now runs during *Validate*.
+
+## Unreleased - bulk parameter workbook
+
+- New: Excel parameter workbook on the Assets page (`GET`/`POST /api/projects/{id}/parameter-workbook`). Download a template, fill in approved costs, capacities, profiles and review status, check the field-level change list and apply it as an audited new project revision. See the user guide.
+
+## PowerSim 1.0 application completion (merged in #130)
 
 Not yet released or versioned. Merging is subject to CI and independent review.
 

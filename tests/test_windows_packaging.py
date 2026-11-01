@@ -26,3 +26,20 @@ def test_windows_distribution_defines_installer_and_local_launcher():
     assert "<title>PowerSim 1.0</title>" in workflow and "/api/reference" in workflow
     assert "def _ensure_standard_streams" in desktop
     assert _available_port("127.0.0.1") > 0
+
+
+def test_windows_install_needs_no_administrator_rights():
+    installer = (ROOT / "packaging" / "windows" / "PowerSim.iss").read_text(encoding="utf-8")
+    workflow = (ROOT / ".github" / "workflows" / "windows-package.yml").read_text(encoding="utf-8")
+    assert "PrivilegesRequired=lowest" in installer
+    assert "/CURRENTUSER" in workflow  # CI exercises the per-user install path
+    assert "PowerSim-Windows-x64-portable" in workflow and "PowerSim-Windows-x64-installer" in workflow
+
+
+def test_source_checkout_launcher():
+    launcher = (ROOT / "PowerSim.bat").read_bytes()
+    assert b"\r\n" in launcher and b"\n" not in launcher.replace(b"\r\n", b"")  # cmd.exe needs CRLF
+    text = launcher.decode("ascii")
+    assert "-m venv .venv" in text and "-m pip install ." in text
+    assert "powersim.exe\" serve --workspace" in text and "http://127.0.0.1:8000/" in text
+    assert "*.bat text eol=crlf" in (ROOT / ".gitattributes").read_text(encoding="utf-8")

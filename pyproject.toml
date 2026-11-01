@@ -37,7 +37,8 @@ powersim = ["ui/static/*"]
   "data/reference/plant_parameters/hpp_summary.json",
   "data/reference/plant_parameters/plant_detail_sheets.json",
 ]
-"powersim/samples/projects" = ["samples/projects/georgia_2026_baseline.json"]
+"powersim/samples/projects" = ["samples/projects/georgia_2026_baseline.json", "samples/projects/georgia_2030_plexos.json", "samples/projects/georgia_2026_balance.json", "samples/projects/georgia_2027_balance.json"]
+"powersim/data/benchmarks" = ["data/benchmarks/plexos_bess_research_800_1400.json"]
 "powersim/samples" = ["samples/application_compact_demo.json"]
 
 [tool.pytest.ini_options]

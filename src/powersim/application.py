@@ -11,6 +11,10 @@ from typing import Any, Protocol, get_args
 import zipfile
 from powersim.contracts import ProjectContract, ResultEnvelope, RunStatus
 from powersim.platform import RunManager
+try:  # resolved by FastAPI from module globals (postponed annotations)
+    from starlette.requests import Request
+except ImportError:  # the HTTP adapter is optional for the core service
+    Request = Any  # type: ignore[misc,assignment]
 
 UNSUPPORTED_CAPABILITIES = (
     "AC power flow", "voltage and reactive-power studies", "EMT studies", "transient stability",
@@ -90,6 +94,64 @@ def _series(hourly: list[dict[str, Any]]) -> dict[str, Any]:
     return {"resolution": "hourly" if step == 1 else "daily_mean", "points": points}
 
 
+_MONTH_END_HOURS = (744, 1416, 2160, 2880, 3624, 4344, 5088, 5832, 6552, 7296, 8016, 8760)
+
+
+def _technology_view(results: dict[str, Any]) -> dict[str, Any]:
+    """Dispatch by technology (asset kind) for the stacked and monthly charts.
+
+    BESS is reported as net output (discharge - charge), so it is negative
+    while charging.  Values come straight from canonical per-unit results.
+    """
+    by_unit = results.get("hourly_by_unit") or {}
+    summary = results.get("by_unit_summary") or {}
+    system = results.get("hourly_system") or []
+    if not by_unit or not system:
+        return {"kinds": [], "series": {"resolution": None, "points": []}, "monthly": []}
+    dt = float(system[0].get("period_minutes", 60)) / 60.0
+    periods = [int(row["t"]) for row in system]
+    index = {t: i for i, t in enumerate(periods)}
+    totals: dict[str, list[float]] = {}
+    for unit_id, rows in by_unit.items():
+        kind = (summary.get(unit_id) or {}).get("type") or "other"
+        bucket = totals.setdefault(kind, [0.0] * len(periods))
+        for row in rows:
+            i = index.get(int(row["t"]))
+            if i is None:
+                continue
+            storage = row.get("bess") or {}
+            if kind == "bess" and storage:
+                bucket[i] += float(storage.get("discharge_mw", 0) or 0) - float(storage.get("charge_mw", 0) or 0)
+            else:
+                bucket[i] += float(row.get("dispatch_mw", 0) or 0)
+    kinds = sorted(totals, key=lambda k: -sum(totals[k]))
+    load = [float(row.get("load_mw", 0) or 0) for row in system]
+    unserved = [float(row.get("unserved_mwh", 0) or 0) / dt for row in system]
+    step = 1 if len(periods) <= 400 else max(1, int(round(24 / dt)))
+    points = []
+    for start in range(0, len(periods), step):
+        stop = min(start + step, len(periods))
+        mean = lambda values: round(sum(values[start:stop]) / (stop - start), 3)
+        points.append({"index": start, "load_mw": mean(load), "unserved_mw": mean(unserved),
+                       **{kind: mean(totals[kind]) for kind in kinds}})
+    monthly: dict[int, dict[str, float]] = {}
+    for i, t in enumerate(periods):
+        hour = int(t * dt) % 8760
+        month = next(m for m, end in enumerate(_MONTH_END_HOURS) if hour < end)
+        bucket = monthly.setdefault(month, {"demand_mwh": 0.0, "unserved_mwh": 0.0, "curtailed_mwh": 0.0,
+                                            **{kind: 0.0 for kind in kinds}})
+        bucket["demand_mwh"] += load[i] * dt
+        bucket["unserved_mwh"] += float(system[i].get("unserved_mwh", 0) or 0)
+        bucket["curtailed_mwh"] += float(system[i].get("curtailed_mwh", 0) or 0)
+        for kind in kinds:
+            bucket[kind] += totals[kind][i] * dt
+    names = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+    return {"kinds": kinds,
+            "series": {"resolution": "hourly" if step == 1 else "daily_mean", "points": points},
+            "monthly": [{"label": names[m], **{k: round(v, 3) for k, v in values.items()}}
+                        for m, values in sorted(monthly.items())]}
+
+
 def _result_view(results: dict[str, Any]) -> dict[str, Any]:
     if isinstance(results.get("system_summary"), dict):
         by_unit = []
@@ -103,7 +165,7 @@ def _result_view(results: dict[str, Any]) -> dict[str, Any]:
                    for row in results.get("monthly_summary") or [] if isinstance(row, dict)]
         hourly = results.get("hourly_system") if isinstance(results.get("hourly_system"), list) else []
         return {"kind": "dispatch", "system_summary": _scalars(results["system_summary"]), "by_unit": by_unit,
-                "monthly": monthly, "series": _series(hourly)}
+                "monthly": monthly, "series": _series(hourly), "technology": _technology_view(results)}
     return {"kind": "metrics", "metrics": _scalars({k: v for k, v in results.items()
                                                     if k not in {"publication", "solver_diagnostics"}})}
 
@@ -364,6 +426,163 @@ class ApplicationService:
                               "description":WORKFLOW_DESCRIPTIONS.get(w,("",""))[1]} for w in workflows],
                 "unsupported":list(UNSUPPORTED_CAPABILITIES),"reference_catalogue":reference}
 
+    # -- sensitivity and scenario overview -----------------------------------
+    _SENSITIVITY_FIELDS = {"capacity_max_mw", "vom", "fuel_price", "heat_rate", "monthly_energy_mwh"}
+    def sensitivity(self, project_id: str, body: dict[str, Any]) -> dict[str, Any]:
+        """Create one scaled scenario per factor, save the project and launch the runs."""
+        import math
+        import re
+        try:
+            project=self.manager.load_project(project_id)
+        except FileNotFoundError:
+            raise ApiError(404, "project_not_found", f"project {project_id!r} has not been saved")
+        target=body.get("target") or {}
+        factors=body.get("factors")
+        if not isinstance(factors, list) or not 1 <= len(factors) <= 9:
+            raise ApiError(422, "invalid_factors", "give between 1 and 9 factors")
+        for factor in factors:
+            if isinstance(factor, bool) or not isinstance(factor, (int, float)) or not math.isfinite(factor) or not 0 <= factor <= 10:
+                raise ApiError(422, "invalid_factors", "factors must be numbers between 0 and 10")
+        payload=project.model_dump(mode="json")
+        base_id=body.get("base_scenario") or None
+        base_overlay={}
+        if base_id:
+            match=[sc for sc in payload["scenarios"] if sc["id"]==base_id]
+            if not match:
+                raise ApiError(422, "unknown_scenario", f"unknown base scenario {base_id!r}")
+            base_overlay={k:v for k,v in match[0]["overlay"].items() if k!="scale"}
+        if target.get("type")=="profile":
+            if target.get("id") not in {p["id"] for p in payload["profiles"]}:
+                raise ApiError(422, "unknown_profile", f"unknown profile {target.get('id')!r}")
+            label=f"{target['id']}"
+            scale_for=lambda f: {"profiles": {target["id"]: f}}
+        elif target.get("type")=="asset":
+            if target.get("id") not in {a["id"] for a in payload["assets"]} or target.get("field") not in self._SENSITIVITY_FIELDS:
+                raise ApiError(422, "invalid_target", "asset sensitivity needs a known asset id and a field in "
+                               + ", ".join(sorted(self._SENSITIVITY_FIELDS)))
+            label=f"{target['id']}-{target['field']}"
+            scale_for=lambda f: {"assets": {target["id"]: {target["field"]: f}}}
+        else:
+            raise ApiError(422, "invalid_target", "target.type must be 'profile' or 'asset'")
+        slug=re.sub(r"[^A-Za-z0-9]+", "-", label).strip("-").lower()[:60]
+        created=[]
+        existing={sc["id"] for sc in payload["scenarios"]}
+        for factor in factors:
+            sid=f"sens-{slug}-{round(factor*100):03d}" + (f"-{base_id}" if base_id else "")
+            sid=sid[:128]
+            scenario={"id":sid,"name":f"Sensitivity: {label} x{factor:g}" + (f" ({base_id})" if base_id else ""),
+                      "overlay":{**base_overlay, "scale":scale_for(factor)}}
+            payload["scenarios"]=[sc for sc in payload["scenarios"] if sc["id"]!=sid]+[scenario]
+            created.append(sid)
+        meta=dict(payload.get("metadata") or {})
+        groups=dict(meta.get("sensitivity_groups") or {})
+        groups[slug + (f"@{base_id}" if base_id else "")]={"target":target,"factors":factors,"base_scenario":base_id,"scenarios":created}
+        meta["sensitivity_groups"]=groups
+        payload["metadata"]=meta
+        payload["version"]={**payload["version"],"revision":payload["version"]["revision"]+1,"parent_fingerprint":project.fingerprint()}
+        saved=self.save_validated_project(payload)
+        runs=[]
+        if body.get("launch", True):
+            for sid in created:
+                run=self.create_validated_run(project_id, sid)
+                self.launch(run["id"])
+                runs.append({"scenario_id":sid,"run_id":run["id"]})
+        return {**saved,"scenarios":created,"runs":runs,"replaced":sorted(existing.intersection(created))}
+    def overview(self, project_id: str) -> list[dict[str, Any]]:
+        """Key results of every completed, publishable run of a project."""
+        rows=[]
+        for run in self.run_list(project_id):
+            row={"run_id":run["id"],"scenario_id":run.get("scenario_id"),"status":run["status"],
+                 "created_at":run.get("created_at"),"publishable":run.get("publishable")}
+            if run["status"]=="completed" and run.get("publishable"):
+                summary=self.run_summary(run["id"])
+                system=((summary.get("view") or {}).get("system_summary") or {})
+                row["metrics"]={k:system.get(k) for k in ("total_energy_mwh","total_unserved_mwh","total_curtailed_mwh",
+                                "total_objective_cost_usd","total_cost_usd","avg_lambda_usd_mwh","peak_load_mw","total_co2_t")}
+            rows.append(row)
+        return rows
+
+    # -- reports ---------------------------------------------------------------
+    def _report_inputs(self, run_id: str) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any] | None]:
+        summary=self.run_summary(run_id)
+        if not summary.get("view"):
+            raise ApiError(409, "run_not_publishable", "reports are only available for publishable results")
+        envelope=self.result(run_id)
+        project=None
+        if summary.get("project_id"):
+            try:
+                project=self.manager.load_project(summary["project_id"]).model_dump(mode="json")
+            except (FileNotFoundError, ValueError):
+                project=None
+        return summary, envelope, project
+    def excel_report(self, run_id: str) -> bytes:
+        from powersim.reports import excel_report
+        return excel_report(*self._report_inputs(run_id), list(UNSUPPORTED_CAPABILITIES))
+    def html_report(self, run_id: str) -> str:
+        from powersim.reports import html_report
+        return html_report(*self._report_inputs(run_id), list(UNSUPPORTED_CAPABILITIES))
+
+    # -- calibration against measured data ----------------------------------
+    def _publishable_envelope(self, run_id: str) -> dict[str, Any]:
+        path=self.manager._run_dir(run_id)/"result.json"
+        if not path.exists():
+            raise ApiError(409, "result_unavailable", f"run {run_id} has no persisted result")
+        envelope=json.loads(path.read_text(encoding="utf-8"))
+        state=publication_state(envelope)
+        if not state["publishable"]:
+            raise ApiError(409, "run_not_publishable",
+                           "calibration is only available for publishable results: "+", ".join(state["reasons"]))
+        return envelope
+    def calibration_template(self, run_id: str) -> bytes:
+        from powersim.calibration import CalibrationRejected, build_template
+        try:
+            return build_template(self._publishable_envelope(run_id))
+        except CalibrationRejected as exc:
+            raise ApiError(422, "calibration_unavailable", str(exc))
+    def calibrate(self, run_id: str, content: bytes, file_name: str|None=None) -> dict[str, Any]:
+        """Compare a run with uploaded measured data and persist the report."""
+        from powersim.calibration import CalibrationRejected, compare
+        envelope=self._publishable_envelope(run_id)
+        if not content:
+            raise ApiError(422, "empty_upload", "no workbook was uploaded")
+        try:
+            report=compare(envelope, content, file_name=file_name)
+        except CalibrationRejected as exc:
+            raise ApiError(422, "calibration_rejected", str(exc), exc.issues)
+        stamp=report["compared_at"].replace(":", "").replace("-", "").split(".")[0]
+        self.manager._write(self.manager._run_dir(run_id)/f"calibration-{stamp}.json", report)
+        return report
+    def calibration_reports(self, run_id: str) -> list[dict[str, Any]]:
+        directory=self.manager._run_dir(run_id)
+        return [json.loads(p.read_text(encoding="utf-8")) for p in sorted(directory.glob("calibration-*.json"))]
+
+    # -- bulk parameter workbook ---------------------------------------------
+    def parameter_workbook(self, project_id: str) -> bytes:
+        from powersim.parameter_workbook import build_template
+        try:
+            project=self.manager.load_project(project_id)
+        except FileNotFoundError:
+            raise ApiError(404, "project_not_found", f"project {project_id!r} has not been saved")
+        return build_template(project)
+    def parameter_workbook_upload(self, project_id: str, content: bytes, *, apply: bool=False,
+                                  file_name: str|None=None, imported_by: str|None=None) -> dict[str, Any]:
+        """Check (and optionally apply) an uploaded parameter workbook."""
+        from powersim.parameter_workbook import WorkbookRejected, apply_workbook, public_report, read_workbook
+        try:
+            project=self.manager.load_project(project_id)
+        except FileNotFoundError:
+            raise ApiError(404, "project_not_found", f"project {project_id!r} has not been saved")
+        if not content:
+            raise ApiError(422, "empty_upload", "no workbook was uploaded")
+        if not apply:
+            return {"applied":False, **public_report(read_workbook(project, content))}
+        try:
+            updated, report=apply_workbook(project, content, file_name=file_name, imported_by=imported_by)
+        except WorkbookRejected as exc:
+            raise ApiError(422, "workbook_rejected", str(exc), exc.issues)
+        saved=self.save_validated_project(updated.model_dump(mode="json"))
+        return {"applied":True, **report, **saved}
+
     # -- reference catalogue --------------------------------------------------
     def catalogue(self):
         if self._catalogue is None:
@@ -466,6 +685,23 @@ def build_fastapi_app(service: ApplicationService):
     @app.post('/projects/{project_id}/runs')
     def create_run(project_id:str,scenario_id:str|None=None):
         return _call(service.create_validated_run, project_id, scenario_id)
+    @app.get('/projects/{project_id}/parameter-workbook')
+    def parameter_workbook(project_id:str):
+        return _download(_call(service.parameter_workbook, project_id), f"{project_id}-parameters.xlsx",
+                         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    @app.post('/projects/{project_id}/parameter-workbook')
+    async def parameter_workbook_upload(project_id:str, request:Request, apply:bool=False,
+                                        file_name:str|None=None, imported_by:str|None=None):
+        from powersim.parameter_workbook import MAX_WORKBOOK_BYTES
+        content=await request.body()
+        if len(content) > MAX_WORKBOOK_BYTES:
+            raise HTTPException(status_code=413, detail={"code":"file_too_large","message":"the workbook is larger than 25 MB","issues":[]})
+        return _call(service.parameter_workbook_upload, project_id, content, apply=apply,
+                     file_name=file_name, imported_by=imported_by)
+    @app.post('/projects/{project_id}/sensitivity')
+    def sensitivity(project_id:str, body:dict[str,Any]): return _call(service.sensitivity, project_id, body)
+    @app.get('/projects/{project_id}/overview')
+    def overview(project_id:str): return _call(service.overview, project_id)
     @app.post('/projects/{project_id}/reference-import')
     def reference_import(project_id:str, body:dict[str,Any]): return _call(service.reference_import, project_id, body)
     @app.get('/runs')
@@ -488,6 +724,29 @@ def build_fastapi_app(service: ApplicationService):
     @app.get('/runs/{run_id}/export')
     def export_run(run_id:str):
         return _download(_call(service.export_run, run_id), f"powersim-run-{run_id}.zip", "application/zip")
+    @app.get('/runs/{run_id}/report.xlsx')
+    def excel_report(run_id:str):
+        return _download(_call(service.excel_report, run_id), f"powersim-report-{run_id[:8]}.xlsx",
+                         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    @app.get('/runs/{run_id}/report.html')
+    def html_report(run_id:str):
+        from fastapi.responses import HTMLResponse
+        # a static document: inline styles only, no scripts
+        return HTMLResponse(_call(service.html_report, run_id), headers={
+            "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; img-src data:"})
+    @app.get('/runs/{run_id}/calibration-template')
+    def calibration_template(run_id:str):
+        return _download(_call(service.calibration_template, run_id), f"powersim-calibration-{run_id[:8]}.xlsx",
+                         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    @app.post('/runs/{run_id}/calibration')
+    async def calibrate(run_id:str, request:Request, file_name:str|None=None):
+        from powersim.calibration import MAX_BYTES
+        content=await request.body()
+        if len(content) > MAX_BYTES:
+            raise HTTPException(status_code=413, detail={"code":"file_too_large","message":"the workbook is larger than 25 MB","issues":[]})
+        return _call(service.calibrate, run_id, content, file_name)
+    @app.get('/runs/{run_id}/calibration')
+    def calibration_reports(run_id:str): return _call(service.calibration_reports, run_id)
     @app.get('/runs/{run_id}/result')
     def result(run_id:str):
         try: return service.result(run_id)

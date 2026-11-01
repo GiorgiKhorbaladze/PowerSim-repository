@@ -33,7 +33,7 @@ def test_ui_identity_and_no_legacy_assets():
 
 
 def test_ui_uses_only_the_same_origin_api():
-    assert re.findall(r"fetch\(`([^`]*)`", SOURCE) == ["/api${path}"]
+    assert re.findall(r"fetch\(`([^`]*)`", SOURCE) == ["/api${path}", "/api${path}"]  # api() and postFile()
     external = SOURCE.replace("http://www.w3.org/2000/svg", "")
     assert "http://" not in external and "https://" not in external
     for path in ("/projects/validate", "/projects/save", "/reference/review", "/reference-import", "/summary",

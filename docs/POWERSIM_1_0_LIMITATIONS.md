@@ -11,10 +11,11 @@ PowerSim 1.0 is deliberately fail-closed outside its validated scope.
 - Chronological adequacy uses independent outages and a transparent chronological dispatch/storage model; it excludes network, UC, hydro chronology, correlated/common-mode outages and capacity accreditation claims.
 - Scoped expansion is screening, not an integer multi-year chronological investment optimization.
 - The Georgia example is sanitized and aggregated. It is not private GSE operational data and is not an official dispatch case.
+- The Georgia 2026 unit-level model (`docs/GEORGIA_2026_MODEL.md`) is single-node, uses mean 2024-2025 hydrology without a reservoir model, fixes net interconnector flow to 2025, and uses generic placeholder thermal efficiency, VOM and fuel prices with full availability. Its total thermal energy follows from the energy balance; the split between thermal plants is not a result.
 
 ## Application and reference data
 
-- The browser application has structured editors for project metadata, workflow, typed solver settings, assets and scenarios. The time axis, profiles, networks, reserves and workflow-specific inputs (stochastic scenarios, contingencies, adequacy and expansion blocks) are edited in the JSON project-document editor. If those inputs are missing, the backend rejects the run and shows the cause.
+- The browser application has structured editors for project metadata, workflow, typed solver settings, assets, scenarios and workflow-specific inputs (stochastic scenarios, contingencies and reserve products, adequacy samples and forced outage rates, expansion candidates). The time axis, profile values and DC networks are still edited in the JSON project-document editor (or the Excel parameter workbook for profiles).
 - The application executor uses the typed `solver_settings`. Solver settings stored only inside `legacy_payload` are not used for application runs.
 - Exports are the project JSON and a run bundle (snapshot, manifest, events, hash verification and, for publishable runs only, the result envelope and CSV summaries). There is no report generator, settlement export or regulatory-filing format.
 - Running runs cannot be cancelled; only draft and queued runs can. One run executes at a time.

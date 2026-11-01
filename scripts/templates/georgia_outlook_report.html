@@ -1,0 +1,438 @@
+<title>საქართველოს ენერგოსისტემა 2027–2032</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+Georgian:wght@400;500;600&family=Noto+Serif+Georgian:wght@600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a planning dossier — a narrow label column beside each section, one reading column, charts full width. */
+:root {
+  --bg: #f4f6f5; --surface: #ffffff; --fg: #15211e; --muted: #56635f; --line: #d6dfdb; --accent: #0f6e82;
+  --good: #1d7f47; --warn: #a8670c; --crit: #b8322a;
+  --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100; --s5: #e87ba4; --s6: #008300; --s7: #6250d6;
+  --display: "Noto Serif Georgian", "Sylfaen", Georgia, serif;
+  --body: "Noto Sans Georgian", "Sylfaen", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #101715; --surface: #17201e; --fg: #e6edea; --muted: #a0b0ab; --line: #2b3935; --accent: #52b6cb;
+    --good: #4cc27f; --warn: #e0a440; --crit: #ef6b62;
+    --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --s6: #008300; --s7: #9085e9;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #101715; --surface: #17201e; --fg: #e6edea; --muted: #a0b0ab; --line: #2b3935; --accent: #52b6cb;
+  --good: #4cc27f; --warn: #e0a440; --crit: #ef6b62;
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --s6: #008300; --s7: #9085e9;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font: 15px/1.6 var(--body); }
+.wrap { max-width: 1120px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 32px 64px; }
+header.top { display: grid; gap: 14px; padding-bottom: 28px; border-bottom: 2px solid var(--fg); }
+.eyebrow { font: 500 12px/1.4 var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+h1 { font: 700 clamp(28px, 4.4vw, 46px)/1.15 var(--display); margin: 0; text-wrap: balance; }
+h2 { font: 700 22px/1.3 var(--display); margin: 0 0 6px; text-wrap: balance; }
+h3 { font: 600 15px/1.4 var(--body); margin: 0; }
+p { margin: 0; max-width: 70ch; }
+.lede { color: var(--muted); font-size: 16px; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { font: 500 12px/1 var(--mono); padding: 6px 9px; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); background: var(--surface); }
+.chip.warn { border-color: var(--warn); color: var(--warn); }
+section.block { display: grid; grid-template-columns: 190px minmax(0, 1fr); gap: 28px; padding-block: 34px; border-bottom: 1px solid var(--line); }
+section.block > .label { display: grid; align-content: start; gap: 6px; }
+section.block > .label .eyebrow { color: var(--accent); }
+.content { display: grid; gap: 18px; min-width: 0; }
+.content > * { min-width: 0; }
+#stressBlock { display: grid; gap: 10px; }
+@media (max-width: 760px) { section.block { grid-template-columns: minmax(0, 1fr); gap: 12px; } }
+.findings { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; counter-reset: f; }
+.findings li { display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 10px; padding: 12px 14px; background: var(--surface); border: 1px solid var(--line); border-radius: 6px; counter-increment: f; }
+.findings li::before { content: counter(f); font: 600 14px/1.5 var(--mono); color: var(--accent); }
+.seg { display: inline-flex; flex-wrap: wrap; max-width: 100%; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; background: var(--surface); }
+.seg button { font: 500 13px/1 var(--body); padding: 9px 14px; border: 0; background: transparent; color: var(--muted); cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--surface); }
+.seg button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.toolbar { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; }
+.chart { position: relative; background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 14px 12px 8px; overflow-x: auto; }
+.chart svg { display: block; width: 100%; min-width: 520px; height: auto; }
+.chart text { fill: var(--muted); font: 11px var(--mono); }
+.chart .grid line { stroke: var(--line); stroke-width: 1; }
+.chart .axis { stroke: var(--muted); stroke-width: 1; }
+.chart .target { stroke: var(--crit); stroke-width: 1.5; stroke-dasharray: 5 4; }
+.chart .target-label { fill: var(--crit); }
+.chart .val { fill: var(--fg); font-weight: 500; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12.5px; color: var(--muted); padding: 2px 4px 8px; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend i { width: 11px; height: 11px; border-radius: 3px; display: inline-block; }
+.tip { position: absolute; pointer-events: none; background: var(--fg); color: var(--bg); font: 12px/1.45 var(--body); padding: 7px 9px; border-radius: 5px; max-width: 260px; z-index: 5; }
+.tip b { font-family: var(--mono); font-weight: 500; }
+.tablewrap { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 6px; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th, td { padding: 8px 10px; text-align: right; border-bottom: 1px solid var(--line); white-space: nowrap; }
+th:first-child, td:first-child { text-align: left; }
+th { font: 600 12px/1.35 var(--body); color: var(--muted); background: color-mix(in srgb, var(--surface) 85%, var(--line)); position: sticky; top: 0; white-space: normal; }
+td { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+td.txt { font-family: var(--body); text-align: left; }
+tr:last-child td { border-bottom: 0; }
+.pill { display: inline-block; font: 500 11.5px/1 var(--body); padding: 4px 8px; border-radius: 999px; border: 1px solid currentColor; }
+.pill.good { color: var(--good); } .pill.warn { color: var(--warn); } .pill.crit { color: var(--crit); }
+.timeline { display: grid; grid-template-columns: 150px repeat(6, minmax(92px, 1fr)); gap: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 6px; overflow-x: auto; }
+.timeline > div { padding: 10px; border-bottom: 1px solid var(--line); border-right: 1px solid var(--line); min-height: 64px; display: grid; align-content: start; gap: 5px; }
+.timeline > div.head { min-height: 0; font: 600 12px var(--mono); color: var(--muted); background: color-mix(in srgb, var(--surface) 85%, var(--line)); }
+.timeline .scen { font: 600 13px/1.35 var(--body); }
+.build { font: 500 12px/1.3 var(--mono); padding: 4px 6px; border-radius: 4px; border-left: 3px solid var(--s7); background: color-mix(in srgb, var(--s7) 12%, transparent); }
+.build.ccgt { border-left-color: var(--s2); background: color-mix(in srgb, var(--s2) 12%, transparent); }
+.none { color: var(--muted); font-size: 12px; }
+.note { font-size: 13px; color: var(--muted); max-width: 80ch; }
+.assume { margin: 0; padding-left: 20px; display: grid; gap: 6px; font-size: 14px; max-width: 85ch; }
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; }
+.kpi { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 12px 14px; display: grid; gap: 4px; }
+.kpi .v { font: 500 24px/1.1 var(--mono); }
+.kpi .k { font-size: 12.5px; color: var(--muted); }
+footer { padding-top: 26px; font-size: 12.5px; color: var(--muted); display: grid; gap: 6px; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div class="eyebrow">PowerSim · დაგეგმვის კვლევა · 8,760 საათი × 6 წელი × 2 სცენარი</div>
+    <h1>საქართველოს ენერგოსისტემა 2027–2032</h1>
+    <p class="lede">რა სიმძლავრე და რეზერვი დასჭირდება სისტემას, თუ თბილსრესის III და IV ბლოკები ექსპლუატაციიდან გავა, როდის არის საჭირო RICE და CCGT-3, და რამდენად საიმედოა სისტემა (LOLE, EENS) ორი განვითარების სცენარით.</p>
+    <div class="chips" id="chips"></div>
+  </header>
+
+  <section class="block">
+    <div class="label"><span class="eyebrow">შეჯამება</span><h2>მთავარი დასკვნები</h2></div>
+    <div class="content">
+      <div class="kpis" id="kpis"></div>
+      <ol class="findings" id="findings"></ol>
+    </div>
+  </section>
+
+  <section class="block">
+    <div class="label"><span class="eyebrow">ინვესტიცია</span><h2>რა და როდის უნდა აშენდეს</h2></div>
+    <div class="content">
+      <p>თითოეულ წელს მოდელი ამატებს მინიმალურ სიმძლავრეს, რომელიც LOLE-ს ნორმამდე (≤ 3 სთ/წელი) ამცირებს და რეზერვის მოთხოვნას ყველა საათში აკმაყოფილებს, და ირჩევს უფრო იაფ ვარიანტს: მხოლოდ RICE (20 MW ბლოკები) თუ CCGT-3 (250 MW) + RICE. აშენებული სიმძლავრე შემდეგ წლებშიც რჩება.</p>
+      <div class="timeline" id="timeline"></div>
+      <p class="note">მშენებლობის ვადები: RICE — 2028 წლიდან, CCGT-3 — 2029 წლიდან. ბატარეა 200 MW / 200 MWh — 2029 წლიდან (შემოდის 2028-ის ბოლოს).</p>
+    </div>
+  </section>
+
+  <section class="block" id="pathSection">
+    <div class="label"><span class="eyebrow">CCGT-3</span><h2>როდის სჭირდება CCGT-3</h2></div>
+    <div class="content">
+      <p>წლიდან-წლამდე არჩევანი უკვე აშენებულ RICE-ს ინარჩუნებს, ამიტომ CCGT-3 მთლიან გზებადაც შევადარეთ: „მხოლოდ RICE“, „CCGT-3 2029-დან“ და „CCGT-3 2031-დან“. თითოეულ გზაში RICE ყოველწლიურად იმდენია, რამდენიც LOLE-ს ნორმასა და რეზერვს სჭირდება. შედარება 2027–2032 წლების წლიური ხარჯების დისკონტირებულ ჯამზეა (NPV, 8%).</p>
+      <div class="tablewrap" id="pathTable"></div>
+      <p class="note">ჰორიზონტი 2032 წელს მთავრდება: CCGT-3-ის უპირატესობა (იაფი ენერგია) 2032-ის შემდეგ გრძელდება, ხოლო მისი ანუიტეტი აქ მხოლოდ 2032-მდეა ჩათვლილი, ამიტომ გრძელვადიანი შედარება შეიძლება CCGT-3-ის სასარგებლოდ შეიცვალოს.</p>
+    </div>
+  </section>
+
+  <section class="block">
+    <div class="label"><span class="eyebrow">საიმედოობა</span><h2>LOLE: დეფიციტის საათები წელიწადში</h2></div>
+    <div class="content">
+      <div class="toolbar"><div class="seg" data-target="lole"></div></div>
+      <div class="chart" id="lole"></div>
+      <div class="tablewrap" id="loleTable"></div>
+      <div id="stressBlock">
+        <h3>სტრეს-ტესტი: 2024 წლის ზამთრის ჰიდროლოგია და, სცენარ B-ში, მშვიდი ქარი და დაბალი მზე</h3>
+        <p class="note">ძირითადი გაანგარიშება ჰიდროლოგიას 2024/2025-დან შემთხვევით იღებს, ხოლო ქარსა და მზეს — ერთი ამინდის წლიდან. 2025 წელს ჰესებმა წლიურად ნაკლები გამოიმუშავეს, მაგრამ 2024-ში მარეგულირებელ ჰესებს ზამთარში ნაკლები ენერგია ჰქონდათ (995 და 1,213 GWh იან/თებ/ნოე/დეკ-ში), ამიტომ სიმძლავრის ბალანსისთვის უფრო მძიმე 2024 წელია. აქ ორივე სცენარი 2024 წლის ჰიდროლოგიით გადის, B კი PLEXOS-ის „calm“ ქარისა და „low“ მზის პროფილებით. ცხრილი აჩვენებს, რამდენი მყარი სიმძლავრე იქნებოდა საჭირო ასეთ წელს.</p>
+        <div class="tablewrap" id="stressTable"></div>
+      </div>
+      <p class="note">მონტე-კარლო, 200 ნიმუში წელიწადში: თბოსადგურების ავარიული გაჩერებები (ორმდგომარეობიანი მარკოვის მოდელი), ჰიდროლოგია 2024 ან 2025 (50/50), მარეგულირებელი ჰესების თვიური ენერგიის ლიმიტი, ბატარეის დღიური ციკლი. ექსპორტი შეწყვეტადად ითვლება, იმპორტი — 2025 წლის თვიური სალდოს დონეზე.</p>
+    </div>
+  </section>
+
+  <section class="block">
+    <div class="label"><span class="eyebrow">ენერგია</span><h2>ენერგობალანსი წლების მიხედვით</h2></div>
+    <div class="content">
+      <div class="toolbar"><div class="seg" data-target="energy"></div></div>
+      <div class="chart" id="energy"></div>
+      <div class="tablewrap" id="energyTable"></div>
+    </div>
+  </section>
+
+  <section class="block">
+    <div class="label"><span class="eyebrow">თბოსადგურები</span><h2>თბური გამომუშავება და მგრძნობელობა</h2></div>
+    <div class="content">
+      <div class="chart" id="thermal"></div>
+      <p class="note">სვეტი — საბაზო შემთხვევა (საშუალო ჰიდროლოგია, P50 მოთხოვნა). ხაზი — დიაპაზონი 2024 და 2025 წლების ჰიდროლოგიასა და მოთხოვნის ±5%-ს შორის.</p>
+      <div class="tablewrap" id="sensTable"></div>
+    </div>
+  </section>
+
+  <section class="block">
+    <div class="label"><span class="eyebrow">ზამთარი</span><h2>თვიური ბალანსი</h2></div>
+    <div class="content">
+      <div class="toolbar"><div class="seg" data-target="monthly"></div><div class="seg" id="yearSeg"></div></div>
+      <div class="chart" id="monthly"></div>
+    </div>
+  </section>
+
+  <section class="block">
+    <div class="label"><span class="eyebrow">რეზერვი</span><h2>რამდენი რეზერვია საჭირო</h2></div>
+    <div class="content">
+      <p>მოთხოვნა = უდიდესი ბლოკის ავარია + ქარისა და მზის საათობრივი ცვლილების არაპროგნოზირებადი ნაწილი (P99). მარაგი = თბოსადგურებისა და მარეგულირებელი ჰესების გამოუყენებელი სიმძლავრე დისპეტჩირებაში, ყველაზე მძიმე საათში.</p>
+      <div class="toolbar"><div class="seg" data-target="reserve"></div></div>
+      <div class="chart" id="reserve"></div>
+      <div class="tablewrap" id="reserveTable"></div>
+    </div>
+  </section>
+
+  <section class="block">
+    <div class="label"><span class="eyebrow">ეკონომიკა</span><h2>ვარიანტების ხარჯები</h2></div>
+    <div class="content">
+      <p>წლიური ხარჯი = ახალი სიმძლავრის ანუიტეტი (8%, 25 წელი) + ფიქსირებული O&amp;M + დისპეტჩირების ხარჯი (საწვავი, VOM, დაუკმაყოფილებელი ენერგია 3,000 $/MWh). ხარჯები ილუსტრაციულ ფასებს ეყრდნობა და მხოლოდ ვარიანტების შესადარებლადაა.</p>
+      <div class="tablewrap" id="costTable"></div>
+    </div>
+  </section>
+
+  <section class="block">
+    <div class="label"><span class="eyebrow">საფუძველი</span><h2>დაშვებები და შეზღუდვები</h2></div>
+    <div class="content">
+      <ol class="assume" id="assumptions"></ol>
+      <p class="note">მოდელი ერთკვანძიანია: შიდა გადამცემი ქსელი, N-1 ქსელური უსაფრთხოება, ძაბვა და რეაქტიული სიმძლავრე არ მოდელირდება. ეს არ არის GSE-ის ოფიციალური პროგნოზი. ხარჯები, ავარიულობის მაჩვენებლები და გაზის ფასი ზოგადი დაშვებებია და დამტკიცებული მონაცემებით უნდა ჩანაცვლდეს.</p>
+    </div>
+  </section>
+
+  <footer>
+    <span>წყაროები: GSE P50 საათობრივი პროგნოზი 2026–2030; საქართველოს ელექტროენერგიის ბალანსი 2024 და 2025; PLEXOS-ის მოდელი „BESS Research 800-1400“; PyPSA technology-data.</span>
+    <span>გამოთვლა: PowerSim (HiGHS, 8,760-საათიანი LP, კანონიკური QA და გამოქვეყნების კონტროლი) — scripts/georgia_outlook.py.</span>
+  </footer>
+</div>
+<div class="tip" id="tip" hidden></div>
+
+<script>
+const DATA = /*__DATA__*/null;
+const S = DATA.summary, ROWS = S.rows, YEARS = [...new Set(ROWS.map(r => r.year))].sort();
+const MONTHS = ["იან", "თებ", "მარ", "აპრ", "მაი", "ივნ", "ივლ", "აგვ", "სექ", "ოქტ", "ნოე", "დეკ"];
+const COLORS = ["--s1", "--s2", "--s3", "--s4", "--s5", "--s6", "--s7"];
+const state = { lole: "A", energy: "A", monthly: "A", reserve: "A", year: 2030 };
+const fmt = (v, d = 0) => (v === null || v === undefined || Number.isNaN(v)) ? "—" : Number(v).toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d });
+const row = (s, y) => ROWS.find(r => r.scenario === s && r.year === y);
+const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+// ---------- tooltip
+const tip = document.getElementById("tip");
+function showTip(evt, html) {
+  const box = evt.currentTarget.closest(".chart");
+  tip.innerHTML = html; tip.hidden = false;
+  const r = box.getBoundingClientRect(), wrap = document.body.getBoundingClientRect();
+  let x = evt.clientX - wrap.left + 14, y = evt.clientY - wrap.top + 14;
+  if (x + 270 > wrap.width) x = evt.clientX - wrap.left - 270;
+  tip.style.left = x + "px"; tip.style.top = y + "px";
+}
+function hideTip() { tip.hidden = true; }
+
+// ---------- bar chart (grouped or stacked), optional whiskers and target line
+function niceMax(v) { if (v <= 0) return 1; const p = Math.pow(10, Math.floor(Math.log10(v))); const n = v / p; return (n <= 1 ? 1 : n <= 2 ? 2 : n <= 2.5 ? 2.5 : n <= 5 ? 5 : 10) * p; }
+function barChart(el, { cats, series, stacked = false, unit = "", target = null, targetLabel = "", whiskers = null, valueLabels = false, digits = 0 }) {
+  const W = 900, H = 330, L = 64, R = 16, T = 16, B = 34, iw = W - L - R, ih = H - T - B;
+  const totals = cats.map((_, i) => stacked ? series.reduce((a, s) => a + Math.max(0, s.values[i] || 0), 0) : Math.max(...series.map(s => s.values[i] || 0)));
+  let max = Math.max(...totals, target || 0, ...(whiskers ? whiskers.flat().map(w => w ? w[1] : 0) : [0]));
+  max = niceMax(max * 1.06);
+  const y = v => T + ih - (v / max) * ih;
+  const band = iw / cats.length, gap = 2;
+  const inner = stacked ? Math.min(54, band * 0.56) : Math.min(30, band * 0.8 / series.length);
+  let svg = `<svg viewBox="0 0 ${W} ${H}" role="img">`;
+  svg += `<g class="grid">`;
+  for (let k = 0; k <= 4; k++) { const v = max * k / 4; svg += `<line x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}"/><text x="${L - 8}" y="${y(v) + 4}" text-anchor="end">${fmt(v, max < 10 ? 1 : 0)}</text>`; }
+  svg += `</g><line class="axis" x1="${L}" x2="${W - R}" y1="${y(0)}" y2="${y(0)}"/>`;
+  svg += `<text x="${L}" y="${T - 4}" text-anchor="start">${esc(unit)}</text>`;
+  cats.forEach((c, i) => {
+    const cx = L + band * i + band / 2;
+    svg += `<text x="${cx}" y="${H - 12}" text-anchor="middle">${esc(c)}</text>`;
+    if (stacked) {
+      let acc = 0;
+      series.forEach((s, si) => {
+        const v = Math.max(0, s.values[i] || 0); if (v <= 0) return;
+        const y0 = y(acc), y1 = y(acc + v); acc += v;
+        const h = Math.max(0, y0 - y1 - gap);
+        svg += `<rect class="hit" data-i="${i}" data-s="${si}" x="${cx - inner / 2}" y="${y1}" width="${inner}" height="${h}" rx="${si === series.length - 1 ? 3 : 0}" fill="var(${s.color})"/>`;
+      });
+      if (valueLabels) svg += `<text class="val" x="${cx}" y="${y(totals[i]) - 6}" text-anchor="middle">${fmt(totals[i], digits)}</text>`;
+    } else {
+      const groupW = inner * series.length + gap * (series.length - 1);
+      series.forEach((s, si) => {
+        const v = s.values[i]; if (v === null || v === undefined) return;
+        const x = cx - groupW / 2 + si * (inner + gap);
+        const h = Math.max(v > 0 ? 1.5 : 0, y(0) - y(v));
+        svg += `<rect class="hit" data-i="${i}" data-s="${si}" x="${x}" y="${y(0) - h}" width="${inner}" height="${h}" rx="3" fill="var(${s.color})"/>`;
+        if (whiskers && whiskers[si] && whiskers[si][i]) {
+          const [lo, hi] = whiskers[si][i], wx = x + inner / 2;
+          svg += `<line x1="${wx}" x2="${wx}" y1="${y(lo)}" y2="${y(hi)}" stroke="var(--fg)" stroke-width="1.5"/><line x1="${wx - 5}" x2="${wx + 5}" y1="${y(lo)}" y2="${y(lo)}" stroke="var(--fg)" stroke-width="1.5"/><line x1="${wx - 5}" x2="${wx + 5}" y1="${y(hi)}" y2="${y(hi)}" stroke="var(--fg)" stroke-width="1.5"/>`;
+        }
+        if (valueLabels) { const top = (whiskers && whiskers[si] && whiskers[si][i]) ? Math.min(y(v), y(whiskers[si][i][1])) : y(v); svg += `<text class="val" x="${x + inner / 2}" y="${top - 5}" text-anchor="middle">${fmt(v, digits)}</text>`; }
+      });
+    }
+  });
+  if (target !== null) svg += `<line class="target" x1="${L}" x2="${W - R}" y1="${y(target)}" y2="${y(target)}"/><text class="target-label" x="${L + 6}" y="${y(target) - 6}" text-anchor="start">${esc(targetLabel)}</text>`;
+  svg += `</svg>`;
+  const legend = series.length > 1 ? `<div class="legend">${series.map(s => `<span><i style="background:var(${s.color})"></i>${esc(s.label)}</span>`).join("")}</div>` : "";
+  el.innerHTML = legend + svg;
+  el.querySelectorAll(".hit").forEach(r => {
+    r.addEventListener("mousemove", e => {
+      const i = +r.dataset.i, s = series[+r.dataset.s];
+      let html = `<div>${esc(cats[i])} · ${esc(s.label)}</div><b>${fmt(s.values[i], digits)} ${esc(unit)}</b>`;
+      if (stacked) html += `<div>სულ: ${fmt(totals[i], digits)} ${esc(unit)}</div>`;
+      if (whiskers && whiskers[+r.dataset.s] && whiskers[+r.dataset.s][i]) { const [lo, hi] = whiskers[+r.dataset.s][i]; html += `<div>დიაპაზონი: ${fmt(lo)}–${fmt(hi)}</div>`; }
+      showTip(e, html);
+    });
+    r.addEventListener("mouseleave", hideTip);
+  });
+}
+
+function table(el, head, rows) {
+  el.innerHTML = `<table><thead><tr>${head.map(h => `<th>${h}</th>`).join("")}</tr></thead><tbody>${rows.map(r => `<tr>${r.map((c, i) => `<td class="${typeof c === "string" && i === 0 ? "txt" : (typeof c === "string" && !/^[\d,.\-—−+ ]+$/.test(c) ? "txt" : "")}">${c}</td>`).join("")}</tr>`).join("")}</tbody></table>`;
+}
+function status(r) {
+  if (!r.meets_target) return `<span class="pill crit">ნორმა არ სრულდება</span>`;
+  return `<span class="pill good">ნორმა სრულდება</span>`;
+}
+
+// ---------- static parts
+document.getElementById("chips").innerHTML = [
+  `<span class="chip">QA: ${ROWS.every(r => r.qa === "pass") ? "ყველა გაშვება pass" : "იხ. ცხრილი"}</span>`,
+  `<span class="chip">LOLE ნორმა ≤ ${fmt(S.target)} სთ/წელი</span>`,
+  `<span class="chip">ბატარეა ${fmt(S.bess.power_mw)} MW / ${fmt(S.bess.energy_mwh)} MWh · ${S.bess.from_year}-დან</span>`,
+  `<span class="chip warn">ხარჯები და ავარიულობა — დაშვებები, გადასამოწმებელი</span>`].join("");
+document.getElementById("findings").innerHTML = DATA.findings.map(f => `<li><span>${esc(f)}</span></li>`).join("");
+const a32 = row("A", 2032), b32 = row("B", 2032), a27 = row("A", 2027);
+document.getElementById("kpis").innerHTML = [
+  [a32 ? fmt(a32.rice_mw + (a32.ccgt3 ? 250 : 0)) + " MW" : "—", "ახალი სიმძლავრე 2032-მდე, სცენარი A"],
+  [b32 ? fmt(b32.rice_mw + (b32.ccgt3 ? 250 : 0)) + " MW" : "—", "ახალი სიმძლავრე 2032-მდე, სცენარი B"],
+  [a27 ? fmt(a27.lole_no_build, 1) + " სთ" : "—", "LOLE 2027, თბილსრესის III–IV გარეშე"],
+  [row("A", 2030) ? fmt(row("A", 2030).reserve.requirement_mw) + " MW" : "—", "საჭირო რეზერვი 2030 (A)"],
+].map(([v, k]) => `<div class="kpi"><span class="v">${v}</span><span class="k">${k}</span></div>`).join("");
+document.getElementById("assumptions").innerHTML = S.assumptions.map(a => `<li>${esc(a)}</li>`).join("");
+
+// timeline
+(function () {
+  const tl = document.getElementById("timeline");
+  let html = `<div class="head">სცენარი</div>` + YEARS.map(y => `<div class="head">${y}</div>`).join("");
+  ["A", "B"].forEach(s => {
+    html += `<div class="scen">${esc(DATA.scenLabels[s])}</div>`;
+    let prevRice = 0, prevCcgt = false;
+    YEARS.forEach(y => {
+      const r = row(s, y); if (!r) { html += `<div></div>`; return; }
+      const items = [];
+      if (r.ccgt3 && !prevCcgt) items.push(`<span class="build ccgt">+ CCGT-3 250 MW</span>`);
+      if (r.rice_mw > prevRice) items.push(`<span class="build">+ RICE ${fmt(r.rice_mw - prevRice)} MW</span>`);
+      if (!items.length) items.push(`<span class="none">${r.meets_target ? "დამატება არ სჭირდება" : "ვერ აშენდება"}</span>`);
+      items.push(status(r));
+      prevRice = r.rice_mw; prevCcgt = r.ccgt3;
+      html += `<div>${items.join("")}</div>`;
+    });
+  });
+  tl.innerHTML = html;
+})();
+
+// segmented controls
+document.querySelectorAll(".seg[data-target]").forEach(seg => {
+  const key = seg.dataset.target;
+  seg.innerHTML = ["A", "B"].map(s => `<button type="button" id="seg-${key}-${s}" aria-pressed="${state[key] === s}">${esc(DATA.scenLabels[s])}</button>`).join("");
+  seg.querySelectorAll("button").forEach((b, i) => b.addEventListener("click", () => {
+    state[key] = ["A", "B"][i];
+    seg.querySelectorAll("button").forEach((x, j) => x.setAttribute("aria-pressed", String(j === i)));
+    render();
+  }));
+});
+(function () {
+  const seg = document.getElementById("yearSeg");
+  seg.innerHTML = YEARS.map(y => `<button type="button" id="seg-year-${y}" aria-pressed="${y === state.year}">${y}</button>`).join("");
+  seg.querySelectorAll("button").forEach((b, i) => b.addEventListener("click", () => {
+    state.year = YEARS[i];
+    seg.querySelectorAll("button").forEach((x, j) => x.setAttribute("aria-pressed", String(j === i)));
+    render();
+  }));
+})();
+
+function render() {
+  // LOLE
+  const ls = state.lole, lr = YEARS.map(y => row(ls, y));
+  barChart(document.getElementById("lole"), {
+    cats: YEARS.map(String), unit: "სთ/წელი", target: S.target, targetLabel: `ნორმა ${S.target} სთ`, valueLabels: true, digits: 1,
+    series: [
+      { label: "თბილსრესი III–IV რჩება, ახალი სიმძლავრის გარეშე", color: "--s1", values: lr.map(r => r ? r.lole_keep_tbilsresi : null) },
+      { label: "III–IV გასულია, ახალი სიმძლავრის გარეშე", color: "--s2", values: lr.map(r => r ? r.lole_no_build : null) },
+      { label: "III–IV გასულია, მოდელის გეგმით", color: "--s3", values: lr.map(r => r ? r.lole_plan : null) },
+    ]
+  });
+  table(document.getElementById("loleTable"), ["წელი", "LOLE: III–IV რჩება, სთ", "LOLE: გარეშე, სთ", "EENS გარეშე, MWh", "LOLE გეგმით, სთ", "EENS გეგმით, MWh", "სტატუსი"],
+    lr.filter(Boolean).map(r => [String(r.year), fmt(r.lole_keep_tbilsresi, 1), fmt(r.lole_no_build, 1), fmt(r.eens_no_build_mwh), fmt(r.lole_plan, 2), fmt(r.eens_plan_mwh), status(r)]));
+
+  // energy
+  const es = state.energy, er = YEARS.map(y => row(es, y));
+  barChart(document.getElementById("energy"), {
+    cats: YEARS.map(String), unit: "GWh", stacked: true, valueLabels: true,
+    series: DATA.groups.map(([k, label], i) => ({ label, color: COLORS[i], values: er.map(r => r ? r.energy[k] : 0) }))
+  });
+  table(document.getElementById("energyTable"), ["წელი"].concat(DATA.groups.map(g => g[1] + ", GWh"), ["ჩაჭრილი, GWh", "პიკი, MW"]),
+    er.filter(Boolean).map(r => [String(r.year)].concat(DATA.groups.map(([k]) => fmt(r.energy[k])), [fmt(r.curtailed_gwh, 1), fmt(r.peak_load_mw)])));
+
+  // monthly
+  const mr = row(state.monthly, state.year);
+  if (mr) barChart(document.getElementById("monthly"), {
+    cats: MONTHS, unit: "GWh", stacked: true,
+    series: DATA.groups.map(([k, label], i) => ({ label, color: COLORS[i], values: mr.energy_monthly[k] }))
+  });
+
+  // reserve
+  const rs = state.reserve, rr = YEARS.map(y => row(rs, y));
+  barChart(document.getElementById("reserve"), {
+    cats: YEARS.map(String), unit: "MW", valueLabels: true,
+    series: [
+      { label: "საჭირო რეზერვი", color: "--s2", values: rr.map(r => r ? r.reserve.requirement_mw : null) },
+      { label: "მინიმალური მარაგი (ყველაზე მძიმე საათი)", color: "--s1", values: rr.map(r => r ? r.reserve.min_headroom_mw : null) },
+    ]
+  });
+  table(document.getElementById("reserveTable"), ["წელი", "უდიდესი ბლოკი, MW", "ქარი/მზე, MW", "მოთხოვნა, MW", "მინ. მარაგი, MW", "საათები დეფიციტით", "ქარის სიმძლავრე, MW", "მზის სიმძლავრე, MW"],
+    rr.filter(Boolean).map(r => [String(r.year), fmt(r.reserve.largest_unit_mw), fmt(r.reserve.vre_balancing_mw), fmt(r.reserve.requirement_mw), fmt(r.reserve.min_headroom_mw), fmt(r.reserve.hours_short), fmt(r.reserve.wind_mw), fmt(r.reserve.solar_mw)]));
+}
+
+// thermal (both scenarios), sensitivity, cost — scenario independent
+(function () {
+  const ranges = s => YEARS.map(y => { const r = row(s, y); if (!r) return null; const vals = [r.thermal_gwh].concat(Object.values(r.sensitivities).map(x => x.thermal_gwh)); return [Math.min(...vals), Math.max(...vals)]; });
+  barChart(document.getElementById("thermal"), {
+    cats: YEARS.map(String), unit: "GWh", valueLabels: true,
+    series: [{ label: DATA.scenLabels.A, color: "--s2", values: YEARS.map(y => row("A", y) ? row("A", y).thermal_gwh : null) },
+             { label: DATA.scenLabels.B, color: "--s1", values: YEARS.map(y => row("B", y) ? row("B", y).thermal_gwh : null) }],
+    whiskers: [ranges("A"), ranges("B")]
+  });
+  const sensRows = [];
+  ROWS.forEach(r => {
+    sensRows.push([`${r.scenario} · ${r.year}`, "საბაზო", fmt(r.thermal_gwh), fmt(r.gas_mcm), fmt(r.unserved_gwh, 2), fmt(r.lole_plan, 2)]);
+    Object.entries(r.sensitivities).forEach(([k, s]) => sensRows.push(["", esc(DATA.sensLabels[k] || k), fmt(s.thermal_gwh), "—", fmt(s.unserved_gwh, 2), s.lole === null ? "—" : fmt(s.lole, 2)]));
+  });
+  table(document.getElementById("sensTable"), ["სცენარი · წელი", "შემთხვევა", "თბოსადგურები, GWh", "გაზი, მლნ მ³", "დაუკმაყოფილებელი, GWh", "LOLE, სთ"], sensRows);
+  const costRows = [];
+  ROWS.forEach(r => r.options.forEach(o => costRows.push([`${r.scenario} · ${r.year}`, o.ccgt3 ? "CCGT-3 + RICE" : "მხოლოდ RICE", fmt(o.rice_mw), fmt(o.total_musd, 1), fmt(o.lole, 2),
+    (o.ccgt3 === r.ccgt3 && o.rice_mw === r.rice_mw) ? `<span class="pill good">არჩეული</span>` : ""])));
+  table(document.getElementById("costTable"), ["სცენარი · წელი", "ვარიანტი", "RICE ჯამი, MW", "წლიური ხარჯი, მლნ $", "LOLE, სთ", ""], costRows);
+})();
+(function () {
+  const st = S.stress || [];
+  if (!st.length) { document.getElementById("stressBlock").hidden = true; return; }
+  table(document.getElementById("stressTable"), ["სცენარი · წელი", "ამინდი", "LOLE ახალი სიმძლავრის გარეშე, სთ", "EENS, MWh", "საჭირო RICE, MW", "LOLE RICE-ით, სთ"],
+    st.map(x => [`${x.scenario} · ${x.year}`, x.weather.includes("calm") ? "ჰიდროლოგია 2024, მშვიდი ქარი, დაბალი მზე" : "ჰიდროლოგია 2024", fmt(x.lole_no_build, 1), fmt(x.eens_no_build_mwh), x.rice_needed_mw === null ? "ვერ აშენდება" : fmt(x.rice_needed_mw), fmt(x.lole_with_rice, 2)]));
+})();
+(function () {
+  const P = S.pathways || [];
+  if (!P.length) { document.getElementById("pathSection").hidden = true; return; }
+  const hasRice = p => p.years.some(y => y.rice_mw > 0);
+  const name = p => p.ccgt_from === null ? (hasRice(p) ? "მხოლოდ RICE" : "ახალი თბური სიმძლავრის გარეშე") : `CCGT-3 ${p.ccgt_from}-დან${hasRice(p) ? " + RICE" : ""}`;
+  const rows = [];
+  ["A", "B"].forEach(s => {
+    const ps = P.filter(p => p.scenario === s);
+    if (!ps.length) return;
+    const best = Math.min(...ps.map(p => p.npv_musd));
+    ps.forEach(p => rows.push([`${s} · ${name(p)}`].concat(YEARS.map(y => { const v = p.years.find(x => x.year === y); return v ? `${fmt(v.rice_mw)}${v.ccgt3 ? " + 250" : ""}` : "—"; }),
+      [fmt(p.npv_musd), p.npv_musd === best ? `<span class="pill good">ყველაზე იაფი</span>` : `+${fmt(p.npv_musd - best)}`])));
+  });
+  table(document.getElementById("pathTable"), ["სცენარი · გზა"].concat(YEARS.map(y => `${y}, MW`), ["NPV, მლნ $", ""]), rows);
+})();
+render();
+</script>

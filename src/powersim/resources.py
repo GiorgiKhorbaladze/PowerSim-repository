@@ -22,6 +22,27 @@ SAMPLE_PROJECTS: dict[str, dict[str, str]] = {
         "description": ("8,760-hour deterministic UC/ED demonstration with 2027-2030 demand scenarios. "
                         "Two aggregated dispatch resources; not official GSE operational data."),
     },
+    "georgia_2030_plexos": {
+        "path": "samples/projects/georgia_2030_plexos.json",
+        "name": "Georgia 2030 (PLEXOS model reconstruction)",
+        "description": ("8,760-hour model rebuilt from the approved PLEXOS model 'BESS Research 800-1400': 16 "
+                        "run-of-river zones, 5 wind and 9 solar regions, an energy-limited regulating HPP, fixed "
+                        "TPP/import, Ksani BESS; dry/flood hydrology, wind and solar scenarios. About 1 minute per run."),
+    },
+    "georgia_2026_balance": {
+        "path": "samples/projects/georgia_2026_balance.json",
+        "name": "Georgia 2026 (unit-level, 2024-2025 balance hydrology)",
+        "description": ("8,760-hour model of 2026: GSE P50 load, 7 regulating HPPs with exact monthly energy, 21 "
+                        "seasonal/small HPP assets, wind, solar, 6 thermal plants and the 2025 net interconnector "
+                        "flow. Thermal costs are placeholders that require review. About 1 minute per run."),
+    },
+    "georgia_2027_balance": {
+        "path": "samples/projects/georgia_2027_balance.json",
+        "name": "Georgia 2027 (2026 model + 2027 load + Ruisi wind 206 MW)",
+        "description": ("The Georgia 2026 unit-level model with the GSE P50 2027 load and the 206 MW Ruisi wind farm "
+                        "(assumed in operation all year, Kartli wind capacity factor). Thermal costs are placeholders "
+                        "that require review."),
+    },
     "application_compact_demo": {
         "path": "samples/application_compact_demo.json",
         "name": "Compact 4-hour demonstration",

@@ -5,6 +5,8 @@
 // publication gating and reference-data review all happen server-side.
 // Untrusted text is always inserted with textContent, never as HTML.
 
+import { getLanguage, setLanguage, translate } from "/static/i18n.js";
+
 const TERMINAL = new Set(["completed", "failed", "cancelled"]);
 const CANCELLABLE = new Set(["draft", "validating", "queued"]);
 const ASSET_KINDS = ["thermal", "import", "hydro_ror", "hydro_reg", "pumped_hydro", "solar", "wind", "bess", "dr"];
@@ -37,10 +39,11 @@ function h(tag, attrs = {}, ...children) {
   for (const [key, value] of Object.entries(attrs || {})) {
     if (value === null || value === undefined || value === false) continue;
     if (key === "class") node.className = value;
-    else if (key === "text") node.textContent = value;
+    else if (key === "text") node.textContent = translate(value);
     else if (key.startsWith("on") && typeof value === "function") node.addEventListener(key.slice(2), value);
     else if (key === "dataset") Object.assign(node.dataset, value);
     else if (value === true) node.setAttribute(key, "");
+    else if (key === "placeholder" || key === "aria-label" || key === "title") node.setAttribute(key, translate(String(value)));
     else node.setAttribute(key, String(value));
   }
   append(node, children);
@@ -49,7 +52,7 @@ function h(tag, attrs = {}, ...children) {
 function append(node, children) {
   for (const child of children.flat(Infinity)) {
     if (child === null || child === undefined || child === false) continue;
-    node.append(child instanceof Node ? child : document.createTextNode(String(child)));
+    node.append(child instanceof Node ? child : document.createTextNode(translate(String(child))));
   }
   return node;
 }
@@ -149,12 +152,12 @@ function updateStatus() {
     else if (validation) { text = validation.run_ready ? "Saved - valid, run-ready" : "Saved - not run-ready"; kind = validation.run_ready ? "ok" : "warn"; }
     else { text = "Saved - not validated"; kind = "info"; }
   }
-  status.textContent = text;
+  status.textContent = translate(text);
   status.className = `badge badge-${kind}`;
-  $("#nav-project").textContent = S.project ? `Project: ${S.project.metadata?.name || S.project.id}` : "No project open";
+  $("#nav-project").textContent = S.project ? `${translate("Project")}: ${S.project.metadata?.name || S.project.id}` : translate("No project open");
   const actions = $("#project-actions");
   actions.hidden = !S.project || ["overview", "about", "reference"].includes(S.view);
-  $("#dirty-indicator").textContent = S.project ? (isDirty() ? "Unsaved changes" : "All changes saved") : "";
+  $("#dirty-indicator").textContent = S.project ? translate(isDirty() ? "Unsaved changes" : "All changes saved") : "";
   const exportLink = $("#export-project");
   if (S.project && !isDirty()) {
     exportLink.href = `/api/projects/${encodeURIComponent(S.project.id)}/export`;
@@ -165,7 +168,8 @@ function updateStatus() {
   }
   if (S.system) {
     const ws = S.system.workspace;
-    $("#workspace-status").textContent = `${ws.name} - ${ws.projects} project(s), ${ws.runs} run(s)`;
+    $("#workspace-status").textContent = getLanguage() === "ka" ? `${ws.name} - ${ws.projects} პროექტი, ${ws.runs} გაშვება`
+      : `${ws.name} - ${ws.projects} project(s), ${ws.runs} run(s)`;
   }
 }
 
@@ -175,11 +179,11 @@ async function refreshSystem() {
     const highs = S.system.solvers.highs;
     const ready = S.system.executor.configured && highs;
     const backend = $("#backend-status");
-    backend.textContent = ready ? `Backend ready - HiGHS ${highs}` : (highs ? "No executor configured" : "Solver unavailable (HiGHS missing)");
+    backend.textContent = ready ? `${translate("Backend ready")} - HiGHS ${highs}` : translate(highs ? "No executor configured" : "Solver unavailable (HiGHS missing)");
     backend.className = `badge badge-${ready ? "ok" : "err"}`;
   } catch (error) {
     const backend = $("#backend-status");
-    backend.textContent = "Backend unreachable"; backend.className = "badge badge-err";
+    backend.textContent = translate("Backend unreachable"); backend.className = "badge badge-err";
   }
   updateStatus();
 }
@@ -394,7 +398,7 @@ function renderProject(section) {
   const nameInput = h("input", { id: "project-name", value: p.metadata?.name || "",
     oninput: () => { p.metadata = { ...(p.metadata || {}), name: nameInput.value }; markChanged(); } });
   const workflowSelect = h("select", { id: "project-workflow",
-    onchange: () => { p.workflow = workflowSelect.value; workflowHelp.textContent = describeWorkflow(p.workflow); markChanged(); } },
+    onchange: () => { p.workflow = workflowSelect.value; markChanged(); render(); } },
     (S.system?.workflows || [{ id: p.workflow, label: p.workflow }]).map((w) => h("option", { value: w.id, selected: w.id === p.workflow, text: w.label })));
   const workflowHelp = h("span", { class: "help", text: describeWorkflow(p.workflow) });
   const currency = h("input", { id: "project-currency", value: p.units?.currency || "",
@@ -434,6 +438,7 @@ function renderProject(section) {
     h("div", { class: "form-grid" },
       solverField("solver-time-limit", "time_limit_s", "Time limit per solve (s)", "Positive number of seconds.", (v) => (v > 0 && Number.isFinite(v) ? null : "Enter a positive number.")),
       solverField("solver-mip-gap", "mip_gap", "Relative MIP gap", "Between 0 and 1, for example 0.005.", (v) => (v >= 0 && v < 1 ? null : "Enter a value from 0 up to 1.")))));
+  if (p.workflow !== "deterministic_uc") section.append(workflowInputsCard(p));
   const meta = { ...(p.metadata || {}) };
   const imports = meta.reference_imports || [];
   delete meta.reference_imports; delete meta.name;
@@ -474,6 +479,117 @@ function renderProject(section) {
   if (S.documentOpen) docArea.value = JSON.stringify(S.project, null, 2);
   section.append(details);
 }
+// Returns the workflow block and an attach() that stores it in the project on
+// the first real edit, so merely viewing the form never creates unsaved changes.
+function blockFor(p, key, fallback) {
+  const existing = (p.legacy_payload || {})[key];
+  const data = existing !== undefined ? existing : fallback;
+  const attach = () => { if ((p.legacy_payload || {})[key] !== data) p.legacy_payload = { ...(p.legacy_payload || {}), [key]: data }; };
+  return [data, attach];
+}
+function numberCell(value, onValue, attrs = {}) {
+  const input = h("input", { type: "number", step: "any", value: value ?? "", ...attrs });
+  input.addEventListener("input", () => { onValue(input.value === "" ? null : Number(input.value)); markChanged(); });
+  return input;
+}
+function textCell(value, onValue, attrs = {}) {
+  const input = h("input", { value: value ?? "", ...attrs });
+  input.addEventListener("input", () => { onValue(input.value.trim()); markChanged(); });
+  return input;
+}
+function selectCell(value, options, onValue, attrs = {}) {
+  const select = h("select", attrs, options.map(([v, label]) => h("option", { value: v, selected: v === value, text: label })));
+  select.addEventListener("change", () => { onValue(select.value); markChanged(); });
+  return select;
+}
+function rowsTable(id, header, rows) {
+  return h("div", { class: "table-wrap" }, h("table", { id }, h("thead", {}, h("tr", {}, header.map((t) => h("th", { text: t })))), h("tbody", {}, rows)));
+}
+function workflowInputsCard(p) {
+  const card = h("div", { class: "card", id: "workflow-inputs" }, h("h3", { text: "Workflow inputs" }),
+    h("p", { class: "help", text: "Inputs specific to the selected workflow. They are checked by the solver's own validator when you choose Validate; errors appear under Validation before any run is created." }));
+  const rerender = () => render();
+  if (p.workflow === "stochastic_uc") {
+    const [scenarios, attach] = blockFor(p, "stochastic_scenarios", []);
+    const profiles = (p.profiles || []).map((pr) => [pr.id, pr.id]);
+    const engine = h("input", { type: "checkbox", id: "stochastic-shared-engine", checked: (p.solver_settings || {}).component_engine === "shared" });
+    engine.addEventListener("change", () => { p.solver_settings = { ...(p.solver_settings || {}), component_engine: engine.checked ? "shared" : "legacy" }; markChanged(); });
+    const total = scenarios.reduce((sum, sc) => sum + (Number(sc.probability) || 0), 0);
+    card.append(h("label", { class: "inline", for: "stochastic-shared-engine" }, engine, "Use the shared component engine (required by stochastic UC)"),
+      rowsTable("stochastic-table", ["Scenario id", "Probability", "Demand profile", ""], scenarios.map((sc, i) => {
+        const current = Object.keys(sc.profile_overrides || {}).length ? sc.demand_profile_source || "" : "";
+        return h("tr", {}, h("td", {}, textCell(sc.id, (v) => { attach(); sc.id = v; }, { "aria-label": `Scenario ${i + 1} id` })),
+          h("td", {}, numberCell(sc.probability, (v) => { attach(); sc.probability = v; }, { min: 0, max: 1, "aria-label": `Scenario ${i + 1} probability` })),
+          h("td", {}, selectCell(current, [["", "(base demand)"], ...profiles], (v) => { attach();
+            const source = (p.profiles || []).find((pr) => pr.id === v);
+            sc.demand_profile_source = v || undefined;
+            sc.profile_overrides = source ? { demand: [...source.values] } : {};
+          }, { "aria-label": `Scenario ${i + 1} demand profile` })),
+          h("td", {}, h("button", { type: "button", class: "link", text: "Delete", onclick: () => { attach(); scenarios.splice(i, 1); rerender(); } })));
+      })),
+      h("p", { id: "stochastic-probability-sum", class: Math.abs(total - 1) < 1e-9 ? "help" : "field-error", text: `Probabilities sum to ${num(total, 4)} (must be 1).` }),
+      h("button", { type: "button", id: "add-stochastic-scenario", text: "Add scenario", onclick: () => { attach();
+        scenarios.push({ id: `s${scenarios.length + 1}`, probability: 0, profile_overrides: {} }); rerender(); } }));
+  } else if (p.workflow === "security_scuc") {
+    const [contingencies, attach] = blockFor(p, "contingencies", []);
+    const kinds = [["unit_outage", "Unit outage"], ["import_outage", "Import outage"], ["line_outage", "Line outage"]];
+    const elementsFor = (kind) => kind === "line_outage" ? (p.network?.branches || []).map((b) => [b.id, b.id])
+      : (p.assets || []).filter((a) => (kind === "import_outage" ? a.kind === "import" : ["thermal", "hydro_reg", "hydro_ror", "wind", "solar"].includes(a.kind))).map((a) => [a.id, a.id]);
+    card.append(rowsTable("contingency-table", ["Contingency id", "Type", "Element", ""], contingencies.map((c, i) => h("tr", {},
+      h("td", {}, textCell(c.id, (v) => { attach(); c.id = v; }, { "aria-label": `Contingency ${i + 1} id` })),
+      h("td", {}, selectCell(c.kind, kinds, (v) => { attach(); c.kind = v; c.elements = []; rerender(); }, { "aria-label": `Contingency ${i + 1} type` })),
+      h("td", {}, selectCell((c.elements || [])[0] || "", [["", "(choose)"], ...elementsFor(c.kind)], (v) => { attach(); c.elements = v ? [v] : []; }, { "aria-label": `Contingency ${i + 1} element` })),
+      h("td", {}, h("button", { type: "button", class: "link", text: "Delete", onclick: () => { attach(); contingencies.splice(i, 1); rerender(); } }))))),
+      h("button", { type: "button", id: "add-contingency", text: "Add contingency", onclick: () => { attach();
+        contingencies.push({ id: `c${contingencies.length + 1}`, kind: "unit_outage", elements: [] }); rerender(); } }));
+    const engine = h("input", { type: "checkbox", id: "security-shared-engine", checked: (p.solver_settings || {}).component_engine !== "legacy" });
+    engine.addEventListener("change", () => { p.solver_settings = { ...(p.solver_settings || {}), component_engine: engine.checked ? "shared" : "legacy" }; markChanged(); });
+    const products = p.reserve_products || [];
+    const units = (p.assets || []).filter((a) => a.enabled !== false).map((a) => a.id);
+    card.append(h("label", { class: "inline", for: "security-shared-engine" }, engine, "Use the shared component engine (required by N-1 security UC)"),
+      h("h4", { text: "Reserve products (required for corrective redispatch)" }),
+      rowsTable("reserve-table", ["Product id", "Direction", "Requirement (MW)", "Eligible units", ""], products.map((rp, i) => {
+        const eligible = h("select", { multiple: true, size: Math.min(4, Math.max(2, units.length)), "aria-label": `Reserve ${i + 1} eligible units` },
+          units.map((u) => h("option", { value: u, selected: (rp.eligible_units || []).includes(u), text: u })));
+        eligible.addEventListener("change", () => { rp.eligible_units = Array.from(eligible.selectedOptions).map((o) => o.value); p.reserve_products = [...products]; markChanged(); });
+        return h("tr", {}, h("td", {}, textCell(rp.id, (v) => { rp.id = v; p.reserve_products = [...products]; }, { "aria-label": `Reserve ${i + 1} id` })),
+          h("td", {}, selectCell(rp.direction || "up", [["up", "up"], ["down", "down"]], (v) => { rp.direction = v; p.reserve_products = [...products]; }, { "aria-label": `Reserve ${i + 1} direction` })),
+          h("td", {}, numberCell(rp.requirement, (v) => { rp.requirement = v; p.reserve_products = [...products]; }, { min: 0, "aria-label": `Reserve ${i + 1} requirement` })),
+          h("td", {}, eligible),
+          h("td", {}, h("button", { type: "button", class: "link", text: "Delete", onclick: () => { products.splice(i, 1); p.reserve_products = [...products]; rerender(); } })));
+      })),
+      h("button", { type: "button", id: "add-reserve-product", text: "Add reserve product", onclick: () => {
+        p.reserve_products = [...products, { id: `r${products.length + 1}`, direction: "up", requirement: 0, eligible_units: [] }]; rerender(); } }));
+  } else if (p.workflow === "chronological_adequacy") {
+    const [config, attach] = blockFor(p, "chronological_adequacy", { samples: 100, seed: 1 });
+    card.append(h("div", { class: "form-grid" },
+      h("label", {}, "Monte Carlo samples", numberCell(config.samples, (v) => { attach(); config.samples = v; }, { id: "adequacy-samples", min: 1, step: 1 })),
+      h("label", {}, "Random seed", numberCell(config.seed, (v) => { attach(); config.seed = v; }, { id: "adequacy-seed", step: 1 }))),
+      h("h4", { text: "Forced outage rates" }),
+      rowsTable("for-table", ["Asset", "Kind", "Forced outage rate (0-1)"], (p.assets || []).filter((a) => a.enabled !== false).map((a) => h("tr", {},
+        h("td", {}, h("code", { text: a.id })), h("td", { text: a.kind }),
+        h("td", {}, numberCell((a.legacy_extensions || {}).for_rate, (v) => {
+          const ext = { ...(a.legacy_extensions || {}) }; if (v === null) delete ext.for_rate; else ext.for_rate = v; a.legacy_extensions = ext;
+        }, { min: 0, max: 1, "aria-label": `Forced outage rate of ${a.id}` }))))));
+  } else if (p.workflow === "scoped_expansion") {
+    const [ex, attach] = blockFor(p, "expansion", { mode: "scoped_screening", years: 1, discount_rate: 0.08, reserve_margin: 0.15, candidates: [] });
+    if (!Array.isArray(ex.candidates)) ex.candidates = [];
+    const fields = [["capex_per_mw", "CAPEX (/MW)"], ["opex_per_mw_yr", "Fixed O&M (/MW-yr)"], ["max_build_mw", "Max build (MW)"],
+      ["life_yrs", "Life (years)"], ["capacity_credit", "Capacity credit (0-1)"], ["capacity_factor", "Capacity factor (0-1)"]];
+    card.append(h("div", { class: "form-grid" },
+      h("label", {}, "Planning years", numberCell(ex.years, (v) => { attach(); ex.years = v; }, { id: "expansion-years", min: 1, step: 1 })),
+      h("label", {}, "Discount rate", numberCell(ex.discount_rate, (v) => { attach(); ex.discount_rate = v; }, { id: "expansion-discount", min: 0 })),
+      h("label", {}, "Reserve margin", numberCell(ex.reserve_margin, (v) => { attach(); ex.reserve_margin = v; }, { id: "expansion-margin", min: 0 }))),
+      h("p", { class: "warn-panel", text: "Screening only: a continuous LP for candidate sizing, not an investment decision model." }),
+      rowsTable("candidate-table", ["Candidate id", ...fields.map((f) => f[1]), ""], ex.candidates.map((c, i) => h("tr", {},
+        h("td", {}, textCell(c.id, (v) => { attach(); c.id = v; }, { "aria-label": `Candidate ${i + 1} id` })),
+        fields.map(([key, label]) => h("td", {}, numberCell(c[key], (v) => { attach(); if (v === null) delete c[key]; else c[key] = v; }, { min: 0, "aria-label": `Candidate ${i + 1} ${label}` }))),
+        h("td", {}, h("button", { type: "button", class: "link", text: "Delete", onclick: () => { attach(); ex.candidates.splice(i, 1); rerender(); } }))))),
+      h("button", { type: "button", id: "add-candidate", text: "Add candidate", onclick: () => { attach();
+        ex.candidates.push({ id: `cand-${ex.candidates.length + 1}`, capex_per_mw: 1000000, opex_per_mw_yr: 20000, max_build_mw: 100, life_yrs: 25, capacity_credit: 0.15, capacity_factor: 0.4 }); rerender(); } }));
+  }
+  return card;
+}
 function describeWorkflow(id) { return S.system?.workflows.find((w) => w.id === id)?.description || ""; }
 
 // ----- assets
@@ -508,6 +624,83 @@ function renderAssets(section) {
       h("td", {}, h("button", { type: "button", class: "link", id: `edit-asset-${index}`, "aria-label": `Edit asset ${asset.id}`, text: "Edit",
         onclick: () => { S.editingAsset = { index, draft: JSON.parse(JSON.stringify(asset)) }; render(); $("#asset-id")?.focus(); } }))))))));
   if (S.editingAsset) section.append(assetEditor());
+  section.append(workbookCard());
+}
+async function uploadWorkbook(file, apply) {
+  const params = new URLSearchParams({ apply: String(apply), file_name: file.name });
+  const reviewer = $("#workbook-reviewer")?.value.trim();
+  if (reviewer) params.set("imported_by", reviewer);
+  return postFile(`/projects/${encodeURIComponent(S.project.id)}/parameter-workbook?${params}`, file);
+}
+async function postFile(path, file) {
+  let response;
+  try {
+    response = await fetch(`/api${path}`, {
+      method: "POST", cache: "no-store", headers: { "Content-Type": "application/octet-stream" }, body: await file.arrayBuffer() });
+  } catch (error) { throw new ApiFailure(0, { code: "backend_unreachable", message: "The PowerSim backend is not reachable." }); }
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const detail = data && typeof data.detail === "object" && !Array.isArray(data.detail) ? data.detail : { code: `http_${response.status}`, message: response.statusText };
+    throw new ApiFailure(response.status, detail);
+  }
+  return data;
+}
+function workbookCard() {
+  const card = h("div", { class: "card", id: "workbook-card" }, h("h3", { text: "Bulk edit parameters with Excel" }),
+    h("p", { class: "help", text: "Download a workbook with every asset and profile, fill in approved values (fuel, heat rate, fuel price, VOM, capacities, availability/inflow profiles, review status), and upload it. Empty cells leave values unchanged. You see every change before it is applied." }));
+  const blocker = !S.savedJson ? "Save the project first." : (isDirty() ? "Save your changes before using the workbook: it is generated from the saved project." : null);
+  const out = h("div", { id: "workbook-result", "aria-live": "polite" });
+  const fileInput = h("input", { type: "file", id: "workbook-file", accept: ".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", disabled: Boolean(blocker) });
+  const reviewer = h("input", { id: "workbook-reviewer", placeholder: "Your name or initials (optional)" });
+  card.append(
+    h("div", { class: "actions" },
+      h("button", { type: "button", id: "download-workbook", disabled: Boolean(blocker), text: "Download Excel template",
+        onclick: () => download(`/projects/${encodeURIComponent(S.project.id)}/parameter-workbook`) }),
+      blocker ? h("span", { class: "field-error", text: blocker }) : null),
+    h("div", { class: "form-grid" }, h("label", { for: "workbook-file" }, "Filled workbook (.xlsx)", fileInput),
+      h("label", { for: "workbook-reviewer" }, "Imported by", reviewer)),
+    h("div", { class: "actions" }, h("button", { type: "button", id: "check-workbook", disabled: Boolean(blocker), text: "Check workbook",
+      onclick: async () => {
+        const file = fileInput.files[0];
+        if (!file) { clear(out).append(h("p", { class: "field-error", role: "alert", text: "Choose the filled .xlsx file first." })); return; }
+        clear(out).append(h("p", { class: "muted", text: "Checking..." }));
+        try { renderWorkbookReport(clear(out), await uploadWorkbook(file, false), file); }
+        catch (error) { clear(out).append(errorPanel(error, "The workbook could not be checked")); }
+      } })),
+    out);
+  return card;
+}
+function renderWorkbookReport(out, report, file) {
+  const ok = report.errors === 0;
+  out.append(h("div", { class: ok ? (report.applicable ? "info-panel" : "warn-panel") : "error-panel", role: "status" },
+    h("strong", { text: ok ? (report.applicable ? `${report.changes.length} change(s) and ${report.profiles.length} profile update(s) ready to apply.` : "The workbook contains no changes.") : `${report.errors} error(s) must be fixed in the workbook.` }),
+    h("p", { text: `${report.warnings} warning(s). File ${shortHash(report.file_sha256)}.` })));
+  if (report.issues.length) {
+    out.append(h("div", { class: "table-wrap" }, h("table", { id: "workbook-issues" },
+      h("thead", {}, h("tr", {}, ["Severity", "Cell", "Code", "Message"].map((t) => h("th", { text: t })))),
+      h("tbody", {}, report.issues.map((i) => h("tr", {}, h("td", {}, badge(i.severity, severityKind(i.severity))),
+        h("td", {}, h("code", { text: i.path || "-" })), h("td", {}, h("code", { text: i.code })), h("td", { text: i.message })))))));
+  }
+  if (report.changes.length) {
+    out.append(h("h4", { text: "Changes" }), h("div", { class: "table-wrap tall" }, h("table", { id: "workbook-changes" },
+      h("thead", {}, h("tr", {}, ["Asset", "Field", "Current", "New", "Row"].map((t) => h("th", { text: t })))),
+      h("tbody", {}, report.changes.map((c) => h("tr", {}, h("td", {}, h("code", { text: c.asset_id })), h("td", { text: c.field }),
+        h("td", { text: c.old ?? "-" }), h("td", { text: c.new ?? "-" }), h("td", { class: "num", text: c.row })))))));
+  }
+  if (report.profiles.length) {
+    out.append(h("h4", { text: "Profiles" }), h("ul", {}, report.profiles.map((p) => h("li", { text: `${p.id}: ${p.action} (${p.values} values)` }))));
+  }
+  if (report.applicable) {
+    out.append(h("div", { class: "actions" }, h("button", { type: "button", class: "primary", id: "apply-workbook", text: "Apply changes to project",
+      onclick: async () => {
+        try {
+          const result = await uploadWorkbook(file, true);
+          await openProject(result.project_id); await refreshProjects(); await refreshSystem();
+          toast(`Applied ${result.changes.length} change(s); project revision ${result.revision}${result.run_ready ? "" : " - not run-ready, see Validation"}.`, result.run_ready ? "ok" : "warn");
+          render();
+        } catch (error) { out.append(errorPanel(error, "The workbook was not applied")); }
+      } }), h("span", { class: "help", text: "Saves a new project revision and records the file hash and every change." })));
+  }
 }
 function assetEditor() {
   const { index, draft } = S.editingAsset;
@@ -722,6 +915,7 @@ function renderRuns(section) {
       h("div", { class: "actions" }, button,
         h("span", { id: "create-run-reason", class: blocker ? "field-error" : "help", text: blocker || "Ready to run." })),
       errorBox));
+    section.append(sensitivityCard(blocker));
   } else {
     section.append(h("p", { class: "info-panel", text: "Showing all runs in the workspace. Open a project to create runs." }));
   }
@@ -753,6 +947,44 @@ function renderRuns(section) {
   }
 }
 
+function sensitivityCard(blocker) {
+  const p = S.project;
+  const options = [
+    ...(p.profiles || []).map((pr) => ({ value: JSON.stringify({ type: "profile", id: pr.id }), label: `Profile ${pr.id} (all values)` })),
+  ];
+  for (const a of p.assets || []) {
+    const ext = a.legacy_extensions || {};
+    if (a.capacity_max_mw != null) options.push({ value: JSON.stringify({ type: "asset", id: a.id, field: "capacity_max_mw" }), label: `${a.id}: capacity` });
+    for (const field of ["vom", "fuel_price", "heat_rate", "monthly_energy_mwh"]) {
+      if (ext[field] != null) options.push({ value: JSON.stringify({ type: "asset", id: a.id, field }), label: `${a.id}: ${field}` });
+    }
+  }
+  const target = h("select", { id: "sensitivity-target" }, options.map((o) => h("option", { value: o.value, text: o.label })));
+  const base = h("select", { id: "sensitivity-base" }, h("option", { value: "", text: "Base case" }),
+    (p.scenarios || []).filter((sc) => !sc.id.startsWith("sens-")).map((sc) => h("option", { value: sc.id, text: sc.name || sc.id })));
+  const factors = h("input", { id: "sensitivity-factors", value: "0.9, 1.1", "aria-describedby": "sensitivity-help" });
+  const out = h("div", { id: "sensitivity-result", "aria-live": "polite" });
+  const button = h("button", { type: "button", id: "run-sensitivity", disabled: Boolean(blocker), text: "Create and run sensitivity",
+    onclick: async () => {
+      const values = factors.value.split(/[,;\s]+/).filter(Boolean).map(Number);
+      if (!values.length || values.some((v) => !Number.isFinite(v) || v < 0 || v > 10)) {
+        clear(out).append(h("p", { class: "field-error", role: "alert", text: "Enter 1-9 factors between 0 and 10, for example 0.9, 1.1." })); return;
+      }
+      button.disabled = true; clear(out).append(h("p", { class: "muted", text: "Creating scenarios and queuing runs..." }));
+      try {
+        const result = await api(`/projects/${encodeURIComponent(p.id)}/sensitivity`, { method: "POST",
+          body: { target: JSON.parse(target.value), factors: values, base_scenario: base.value || null } });
+        await openProject(result.project_id); await refreshSystem();
+        toast(`Queued ${result.runs.length} sensitivity run(s). Results appear in Compare - Scenario overview.`, "ok"); render();
+      } catch (error) { button.disabled = false; clear(out).append(errorPanel(error, "The sensitivity could not be created")); }
+    } });
+  return h("div", { class: "card", id: "sensitivity-card" }, h("h3", { text: "Sensitivity analysis" }),
+    h("p", { id: "sensitivity-help", class: "help", text: "Creates one scenario per factor that multiplies the chosen input (for example demand x0.9 and x1.1), saves the project and launches the runs. Compare them under Compare - Scenario overview." }),
+    h("div", { class: "form-grid" }, h("label", { for: "sensitivity-target" }, "Input to vary", target),
+      h("label", { for: "sensitivity-base" }, "Starting from", base), h("label", { for: "sensitivity-factors" }, "Factors", factors)),
+    h("div", { class: "actions" }, button, blocker ? h("span", { class: "field-error", text: blocker }) : null), out);
+}
+
 // ----- results
 function renderResults(section) {
   section.append(h("h2", { id: "h-results", text: "Results" }));
@@ -761,7 +993,7 @@ function renderResults(section) {
   if (!S.resultsRunId || !S.runs.some((r) => r.id === S.resultsRunId)) S.resultsRunId = (finished[0] || S.runs[0]).id;
   const select = h("select", { id: "results-run", onchange: () => { S.resultsRunId = select.value; render(); } },
     S.runs.map((run) => h("option", { value: run.id, selected: run.id === S.resultsRunId,
-      text: `${(run.created_at || "").replace("T", " ").slice(0, 16)} - ${run.scenario_id || "Base case"} - ${run.status}` })));
+      text: `${(run.created_at || "").replace("T", " ").slice(0, 16)} - ${run.scenario_id || translate("Base case")} - ${translate(run.status)}` })));
   section.append(h("div", { class: "actions" }, h("label", { for: "results-run" }, "Run", select)));
   const panel = h("div", { id: "results-panel", "aria-live": "polite" }, h("p", { class: "muted", text: "Loading result..." }));
   section.append(panel);
@@ -779,10 +1011,10 @@ function renderSummary(panel, summary) {
   panel.append(h("div", { class: "tiles" },
     h("div", { class: "tile" }, h("div", { class: "label", text: "Run status" }), h("div", { id: "result-status" }, badge(summary.status, statusKind(summary.status)))),
     h("div", { class: "tile" }, h("div", { class: "label", text: "QA" }), h("div", { id: "result-qa" },
-      summary.qa ? badge(`QA ${summary.qa.status}`, summary.qa.status === "pass" ? "ok" : summary.qa.status === "warn" ? "warn" : "err") : badge("QA not available", "neutral"))),
+      summary.qa ? badge(`QA ${translate(summary.qa.status)}`, summary.qa.status === "pass" ? "ok" : summary.qa.status === "warn" ? "warn" : "err") : badge("QA not available", "neutral"))),
     h("div", { class: "tile" }, h("div", { class: "label", text: "Publication" }), h("div", { id: "result-publication" },
       pub ? badge(pub.publishable ? (pub.qualified ? "Publishable (with warnings)" : "Publishable") : "Not publishable", pub.publishable ? (pub.qualified ? "warn" : "ok") : "err") : badge("No result", "neutral"))),
-    h("div", { class: "tile" }, h("div", { class: "label", text: "Workflow / scenario" }), h("div", { text: `${summary.workflow || "-"} / ${summary.scenario_id || "Base case"}` }))));
+    h("div", { class: "tile" }, h("div", { class: "label", text: "Workflow / scenario" }), h("div", { text: `${summary.workflow || "-"} / ${summary.scenario_id || translate("Base case")}` }))));
   if (!TERMINAL.has(summary.status)) {
     panel.append(h("div", { class: "info-panel", role: "status", text: `The run is ${summary.status}. Results appear here when it completes.` }));
     return;
@@ -800,6 +1032,7 @@ function renderSummary(panel, summary) {
   if (summary.view) {
     if (pub.qualified) panel.append(h("div", { class: "warn-panel", text: "QA passed with warnings. Review the QA checks before using these results." }));
     panel.append(resultView(summary.view));
+    panel.append(calibrationCard(summary.run_id));
   }
   if (summary.qa) {
     panel.append(h("details", { class: "card", open: !summary.view },
@@ -819,16 +1052,62 @@ function renderSummary(panel, summary) {
          ["Validity", summary.validity], ["Snapshot fingerprint", summary.snapshot_fingerprint],
          ["Persisted hashes verified", summary.verification?.valid ? "yes" : "no"]].map(([k, v]) => [h("dt", { text: k }), h("dd", { text: String(v ?? "-") })]))));
   }
+  if (summary.view) panel.append(h("div", { class: "actions" },
+    h("button", { type: "button", id: "excel-report", text: "Excel report", onclick: () => download(`/runs/${encodeURIComponent(summary.run_id)}/report.xlsx`) }),
+    h("a", { class: "button", id: "html-report", href: `/api/runs/${encodeURIComponent(summary.run_id)}/report.html`, target: "_blank", rel: "noopener", text: "Printable report (PDF via print)" })));
   panel.append(h("div", { class: "actions" }, h("button", { type: "button", id: "export-run", text: "Export run bundle (ZIP)",
     onclick: () => download(`/runs/${encodeURIComponent(summary.run_id)}/export`) }),
     h("span", { class: "help", text: summary.view ? "Includes the gated result envelope and CSV summaries." : "Includes the snapshot and diagnostics; numeric results are excluded because the run is not publishable." })));
+}
+function calibrationCard(runId) {
+  const out = h("div", { id: "calibration-result", "aria-live": "polite" });
+  const fileInput = h("input", { type: "file", id: "calibration-file", accept: ".xlsx" });
+  const card = h("details", { class: "card", id: "calibration-card" },
+    h("summary", { text: "Calibration against measured data" }),
+    h("p", { class: "help", text: "Download the template for this run, enter measured energy (MWh) per hour and/or per month for demand, asset kinds or individual assets, and upload it. PowerSim reports model vs actual totals, bias, MAE, RMSE and correlation. The comparison does not change the model." }),
+    h("div", { class: "actions" },
+      h("button", { type: "button", id: "download-calibration-template", text: "Download calibration template",
+        onclick: () => download(`/runs/${encodeURIComponent(runId)}/calibration-template`) })),
+    h("label", { for: "calibration-file" }, "Workbook with measured data (.xlsx)", fileInput),
+    h("div", { class: "actions" }, h("button", { type: "button", id: "run-calibration", text: "Compare with measured data",
+      onclick: async () => {
+        const file = fileInput.files[0];
+        if (!file) { clear(out).append(h("p", { class: "field-error", role: "alert", text: "Choose the filled workbook first." })); return; }
+        clear(out).append(h("p", { class: "muted", text: "Comparing..." }));
+        try { renderCalibration(clear(out), await postFile(`/runs/${encodeURIComponent(runId)}/calibration?file_name=${encodeURIComponent(file.name)}`, file)); }
+        catch (error) { clear(out).append(errorPanel(error, "The calibration could not be computed")); }
+      } })),
+    out);
+  return card;
+}
+function renderCalibration(out, report) {
+  out.append(h("div", { class: "info-panel", role: "status" }, h("strong", { text: `Compared ${report.compared_series.length} series` }),
+    h("p", { text: `File ${report.file_name || ""} (${shortHash(report.file_sha256)}), ${report.warnings} warning(s). Positive bias = model above measured.` })));
+  const rows = [];
+  for (const [resolution, block] of [["hourly", report.hourly], ["monthly", report.monthly]]) {
+    for (const [name, m] of Object.entries(block)) rows.push([resolution, name, m]);
+  }
+  out.append(h("div", { class: "table-wrap" }, h("table", { id: "calibration-table" },
+    h("thead", {}, h("tr", {}, ["Resolution", "Series", "Points", "Model (MWh)", "Measured (MWh)", "Bias (%)", "MAE (MWh)", "RMSE (MWh)", "Correlation"].map((t) => h("th", { text: t })))),
+    h("tbody", {}, rows.map(([resolution, name, m]) => h("tr", {}, h("td", { text: resolution }), h("td", {}, h("code", { text: name })),
+      h("td", { class: "num", text: m.points }), h("td", { class: "num", text: num(m.model_mwh, 0) }), h("td", { class: "num", text: num(m.actual_mwh, 0) }),
+      h("td", { class: "num", text: num(m.bias_pct, 2) }), h("td", { class: "num", text: num(m.mae_mwh, 1) }), h("td", { class: "num", text: num(m.rmse_mwh, 1) }),
+      h("td", { class: "num", text: m.correlation == null ? "-" : num(m.correlation, 3) })))))));
+  for (const [name, m] of Object.entries(report.monthly)) {
+    out.append(h("details", {}, h("summary", { text: `Monthly: ${name}` }), h("div", { class: "table-wrap" }, h("table", {},
+      h("thead", {}, h("tr", {}, ["Month", "Model (MWh)", "Measured (MWh)", "Bias (%)"].map((t) => h("th", { text: t })))),
+      h("tbody", {}, m.months.map((r) => h("tr", {}, h("td", { text: r.month }), h("td", { class: "num", text: num(r.model_mwh, 0) }),
+        h("td", { class: "num", text: num(r.actual_mwh, 0) }), h("td", { class: "num", text: num(r.bias_pct, 2) }))))))));
+  }
+  if (report.issues.length) out.append(issuesTable(report.issues.map((i) => ({ ...i, code: i.sheet || "workbook", path: i.row ? `${i.sheet}!${i.row}` : i.sheet }))));
 }
 function resultView(view) {
   const box = h("div", { id: "result-view" });
   if (view.kind === "dispatch") {
     const s = view.system_summary;
     box.append(h("div", { class: "tiles", id: "result-kpis" }, KPI_FIELDS.filter(([key]) => typeof s[key] === "number").map(([key, label, unit]) =>
-      h("div", { class: "tile" }, h("div", { class: "label", text: `${label} (${unit})` }), h("div", { class: "value", text: num(s[key], 1) })))));
+      h("div", { class: "tile" }, h("div", { class: "label", text: `${translate(label)} (${unit})` }), h("div", { class: "value", text: num(s[key], 1) })))));
+    if (view.technology?.kinds?.length) box.append(technologyCharts(view.technology));
     if (view.series?.points?.length) box.append(seriesChart(view.series));
     box.append(h("h3", { text: "By resource" }), h("div", { class: "table-wrap" }, h("table", { id: "by-unit-table" },
       h("thead", {}, h("tr", {}, ["Resource", "Type", "Energy (MWh)", "Capacity factor (%)", "Gross cost", "Avg cost (/MWh)", "Starts"].map((t) => h("th", { text: t })))),
@@ -850,6 +1129,72 @@ function resultView(view) {
       : h("p", { class: "muted", text: "This workflow reported no scalar metrics." }));
   }
   return box;
+}
+const KIND_LABELS = { hydro_ror: "Hydro", hydro_reg: "Reservoir hydro", wind: "Wind", solar: "Solar", thermal: "Thermal",
+  import: "TPP / import", bess: "Battery (net)", pumped_hydro: "Pumped hydro", dr: "Demand response", unserved: "Unserved" };
+const kindLabel = (kind) => KIND_LABELS[kind] || kind;
+function svgEl(tag, attrs = {}, text) {
+  const el = document.createElementNS("http://www.w3.org/2000/svg", tag);
+  for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, String(v));
+  if (text !== undefined) el.textContent = text;
+  return el;
+}
+function chartLegend(kinds, extra = []) {
+  return h("div", { class: "legend" }, [...kinds.map((k) => h("span", {}, h("span", { class: `sw k-${k}` }), kindLabel(k))), ...extra]);
+}
+function technologyCharts(tech) {
+  const kinds = tech.kinds;
+  const points = tech.series.points;
+  const width = 900, height = 260, pad = { l: 60, r: 16, t: 12, b: 26 };
+  const stackTop = points.map((p) => kinds.reduce((sum, k) => sum + Math.max(0, p[k] || 0), 0) + (p.unserved_mw || 0));
+  const maxY = Math.max(1, ...stackTop, ...points.map((p) => p.load_mw || 0));
+  const x = (i) => pad.l + (i / Math.max(1, points.length - 1)) * (width - pad.l - pad.r);
+  const y = (v) => height - pad.b - (v / maxY) * (height - pad.t - pad.b);
+  const svg = svgEl("svg", { viewBox: `0 0 ${width} ${height}`, class: "chart", role: "img",
+    "aria-label": `Dispatch by technology (${tech.series.resolution === "daily_mean" ? "daily mean" : "hourly"}), peak ${num(maxY, 0)} MW. Monthly values are in the table below.` });
+  svg.append(svgEl("line", { x1: pad.l, y1: height - pad.b, x2: width - pad.r, y2: height - pad.b, class: "axis" }),
+    svgEl("line", { x1: pad.l, y1: pad.t, x2: pad.l, y2: height - pad.b, class: "axis" }),
+    svgEl("text", { x: pad.l - 6, y: pad.t + 8, "text-anchor": "end" }, num(maxY, 0)),
+    svgEl("text", { x: pad.l - 6, y: height - pad.b, "text-anchor": "end" }, "0"));
+  const base = points.map(() => 0);
+  for (const kind of [...kinds, "unserved"]) {
+    const top = points.map((p, i) => base[i] + Math.max(0, kind === "unserved" ? (p.unserved_mw || 0) : (p[kind] || 0)));
+    if (top.every((v, i) => v === base[i])) continue;
+    const upper = top.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`);
+    const lower = base.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).reverse();
+    svg.append(svgEl("polygon", { points: [...upper, ...lower].join(" "), class: `area k-${kind}` }));
+    top.forEach((v, i) => { base[i] = v; });
+  }
+  svg.append(svgEl("polyline", { points: points.map((p, i) => `${x(i).toFixed(1)},${y(p.load_mw || 0).toFixed(1)}`).join(" "), class: "load-line" }));
+  const monthly = tech.monthly;
+  const mw = 900, mh = 240, mp = { l: 60, r: 16, t: 12, b: 28 };
+  const monthTop = monthly.map((m) => kinds.reduce((s2, k) => s2 + Math.max(0, m[k] || 0), 0) + (m.unserved_mwh || 0));
+  const maxM = Math.max(1, ...monthTop, ...monthly.map((m) => m.demand_mwh || 0));
+  const band = (mw - mp.l - mp.r) / Math.max(1, monthly.length);
+  const my = (v) => mh - mp.b - (v / maxM) * (mh - mp.t - mp.b);
+  const msvg = svgEl("svg", { viewBox: `0 0 ${mw} ${mh}`, class: "chart", role: "img",
+    "aria-label": `Monthly energy balance in GWh; maximum ${num(maxM / 1000, 0)} GWh. Values are in the table below.` });
+  msvg.append(svgEl("line", { x1: mp.l, y1: mh - mp.b, x2: mw - mp.r, y2: mh - mp.b, class: "axis" }),
+    svgEl("text", { x: mp.l - 6, y: mp.t + 8, "text-anchor": "end" }, `${num(maxM / 1000, 0)} GWh`));
+  monthly.forEach((m, i) => {
+    let acc = 0;
+    for (const kind of [...kinds, "unserved"]) {
+      const v = Math.max(0, kind === "unserved" ? (m.unserved_mwh || 0) : (m[kind] || 0));
+      if (v <= 0) continue;
+      msvg.append(svgEl("rect", { x: mp.l + i * band + band * 0.15, width: band * 0.7, y: my(acc + v), height: Math.max(0, my(acc) - my(acc + v)), class: `bar k-${kind}` }));
+      acc += v;
+    }
+    msvg.append(svgEl("line", { x1: mp.l + i * band + band * 0.08, x2: mp.l + (i + 1) * band - band * 0.08, y1: my(m.demand_mwh), y2: my(m.demand_mwh), class: "demand-mark" }),
+      svgEl("text", { x: mp.l + (i + 0.5) * band, y: mh - 8, "text-anchor": "middle" }, m.label));
+  });
+  const table = h("details", {}, h("summary", { text: "Monthly energy balance table (MWh)" }), h("div", { class: "table-wrap" }, h("table", { id: "technology-table" },
+    h("thead", {}, h("tr", {}, ["Month", ...kinds.map(kindLabel), "Unserved", "Curtailed", "Demand"].map((t) => h("th", { text: t })))),
+    h("tbody", {}, monthly.map((m) => h("tr", {}, h("td", { text: m.label }), kinds.map((k) => h("td", { class: "num", text: num(m[k], 0) })),
+      h("td", { class: "num", text: num(m.unserved_mwh, 0) }), h("td", { class: "num", text: num(m.curtailed_mwh, 0) }), h("td", { class: "num", text: num(m.demand_mwh, 0) })))))));
+  const extra = [h("span", {}, h("span", { class: "sw k-unserved" }), "Unserved"), h("span", {}, h("span", { class: "sw-demand" }), "Demand")];
+  return h("div", { id: "technology-charts" },
+    h("figure", { class: "card" }, h("figcaption", {}, h("strong", { text: `${translate("Dispatch by technology")} (${translate(tech.series.resolution === "daily_mean" ? "daily mean MW" : "MW")})` }), chartLegend(kinds, extra)), svg),
+    h("figure", { class: "card" }, h("figcaption", {}, h("strong", { text: "Monthly energy balance" }), chartLegend(kinds, extra)), msvg, table));
 }
 function seriesChart(series) {
   const ns = "http://www.w3.org/2000/svg";
@@ -877,13 +1222,45 @@ function seriesChart(series) {
     text(width - pad.r + 6, pad.t + 8, num(maxPrice, 0)), text(width - pad.r + 6, height - pad.b, "0"),
     text(pad.l, height - 6, series.resolution === "daily_mean" ? "Day 1" : "Period 1"), text(width - pad.r, height - 6, `${points.length}`, "end"),
     line("s1", (p) => p.load_mw, yL), line("s2", (p) => p.price_usd_mwh, yP));
-  return h("figure", { class: "card" }, h("figcaption", {}, h("strong", { text: `System load and price (${label})` }),
+  return h("figure", { class: "card" }, h("figcaption", {}, h("strong", { text: `${translate("System load and price")} (${translate(label)})` }),
     h("div", { class: "legend" }, h("span", {}, h("span", { class: "sw1" }), "Load, MW (left axis)"), h("span", {}, h("span", { class: "sw2" }), "Price, USD/MWh (right axis)"))), svg);
 }
 
 // ----- compare
+function scenarioOverview(section) {
+  if (!S.project || !S.savedJson) return;
+  const box = h("div", { class: "card", id: "scenario-overview" }, h("h3", { text: "Scenario overview" }), h("p", { class: "muted", text: "Loading..." }));
+  section.append(box);
+  api(`/projects/${encodeURIComponent(S.project.id)}/overview`).then((rows) => {
+    clear(box).append(h("h3", { text: "Scenario overview" }));
+    const done = rows.filter((r) => r.metrics);
+    if (!done.length) { box.append(h("p", { class: "empty", text: "No completed publishable runs yet." })); return; }
+    const cols = [["total_energy_mwh", "Served (GWh)", 1e3], ["total_unserved_mwh", "Unserved (GWh)", 1e3], ["total_curtailed_mwh", "Curtailed (GWh)", 1e3],
+      ["total_objective_cost_usd", "Objective (M USD)", 1e6], ["avg_lambda_usd_mwh", "Avg price (USD/MWh)", 1], ["peak_load_mw", "Peak (MW)", 1]];
+    const latest = new Map();
+    for (const r of done) if (!latest.has(r.scenario_id || "")) latest.set(r.scenario_id || "", r);
+    box.append(h("p", { class: "help", text: "Latest completed run per scenario." }), h("div", { class: "table-wrap" }, h("table", { id: "overview-table" },
+      h("thead", {}, h("tr", {}, ["Scenario", ...cols.map((c) => c[1]), "Run"].map((t) => h("th", { text: t })))),
+      h("tbody", {}, [...latest.values()].map((r) => h("tr", {}, h("td", { text: r.scenario_id || "Base case" }),
+        cols.map(([k, , d]) => h("td", { class: "num", text: num(r.metrics[k] == null ? null : r.metrics[k] / d, 1) })),
+        h("td", {}, h("code", { text: r.run_id.slice(0, 8) }))))))));
+    const groups = (S.project.metadata || {}).sensitivity_groups || {};
+    for (const [name, group] of Object.entries(groups)) {
+      const rowsFor = group.scenarios.map((sid, i) => ({ factor: group.factors[i], run: latest.get(sid) })).filter((x) => x.run);
+      if (!rowsFor.length) continue;
+      const baseRun = latest.get(group.base_scenario || "");
+      box.append(h("h4", { text: `Sensitivity: ${name}` }), h("div", { class: "table-wrap" }, h("table", { class: "sensitivity-table" },
+        h("thead", {}, h("tr", {}, ["Factor", ...cols.slice(1, 5).map((c) => c[1])].map((t) => h("th", { text: t })))),
+        h("tbody", {}, [...(baseRun ? [{ factor: 1, run: baseRun }] : []), ...rowsFor].sort((a, b) => a.factor - b.factor).map((x) => h("tr", {},
+          h("td", { class: "num", text: `x${x.factor}` }), cols.slice(1, 5).map(([k, , d]) => h("td", { class: "num", text: num(x.run.metrics[k] == null ? null : x.run.metrics[k] / d, 2) }))))))));
+    }
+  }).catch((error) => clear(box).append(errorPanel(error, "The overview could not be loaded")));
+}
 function renderCompare(section) {
-  section.append(h("h2", { id: "h-compare", text: "Compare runs" }),
+  section.append(h("h2", { id: "h-compare", text: "Compare runs" }));
+  scenarioOverview(section);
+  section.append(
+    h("h3", { text: "Compare two runs" }),
     h("p", { class: "muted", text: "Only completed runs with persisted results can be compared. Metrics are shown only when both runs are publishable and use the same workflow." }));
   const completed = S.runs.filter((run) => run.status === "completed");
   if (completed.length < 2) { section.append(h("p", { class: "empty", text: "At least two completed runs are needed for a comparison." })); return; }
@@ -1158,8 +1535,23 @@ function renderAbout(section) {
 }
 
 // ---------------------------------------------------------------- startup
+function applyStaticTranslations() {
+  for (const el of document.querySelectorAll(".sidenav button, .status-strip dt, #validate-project, #save-project, #export-project, .brand-sub, .skip-link")) {
+    if (!el.dataset.en) el.dataset.en = el.textContent;
+    el.textContent = translate(el.dataset.en);
+  }
+  const toggle = $("#language-toggle");
+  toggle.textContent = getLanguage() === "ka" ? "English" : "ქართული";
+  toggle.setAttribute("aria-label", getLanguage() === "ka" ? "Switch the interface to English" : "ინტერფეისის ქართულ ენაზე გადართვა");
+  document.documentElement.lang = getLanguage();
+}
 async function start() {
   for (const button of document.querySelectorAll(".sidenav button")) button.addEventListener("click", () => show(button.dataset.view));
+  $("#language-toggle").addEventListener("click", async () => {
+    setLanguage(getLanguage() === "ka" ? "en" : "ka");
+    applyStaticTranslations(); await refreshSystem(); render();
+  });
+  applyStaticTranslations();
   $("#validate-project").addEventListener("click", async () => { await validateProject(); show("validation"); });
   $("#save-project").addEventListener("click", () => saveProject());
   $("#export-project").addEventListener("click", (event) => { if (event.currentTarget.getAttribute("aria-disabled") === "true") { event.preventDefault(); toast("Save the project before exporting it.", "warn"); } });

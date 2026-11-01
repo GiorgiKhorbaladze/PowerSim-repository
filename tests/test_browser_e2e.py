@@ -20,8 +20,11 @@ user journey:
 14. reference data: a conflicting station is staged, blocked, resolved with
     audited overrides, acknowledged and imported as a disabled asset
 15. enabling the unreviewed reference asset blocks runs with a visible reason;
-    a run that the backend rejects is shown as failed with its cause; runs
-    persist across a page reload; no console errors or failed requests occur
+    missing stochastic inputs block the run at validation; the workflow form
+    completes them and the stochastic run succeeds; the Georgian UI toggles;
+    the Excel parameter workbook supplies its costs and review, making it run-ready;
+    runs persist across a page reload; no console errors or failed requests
+    occur (backend failure causes are covered by tests/test_application_api.py)
 
 Playwright is opt-in locally (``POWERSIM_BROWSER_E2E=1``); CI enables it.
 Set ``POWERSIM_CHROMIUM_EXECUTABLE`` to use a preinstalled Chromium.
@@ -245,6 +248,12 @@ def test_full_browser_journey(tmp_path: Path) -> None:
             expect(page.locator("#result-publication")).to_contain_text("Publishable")
             expect(page.locator("#result-kpis")).to_contain_text("Energy served")
             expect(page.locator("#by-unit-table")).to_contain_text("Georgia thermal aggregate")
+            expect(page.locator("#technology-charts")).to_contain_text("Monthly energy balance")
+            expect(page.locator("#technology-table")).to_contain_text("TPP / import")
+            with page.expect_download() as excel_download:
+                page.locator("#excel-report").click()
+            assert excel_download.value.suggested_filename.endswith(".xlsx")
+            expect(page.locator("#html-report")).to_have_attribute("href", re.compile(r"/api/runs/.+/report\.html$"))
             if os.environ.get("POWERSIM_E2E_SCREENSHOTS"):
                 page.screenshot(path=str(Path(os.environ["POWERSIM_E2E_SCREENSHOTS"]) / "georgia_results.png"), full_page=True)
             with page.expect_download() as download_info:
@@ -256,6 +265,23 @@ def test_full_browser_journey(tmp_path: Path) -> None:
                 assert {"manifest.json", "run.json", "resolved_input.json", "result.json", "README.txt"} <= names
                 envelope = json.loads(archive.read("result.json"))
                 assert envelope["qa"]["status"] == "pass" and envelope["validity"] == "valid"
+            # calibration against measured data (template -> fill -> compare)
+            import openpyxl
+            page.locator("#calibration-card summary").click()
+            with page.expect_download() as calibration_download:
+                page.locator("#download-calibration-template").click()
+            calibration_template = tmp_path / "calibration.xlsx"
+            calibration_download.value.save_as(calibration_template)
+            workbook = openpyxl.load_workbook(calibration_template)
+            monthly = workbook["Monthly"]
+            demand_column = [cell.value for cell in monthly[1]].index("demand") + 1
+            for row in range(2, 14):
+                monthly.cell(row, demand_column, 1_300_000)
+            workbook.save(calibration_template)
+            page.locator("#calibration-file").set_input_files(str(calibration_template))
+            page.locator("#run-calibration").click()
+            expect(page.locator("#calibration-table")).to_contain_text("demand")
+            expect(page.locator("#calibration-result")).to_contain_text("Compared 1 series")
             with page.expect_download() as project_download:
                 page.locator("#export-project").click()
             exported = json.loads(Path(project_download.value.path()).read_text(encoding="utf-8"))
@@ -328,28 +354,87 @@ def test_full_browser_journey(tmp_path: Path) -> None:
             if os.environ.get("POWERSIM_E2E_SCREENSHOTS"):
                 page.screenshot(path=str(Path(os.environ["POWERSIM_E2E_SCREENSHOTS"]) / "unreviewed_asset_blocks_run.png"), full_page=True)
 
-            # 15b. a run the backend rejects is visibly failed with its cause
+            # 15a'. complete and review it in bulk through the Excel parameter workbook
+            import openpyxl
+            _goto(page, "assets")
+            with page.expect_download() as template_download:
+                page.locator("#download-workbook").click()
+            assert template_download.value.suggested_filename == "georgia-2026-baseline-parameters.xlsx"
+            template = tmp_path / "template.xlsx"
+            template_download.value.save_as(template)
+            workbook = openpyxl.load_workbook(template)
+            sheet = workbook["Assets"]
+            header = [cell.value for cell in sheet[1]]
+            for row in sheet.iter_rows(min_row=3):
+                if row[0].value == "ref-gardabani-tpp-1-ccpp-1":
+                    for column, value in {"heat_rate_gj_per_mwh": 7.2, "fuel_price_usd_per_mmbtu": 6, "vom_per_mwh": 3,
+                                          "reviewed": "yes", "review_note": "E2E: checked against approved register"}.items():
+                        row[header.index(column)].value = value
+            filled = tmp_path / "filled-parameters.xlsx"
+            workbook.save(filled)
+            page.locator("#workbook-file").set_input_files(str(filled))
+            page.locator("#check-workbook").click()
+            expect(page.locator("#workbook-result")).to_contain_text("ready to apply")
+            expect(page.locator("#workbook-changes")).to_contain_text("heat_rate_gj_per_mwh")
+            page.locator("#apply-workbook").click()
+            expect(page.locator("#project-status")).to_have_text("Saved - valid, run-ready", timeout=60_000)
+            imported = page.locator("#assets-table tbody tr", has_text="ref-gardabani-tpp-1-ccpp-1")
+            expect(imported).to_contain_text("reviewed")
+            expect(imported).to_contain_text("enabled")
+
+            # 15b. workflow-specific inputs: blocked at validation, completed with the form
             _goto(page, "overview")
             page.locator("#project-select").select_option("e2e-compact")
             page.locator("#open-project").click()
             page.locator("#h-project").wait_for()
+            # sensitivity analysis: demand x1.5 on the compact project, compared in the overview
+            _goto(page, "runs")
+            page.locator("#sensitivity-target").select_option(label="Profile demand (all values)")
+            page.locator("#sensitivity-factors").fill("1.5")
+            page.locator("#run-sensitivity").click()
+            _wait_run(page, "sens-demand-150")
+            expect(page.locator("#runs-table tbody tr", has_text="sens-demand-150")).to_contain_text("completed", timeout=120_000)
+            _goto(page, "compare")
+            expect(page.locator("#overview-table")).to_contain_text("sens-demand-150")
+            expect(page.locator("#scenario-overview")).to_contain_text("Sensitivity: demand")
+            _goto(page, "project")
             page.locator("#project-workflow").select_option("stochastic_uc")
             page.locator("#save-project").click()
-            expect(page.locator("#project-status")).to_have_text("Saved - valid, run-ready")
+            expect(page.locator("#project-status")).to_have_text("Saved - not run-ready")
+            _goto(page, "validation")
+            expect(page.locator("#validation-issues")).to_contain_text("stochastic scenarios must be a non-empty list")
+            _goto(page, "runs")
+            expect(page.locator("#create-run")).to_be_disabled()
+            # complete the stochastic inputs with the workflow form and run it
+            _goto(page, "project")
+            inputs = page.locator("#workflow-inputs")
+            inputs.locator("#stochastic-shared-engine").check()
+            for index, (sid, probability) in enumerate((("low", "0.4"), ("high", "0.6"))):
+                inputs.locator("#add-stochastic-scenario").click()
+                inputs = page.locator("#workflow-inputs")
+                inputs.get_by_label(f"Scenario {index + 1} id").fill(sid)
+                inputs.get_by_label(f"Scenario {index + 1} probability").fill(probability)
+            page.locator("#save-project").click()
+            expect(page.locator("#project-status")).to_have_text("Saved - valid, run-ready", timeout=60_000)
             _goto(page, "runs")
             page.locator("#create-run").click()
-            failed = _wait_run(page, "failed", timeout=120_000)
-            failed.get_by_role("button", name="Results").click()
-            expect(page.locator("#result-status")).to_contain_text("failed")
-            expect(page.locator("#results-panel")).to_contain_text("stochastic scenarios must be a non-empty list")
-            expect(page.locator("#result-publication")).to_contain_text("No result")
+            stochastic = page.locator("#runs-table tbody tr", has_text="stochastic_uc").first
+            expect(stochastic).to_contain_text("completed", timeout=120_000)
+            stochastic.get_by_role("button", name="Results").click()
+            expect(page.locator("#result-qa")).to_contain_text("QA pass")
+            expect(page.locator("#result-view")).to_be_visible()
 
             # 15c. persistence across reload, and a clean console
             page.reload()
             page.locator("body[data-ready='true']").wait_for()
             _goto(page, "runs")
-            expect(page.locator("#runs-table tbody tr", has_text="completed")).to_have_count(2)
-            expect(page.locator("#runs-table tbody tr", has_text="failed")).to_have_count(1)
+            expect(page.locator("#runs-table tbody tr", has_text="completed")).to_have_count(4)
+            # Georgian interface
+            page.locator("#language-toggle").click()
+            expect(page.locator(".sidenav button[data-view='runs']")).to_have_text("გაშვებები")
+            expect(page.locator("#runs-table thead")).to_contain_text("სტატუსი")
+            page.locator("#language-toggle").click()
+            expect(page.locator(".sidenav button[data-view='runs']")).to_have_text("Runs")
             # Exactly the two deliberate rejections (steps 4 and 8) may log a
             # browser resource error; anything else is a defect.
             assert sorted(u.split("/api/")[-1] for u in rejected) == ["projects/save", "projects/save"], rejected
