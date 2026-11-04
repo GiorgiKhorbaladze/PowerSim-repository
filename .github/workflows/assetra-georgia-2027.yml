@@ -1,0 +1,38 @@
+name: ASSETRA Georgia 2027 exploratory adequacy
+
+on:
+  push:
+    branches:
+      - research/assetra-georgia-2027
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  run-assetra:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install ASSETRA 2026.09.08
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install "assetra==2026.09.08" || python -m pip install "git+https://github.com/ijbd/assetra.git"
+      - name: Run synthetic-assisted PowerSim 2027 model with ASSETRA
+        run: |
+          python scripts/assetra_georgia_2027.py --trials 300 --seed 2027
+      - name: Compute illustrative ELCC for additional 300MW thermal and 200MW/200MWh BESS
+        run: |
+          python scripts/assetra_elcc_2027.py --trials 300 --seed 2027
+      - name: Publish reproducible output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: assetra-georgia-2027-exploratory
+          path: assetra_georgia_2027_results/
+          if-no-files-found: warn
+          retention-days: 14
